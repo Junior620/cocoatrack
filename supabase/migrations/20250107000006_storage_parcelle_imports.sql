@@ -1,0 +1,56 @@
+-- CocoaTrack V2 - Storage Bucket for Parcelle Import Files
+-- Reference file for storage bucket and policies configuration
+-- 
+-- IMPORTANT: Storage policies cannot be created via SQL migrations in Supabase hosted.
+-- The storage.objects table is owned by supabase_storage_admin, not the database user.
+-- 
+-- This migration is a NO-OP placeholder. Storage must be configured manually.
+
+-- ============================================================================
+-- MANUAL SETUP REQUIRED - Supabase Dashboard
+-- ============================================================================
+-- 
+-- 1. Go to Supabase Dashboard > Storage
+-- 2. Create a new bucket with these settings:
+--    - Name: parcelle-imports
+--    - Public: false (private bucket)
+--    - File size limit: 52428800 (50MB)
+--    - Allowed MIME types: 
+--      * application/zip
+--      * application/x-zip-compressed
+--      * application/vnd.google-earth.kml+xml
+--      * application/vnd.google-earth.kmz
+--      * application/geo+json
+--      * application/json
+--
+-- 3. Create the following policies in the Storage > Policies section:
+--
+-- POLICY 1: "Users can upload parcelle imports"
+-- Operation: INSERT
+-- Target roles: authenticated
+-- WITH CHECK expression:
+--   bucket_id = 'parcelle-imports'
+--
+-- POLICY 2: "Users can view parcelle imports" 
+-- Operation: SELECT
+-- Target roles: authenticated
+-- USING expression:
+--   bucket_id = 'parcelle-imports'
+--
+-- POLICY 3: "Users can update parcelle imports"
+-- Operation: UPDATE
+-- Target roles: authenticated
+-- USING expression:
+--   bucket_id = 'parcelle-imports'
+--
+-- POLICY 4: "Users can delete parcelle imports"
+-- Operation: DELETE
+-- Target roles: authenticated
+-- USING expression:
+--   bucket_id = 'parcelle-imports'
+--
+-- ============================================================================
+
+-- This is a placeholder to mark the migration as complete
+-- No actual SQL operations are performed
+SELECT 1 AS storage_bucket_setup_required;

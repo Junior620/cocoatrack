@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenue sur CocoaTrack V2</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+      border-radius: 8px 8px 0 0;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .content {
+      background: #f9f9f9;
+      padding: 30px;
+      border-radius: 0 0 8px 8px;
+    }
+    .button {
+      display: inline-block;
+      background: #8B4513;
+      color: white;
+      padding: 14px 28px;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+    .button:hover {
+      background: #A0522D;
+    }
+    .features {
+      background: white;
+      padding: 20px;
+      border-radius: 6px;
+      margin: 20px 0;
+    }
+    .features h3 {
+      color: #8B4513;
+      margin-top: 0;
+    }
+    .features ul {
+      padding-left: 20px;
+    }
+    .features li {
+      margin: 10px 0;
+    }
+    .footer {
+      text-align: center;
+      color: #666;
+      font-size: 12px;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🍫 CocoaTrack V2</h1>
+    <p>Votre nouvelle plateforme de suivi du cacao</p>
+  </div>
+  
+  <div class="content">
+    <h2>Bonjour {{user_name}},</h2>
+    
+    <p>
+      Nous sommes ravis de vous annoncer que CocoaTrack a été mis à jour vers une 
+      nouvelle version plus performante et plus intuitive !
+    </p>
+    
+    <p>
+      Votre compte a été migré automatiquement. Pour des raisons de sécurité, 
+      vous devez réinitialiser votre mot de passe avant de vous connecter.
+    </p>
+    
+    <p style="text-align: center;">
+      <a href="{{reset_link}}" class="button">
+        Réinitialiser mon mot de passe
+      </a>
+    </p>
+    
+    <div class="features">
+      <h3>✨ Nouveautés de la V2</h3>
+      <ul>
+        <li><strong>Mode hors-ligne</strong> - Travaillez même sans connexion internet</li>
+        <li><strong>Tableau de bord amélioré</strong> - Visualisez vos données en temps réel</li>
+        <li><strong>Cartes interactives</strong> - Localisez vos planteurs sur une carte</li>
+        <li><strong>Notifications</strong> - Restez informé des événements importants</li>
+        <li><strong>Performance</strong> - Application plus rapide et plus fluide</li>
+      </ul>
+    </div>
+    
+    <p>
+      Si vous avez des questions ou rencontrez des difficultés, n'hésitez pas à 
+      contacter notre équipe de support.
+    </p>
+    
+    <p>
+      Cordialement,<br>
+      L'équipe CocoaTrack
+    </p>
+  </div>
+  
+  <div class="footer">
+    <p>
+      Cet email a été envoyé automatiquement suite à la migration vers CocoaTrack V2.<br>
+      © 2024 CocoaTrack. Tous droits réservés.
+    </p>
+  </div>
+</body>
+</html>

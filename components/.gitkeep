@@ -1,0 +1,9 @@
+# Components directory
+# This directory contains reusable React components
+
+# Structure:
+# - ui/          - Base UI components (buttons, inputs, etc.)
+# - layout/      - Layout components (sidebar, header, etc.)
+# - forms/       - Form components
+# - maps/        - Map-related components
+# - dashboard/   - Dashboard-specific components

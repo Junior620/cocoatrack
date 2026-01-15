@@ -1,0 +1,10 @@
+# Lib directory
+# This directory contains utility functions and shared logic
+
+# Structure:
+# - supabase/    - Supabase client configuration
+# - auth/        - Authentication utilities
+# - api/         - API client functions
+# - offline/     - Offline sync engine
+# - utils/       - General utility functions
+# - hooks/       - Custom React hooks
