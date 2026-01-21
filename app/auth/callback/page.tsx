@@ -14,8 +14,12 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     // Prevent multiple executions using ref
-    if (hasRun.current) return;
+    if (hasRun.current) {
+      console.log('Callback already ran, skipping');
+      return;
+    }
     hasRun.current = true;
+    console.log('Starting callback handler');
 
     const handleCallback = async () => {
       try {
@@ -56,16 +60,13 @@ export default function AuthCallbackPage() {
 
           console.log('Code exchanged successfully:', data.session ? 'Session exists' : 'No session');
 
-          // Wait a bit for cookies to be set
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Redirect based on type using router for client-side navigation
+          // Redirect based on type using full page navigation
           if (type === 'recovery') {
             console.log('Redirecting to reset-password (PKCE)');
-            router.replace('/reset-password');
+            window.location.replace('/reset-password');
           } else {
             console.log('Redirecting to dashboard (PKCE)');
-            router.replace('/dashboard');
+            window.location.replace('/dashboard');
           }
           return;
         }
@@ -86,16 +87,13 @@ export default function AuthCallbackPage() {
 
           console.log('Session set successfully:', data.session ? 'Session exists' : 'No session');
 
-          // Wait a bit for cookies to be set
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Redirect based on type using router for client-side navigation
+          // Redirect based on type using full page navigation
           if (type === 'recovery') {
             console.log('Redirecting to reset-password (implicit)');
-            router.replace('/reset-password');
+            window.location.replace('/reset-password');
           } else {
             console.log('Redirecting to dashboard (implicit)');
-            router.replace('/dashboard');
+            window.location.replace('/dashboard');
           }
           return;
         }
@@ -112,7 +110,7 @@ export default function AuthCallbackPage() {
 
     // Small delay to ensure DOM is ready
     setTimeout(handleCallback, 100);
-  }, [router]);
+  }, []); // Empty dependency array to run only once
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#234D1E] to-[#1a3a16] p-4">
