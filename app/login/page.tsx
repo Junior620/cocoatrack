@@ -93,6 +93,16 @@ function LoginForm() {
         </div>
       </div>
 
+      {/* Forgot Password Link */}
+      <div className="text-right">
+        <a
+          href="/forgot-password"
+          className="text-sm text-[#234D1E] hover:text-[#1a3a16] font-medium transition-colors"
+        >
+          Mot de passe oublié ?
+        </a>
+      </div>
+
       {/* Submit */}
       <button
         type="submit"

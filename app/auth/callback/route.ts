@@ -8,6 +8,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
+  const type = searchParams.get('type');
   const next = searchParams.get('next') ?? '/dashboard';
 
   if (code) {
@@ -18,6 +19,18 @@ export async function GET(request: Request) {
       const forwardedHost = request.headers.get('x-forwarded-host');
       const isLocalEnv = process.env.NODE_ENV === 'development';
 
+      // If this is a password recovery, redirect to reset password page
+      if (type === 'recovery') {
+        if (isLocalEnv) {
+          return NextResponse.redirect(`${origin}/reset-password`);
+        } else if (forwardedHost) {
+          return NextResponse.redirect(`https://${forwardedHost}/reset-password`);
+        } else {
+          return NextResponse.redirect(`${origin}/reset-password`);
+        }
+      }
+
+      // Normal login flow
       if (isLocalEnv) {
         // In development, redirect to localhost
         return NextResponse.redirect(`${origin}${next}`);

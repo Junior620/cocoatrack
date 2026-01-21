@@ -38,6 +38,7 @@ function UsersContent() {
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<SuccessMessage | null>(null);
+  const [resendingEmailFor, setResendingEmailFor] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -113,6 +114,39 @@ function UsersContent() {
     setSuccessMessage(null);
   };
 
+  // Resend password reset email
+  const handleResendPasswordReset = async (userId: string, userEmail: string) => {
+    setResendingEmailFor(userId);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/resend-password-reset`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erreur lors de l\'envoi de l\'email');
+      }
+
+      // Show success message
+      setSuccessMessage({
+        email: userEmail,
+        emailSent: true,
+      });
+
+      // Auto-hide after 8 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 8000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de l\'envoi de l\'email');
+    } finally {
+      setResendingEmailFor(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -168,8 +202,8 @@ function UsersContent() {
                 Utilisateur créé avec succès !
               </p>
               <p className="mt-1 text-sm text-green-700">
-                Un email d&apos;invitation a été envoyé à{' '}
-                <strong>{successMessage.email}</strong> pour définir son mot de passe.
+                Un email de réinitialisation de mot de passe a été envoyé à{' '}
+                <strong>{successMessage.email}</strong>.
               </p>
             </div>
             <div className="ml-auto pl-3">
@@ -210,6 +244,9 @@ function UsersContent() {
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Statut
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Email
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                 Actions
@@ -283,6 +320,32 @@ function UsersContent() {
                   >
                     {user.is_active ? 'Actif' : 'Inactif'}
                   </span>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <button
+                    onClick={() => handleResendPasswordReset(user.id, user.email)}
+                    disabled={resendingEmailFor === user.id}
+                    className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Renvoyer l'email de réinitialisation"
+                  >
+                    {resendingEmailFor === user.id ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Envoi...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+                          <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+                        </svg>
+                        Renvoyer email
+                      </>
+                    )}
+                  </button>
                 </td>
                 <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
                   {editingUser?.id === user.id ? (
