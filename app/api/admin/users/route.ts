@@ -135,10 +135,10 @@ export async function POST(request: NextRequest) {
     let emailSent = false;
 
     try {
-      // Create profile in profiles table (Requirement 1.4)
+      // Update profile in profiles table (Requirement 1.4)
+      // Note: The profile is auto-created by the handle_new_user() trigger with default values
+      // We need to update it with the admin-specified values
       const profileData = {
-        id: newUserId,
-        email: validatedInput.email,
         full_name: validatedInput.full_name,
         role: validatedInput.role,
         cooperative_id: validatedInput.cooperative_id ?? null,
@@ -147,15 +147,16 @@ export async function POST(request: NextRequest) {
         password_reset_required: true,
       } as const;
 
-      const { error: profileInsertError } = await adminClient
+      const { error: profileUpdateError } = await adminClient
         .from('profiles')
-        .insert(profileData);
+        .update(profileData)
+        .eq('id', newUserId);
 
-      if (profileInsertError) {
-        console.error('Error creating profile:', profileInsertError);
-        // Rollback: delete the auth user
+      if (profileUpdateError) {
+        console.error('Error updating profile:', profileUpdateError);
+        // Rollback: delete the auth user (which will cascade delete the profile via trigger)
         await adminClient.auth.admin.deleteUser(newUserId);
-        return errorResponse('Erreur lors de la création du profil', 500);
+        return errorResponse('Erreur lors de la mise à jour du profil', 500);
       }
 
       profileCreated = true;
