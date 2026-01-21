@@ -11,26 +11,44 @@ export default function AuthCallbackPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   useEffect(() => {
     // Prevent multiple executions
-    if (isProcessing) return;
+    if (isProcessing) {
+      console.log('[Callback] Already processing, skipping...');
+      return;
+    }
 
     const handleCallback = async () => {
+      console.log('[Callback] Starting callback handler...');
       setIsProcessing(true);
+      setDebugInfo('Démarrage...');
+      
       const supabase = createClient();
       
       // Check if we have hash parameters (implicit flow)
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const hash = window.location.hash;
+      console.log('[Callback] Hash:', hash);
+      setDebugInfo(`Hash détecté: ${hash.substring(0, 50)}...`);
+      
+      const hashParams = new URLSearchParams(hash.substring(1));
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
       const type = hashParams.get('type');
       const errorCode = hashParams.get('error_code');
       const errorDescription = hashParams.get('error_description');
 
+      console.log('[Callback] Parsed params:', { 
+        hasAccessToken: !!accessToken, 
+        hasRefreshToken: !!refreshToken, 
+        type, 
+        errorCode 
+      });
+
       // Handle errors from Supabase
       if (errorCode) {
-        console.error('Auth error:', errorCode, errorDescription);
+        console.error('[Callback] Auth error:', errorCode, errorDescription);
         
         if (errorCode === 'otp_expired') {
           setError('Le lien a expiré. Veuillez demander un nouveau lien.');
@@ -49,13 +67,16 @@ export default function AuthCallbackPage() {
 
       // If we have tokens, set the session
       if (accessToken && refreshToken) {
+        console.log('[Callback] Setting session...');
+        setDebugInfo('Configuration de la session...');
+        
         const { error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
 
         if (sessionError) {
-          console.error('Session error:', sessionError);
+          console.error('[Callback] Session error:', sessionError);
           setError('Erreur lors de la connexion');
           setTimeout(() => {
             router.push('/login');
@@ -63,18 +84,26 @@ export default function AuthCallbackPage() {
           return;
         }
 
+        console.log('[Callback] Session set successfully');
+
         // If this is a password recovery, redirect to reset password page
         if (type === 'recovery') {
+          console.log('[Callback] Recovery type detected, redirecting to reset-password');
+          setDebugInfo('Redirection vers reset-password...');
           router.push('/reset-password');
           return;
         }
 
         // Normal login, redirect to dashboard
+        console.log('[Callback] Normal login, redirecting to dashboard');
+        setDebugInfo('Redirection vers dashboard...');
         router.push('/dashboard');
         return;
       }
 
       // No tokens found, redirect to login
+      console.log('[Callback] No tokens found, redirecting to login');
+      setDebugInfo('Aucun token trouvé, redirection...');
       router.push('/login');
     };
 
@@ -99,6 +128,9 @@ export default function AuthCallbackPage() {
           <div className="bg-white rounded-2xl p-8 shadow-xl">
             <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#234D1E] border-t-transparent mx-auto mb-4" />
             <p className="text-gray-700 font-medium">Vérification en cours...</p>
+            {debugInfo && (
+              <p className="text-sm text-gray-500 mt-2">{debugInfo}</p>
+            )}
           </div>
         )}
       </div>
