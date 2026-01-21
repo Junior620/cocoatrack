@@ -239,15 +239,28 @@ export const parcellesImportApi = {
   async upload(file: File, planteurId?: string, onProgress?: UploadProgressCallback): Promise<ParcelImportFile> {
     const supabase = getTypedClient();
 
+    // Check for RAR files specifically to provide a helpful error message
+    const fileExtension = file.name.toLowerCase().split('.').pop();
+    if (fileExtension === 'rar') {
+      throw {
+        error_code: PARCELLE_ERROR_CODES.VALIDATION_ERROR,
+        message: 'Les fichiers .rar ne sont pas supportés. Veuillez extraire le contenu et re-compresser en .zip',
+        details: {
+          field: 'file',
+          message: 'RAR format is not supported. Please extract and re-compress as ZIP.',
+        },
+      };
+    }
+
     // Validate file type
     const fileType = getFileType(file.name);
     if (!fileType) {
       throw {
         error_code: PARCELLE_ERROR_CODES.VALIDATION_ERROR,
-        message: 'Unsupported file type. Accepted formats: .zip (Shapefile), .kml, .kmz, .geojson',
+        message: 'Format de fichier non supporté. Formats acceptés : .zip (Shapefile), .kml, .kmz, .geojson',
         details: {
           field: 'file',
-          message: `File extension not supported: ${file.name.split('.').pop()}`,
+          message: `File extension not supported: ${fileExtension}`,
         },
       };
     }
@@ -406,16 +419,25 @@ export const parcellesImportApi = {
 
         xhr.open('POST', uploadUrl);
         xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
-        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        // Normalize MIME type for ZIP files (some browsers use application/x-zip-compressed)
+        const contentType = file.type === 'application/x-zip-compressed' 
+          ? 'application/zip' 
+          : (file.type || 'application/octet-stream');
+        xhr.setRequestHeader('Content-Type', contentType);
         xhr.setRequestHeader('x-upsert', 'false');
         xhr.send(file);
       });
     } else {
       // Standard upload without progress tracking
+      // Normalize MIME type for ZIP files (some browsers use application/x-zip-compressed)
+      const contentType = file.type === 'application/x-zip-compressed' 
+        ? 'application/zip' 
+        : (file.type || 'application/octet-stream');
+      
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(storagePath, file, {
-          contentType: file.type || 'application/octet-stream',
+          contentType,
           upsert: false,
         });
 
