@@ -10,9 +10,14 @@ import { createClient } from '@/lib/supabase/client';
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
+    // Prevent multiple executions
+    if (isProcessing) return;
+
     const handleCallback = async () => {
+      setIsProcessing(true);
       const supabase = createClient();
       
       // Check if we have hash parameters (implicit flow)
@@ -74,7 +79,7 @@ export default function AuthCallbackPage() {
     };
 
     handleCallback();
-  }, [router]);
+  }, []); // Empty dependency array - only run once
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#234D1E] to-[#1a3a16]">
