@@ -1,6 +1,25 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Check if we have auth tokens in the URL hash (from Supabase email links)
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      
+      // If we have an access token, redirect to auth callback
+      if (accessToken) {
+        router.push(`/auth/callback${window.location.hash}`);
+      }
+    }
+  }, [router]);
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8">
       <div className="text-center">
