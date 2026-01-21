@@ -47,20 +47,25 @@ export default function AuthCallbackPage() {
         // If we have a code (PKCE flow), exchange it for a session
         if (code) {
           console.log('Using PKCE flow with code');
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             console.error('Code exchange error:', error);
             window.location.href = '/login?error=' + encodeURIComponent(error.message);
             return;
           }
 
-          // Redirect based on type
+          console.log('Code exchanged successfully:', data.session ? 'Session exists' : 'No session');
+
+          // Wait a bit for cookies to be set
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Redirect based on type using router for client-side navigation
           if (type === 'recovery') {
             console.log('Redirecting to reset-password (PKCE)');
-            window.location.href = '/reset-password';
+            router.replace('/reset-password');
           } else {
             console.log('Redirecting to dashboard (PKCE)');
-            window.location.href = '/dashboard';
+            router.replace('/dashboard');
           }
           return;
         }
@@ -68,7 +73,7 @@ export default function AuthCallbackPage() {
         // If we have tokens (implicit flow), set the session
         if (accessToken && refreshToken) {
           console.log('Using implicit flow with tokens');
-          const { error } = await supabase.auth.setSession({
+          const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
@@ -79,13 +84,18 @@ export default function AuthCallbackPage() {
             return;
           }
 
-          // Redirect based on type
+          console.log('Session set successfully:', data.session ? 'Session exists' : 'No session');
+
+          // Wait a bit for cookies to be set
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Redirect based on type using router for client-side navigation
           if (type === 'recovery') {
             console.log('Redirecting to reset-password (implicit)');
-            window.location.href = '/reset-password';
+            router.replace('/reset-password');
           } else {
             console.log('Redirecting to dashboard (implicit)');
-            window.location.href = '/dashboard';
+            router.replace('/dashboard');
           }
           return;
         }
