@@ -25,14 +25,9 @@ export default function AuthCallbackPage() {
       try {
         const supabase = createClient();
         
-        // Get hash parameters (for access_token, refresh_token)
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        
         // Get query parameters (for type, code, etc.)
         const searchParams = new URLSearchParams(window.location.search);
-        const type = searchParams.get('type') || hashParams.get('type');
+        const type = searchParams.get('type');
         const code = searchParams.get('code');
 
         // Debug logging
@@ -41,9 +36,8 @@ export default function AuthCallbackPage() {
           hash: window.location.hash,
           search: window.location.search,
           type,
-          hasAccessToken: !!accessToken,
-          hasRefreshToken: !!refreshToken,
           hasCode: !!code,
+          hasHash: window.location.hash.length > 0,
         };
         console.log('Auth callback debug:', debug);
         setDebugInfo(JSON.stringify(debug, null, 2));
@@ -54,7 +48,7 @@ export default function AuthCallbackPage() {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             console.error('Code exchange error:', error);
-            window.location.href = '/login?error=' + encodeURIComponent(error.message);
+            window.location.replace('/login?error=' + encodeURIComponent(error.message));
             return;
           }
 
@@ -71,40 +65,70 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // If we have tokens (implicit flow), set the session
-        if (accessToken && refreshToken) {
-          console.log('Using implicit flow with tokens');
-          const { data, error } = await supabase.auth.setSession({
+        // If we have tokens in hash (implicit flow), parse and set session
+        if (window.location.hash && window.location.hash.includes('access_token')) {
+          console.log('Using implicit flow with hash tokens');
+          
+          // Parse hash parameters
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+
+          if (!accessToken || !refreshToken) {
+            console.error('Missing tokens in hash');
+            window.location.replace('/login?error=missing_tokens');
+            return;
+          }
+
+          // Set session with timeout to prevent hanging
+          const sessionPromise = supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
 
-          if (error) {
-            console.error('Session set error:', error);
-            window.location.href = '/login?error=' + encodeURIComponent(error.message);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Session setup timeout')), 5000)
+          );
+
+          try {
+            const { data, error } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+
+            if (error) {
+              console.error('Session set error:', error);
+              window.location.replace('/login?error=' + encodeURIComponent(error.message));
+              return;
+            }
+
+            console.log('Session set successfully:', data?.session ? 'Session exists' : 'No session');
+
+            // Redirect based on type using full page navigation
+            if (type === 'recovery') {
+              console.log('Redirecting to reset-password (implicit)');
+              window.location.replace('/reset-password');
+            } else {
+              console.log('Redirecting to dashboard (implicit)');
+              window.location.replace('/dashboard');
+            }
+            return;
+          } catch (timeoutError) {
+            console.error('Session setup timed out, redirecting anyway');
+            // Even if timeout, try to redirect - the session might still be set
+            if (type === 'recovery') {
+              window.location.replace('/reset-password');
+            } else {
+              window.location.replace('/dashboard');
+            }
             return;
           }
-
-          console.log('Session set successfully:', data.session ? 'Session exists' : 'No session');
-
-          // Redirect based on type using full page navigation
-          if (type === 'recovery') {
-            console.log('Redirecting to reset-password (implicit)');
-            window.location.replace('/reset-password');
-          } else {
-            console.log('Redirecting to dashboard (implicit)');
-            window.location.replace('/dashboard');
-          }
-          return;
         }
 
         // No auth data found, redirect to login
         console.log('No auth data found, redirecting to login');
-        window.location.href = '/login';
+        window.location.replace('/login');
       } catch (error) {
         console.error('Callback error:', error);
         setDebugInfo('Error: ' + (error instanceof Error ? error.message : String(error)));
-        window.location.href = '/login?error=' + encodeURIComponent('callback_error');
+        window.location.replace('/login?error=' + encodeURIComponent('callback_error'));
       }
     };
 
