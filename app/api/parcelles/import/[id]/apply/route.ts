@@ -239,6 +239,7 @@ export async function POST(
       kml: 'kml',
       kmz: 'kml',
       geojson: 'geojson',
+      gpx: 'gpx',
     };
     const source = sourceMap[typedImportFile.file_type];
 
