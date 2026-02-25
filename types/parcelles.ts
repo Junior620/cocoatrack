@@ -68,7 +68,7 @@ export const CONFORMITY_STATUS_COLORS: Record<ConformityStatus, string> = {
  * 
  * Note: KMZ files are stored as 'kml' source (KMZ → kml extraction)
  */
-export const PARCELLE_SOURCE_VALUES = ['manual', 'shapefile', 'kml', 'geojson'] as const;
+export const PARCELLE_SOURCE_VALUES = ['manual', 'shapefile', 'kml', 'geojson', 'gpx'] as const;
 
 /**
  * Source of parcelle data
@@ -76,6 +76,7 @@ export const PARCELLE_SOURCE_VALUES = ['manual', 'shapefile', 'kml', 'geojson'] 
  * - shapefile: Imported from Shapefile ZIP
  * - kml: Imported from KML/KMZ file
  * - geojson: Imported from GeoJSON file
+ * - gpx: Imported from GPX file
  */
 export type ParcelleSource = (typeof PARCELLE_SOURCE_VALUES)[number];
 
@@ -87,6 +88,7 @@ export const PARCELLE_SOURCE_LABELS: Record<ParcelleSource, string> = {
   shapefile: 'Shapefile',
   kml: 'KML/KMZ',
   geojson: 'GeoJSON',
+  gpx: 'GPX',
 };
 
 /**
@@ -299,8 +301,9 @@ export interface ParcelleWithPlanteur extends Parcelle {
  * - kml: Keyhole Markup Language file
  * - kmz: Compressed KML file
  * - geojson: GeoJSON file
+ * - gpx: GPS eXchange Format file (tracks and routes)
  */
-export type ImportFileType = 'shapefile_zip' | 'kml' | 'kmz' | 'geojson';
+export type ImportFileType = 'shapefile_zip' | 'kml' | 'kmz' | 'geojson' | 'gpx';
 
 /**
  * Import workflow status

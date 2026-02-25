@@ -35,6 +35,8 @@ function getFileType(filename: string): ImportFileType | null {
     case 'geojson':
     case 'json':
       return 'geojson';
+    case 'gpx':
+      return 'gpx';
     default:
       return null;
   }
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
     if (!fileType) {
       return validationErrorResponse(
         'file',
-        `File extension not supported: ${file.name.split('.').pop()}. Accepted formats: .zip (Shapefile), .kml, .kmz, .geojson`
+        `File extension not supported: ${file.name.split('.').pop()}. Accepted formats: .zip (Shapefile), .kml, .kmz, .geojson, .gpx`
       );
     }
 

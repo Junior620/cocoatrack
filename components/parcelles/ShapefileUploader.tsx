@@ -2,7 +2,7 @@
 
 // CocoaTrack V2 - ShapefileUploader Component
 // Drag-and-drop file uploader for parcelle imports
-// Supports: .zip (Shapefile), .kml, .kmz, .geojson
+// Supports: .zip (Shapefile), .kml, .kmz, .geojson, .gpx
 // 
 // Features:
 // - Drag-and-drop zone with visual feedback
@@ -38,7 +38,7 @@ import {
 } from '@/types/parcelles';
 
 // Accepted file extensions and MIME types
-const ACCEPTED_EXTENSIONS = ['.zip', '.kml', '.kmz', '.geojson', '.json'];
+const ACCEPTED_EXTENSIONS = ['.zip', '.kml', '.kmz', '.geojson', '.json', '.gpx'];
 const ACCEPTED_MIME_TYPES = [
   'application/zip',
   'application/x-zip-compressed',
@@ -46,6 +46,9 @@ const ACCEPTED_MIME_TYPES = [
   'application/vnd.google-earth.kmz',
   'application/geo+json',
   'application/json',
+  'application/gpx+xml',
+  'application/xml',
+  'text/xml',
 ];
 
 // File type labels for display
@@ -55,6 +58,7 @@ const FILE_TYPE_LABELS: Record<string, string> = {
   '.kmz': 'KMZ',
   '.geojson': 'GeoJSON',
   '.json': 'GeoJSON',
+  '.gpx': 'GPX',
 };
 
 // Planteur type for selector

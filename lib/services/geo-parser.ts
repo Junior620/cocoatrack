@@ -1,8 +1,8 @@
 // CocoaTrack V2 - Geo Parser Service
-// Parses KML, KMZ, and GeoJSON files to GeoJSON features
-// Uses @tmcw/togeojson for KML parsing
+// Parses KML, KMZ, GeoJSON, and GPX files to GeoJSON features
+// Uses @tmcw/togeojson for KML and GPX parsing
 
-import { kml as parseKmlToGeoJson } from '@tmcw/togeojson';
+import { kml as parseKmlToGeoJson, gpx as parseGpxToGeoJson } from '@tmcw/togeojson';
 import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson';
 import { normalizeToMultiPolygon, normalizeGeometryRings } from './geometry-service';
 import type { ParseError, ParseWarning } from '@/types/parcelles';
@@ -181,6 +181,163 @@ export function parseKML(content: string): GeoParseResult {
 export async function parseKMZ(buffer: ArrayBuffer): Promise<GeoParseResult> {
   const kmlContent = await extractKmlFromKmz(buffer);
   return parseKmlContent(kmlContent);
+}
+
+/**
+ * Parse GPX content to GeoJSON features
+ * GPX (GPS eXchange Format) is an XML format for GPS data containing tracks, routes, and waypoints.
+ * For parcelles, we extract tracks and routes as polygons (closed paths).
+ * 
+ * @param gpxContent - GPX content as string
+ * @returns Parsed features with normalized geometry
+ */
+function parseGpxContent(gpxContent: string): GeoParseResult {
+  const errors: ParseError[] = [];
+  const warnings: ParseWarning[] = [];
+  const features: Feature<MultiPolygon>[] = [];
+  const fieldSet = new Set<string>();
+  
+  try {
+    // Parse GPX to DOM
+    const parser = new DOMParser();
+    const gpxDoc = parser.parseFromString(gpxContent, 'text/xml');
+    
+    // Check for parse errors
+    const parseError = gpxDoc.querySelector('parsererror');
+    if (parseError) {
+      errors.push({
+        code: PARCELLE_ERROR_CODES.VALIDATION_ERROR,
+        message: 'Invalid GPX format',
+        details: { reason: parseError.textContent || 'XML parse error' },
+      });
+      return { features, errors, warnings, availableFields: [] };
+    }
+    
+    // Convert to GeoJSON using togeojson
+    const geojson = parseGpxToGeoJson(gpxDoc);
+    
+    // Process features
+    let featureIndex = 0;
+    for (const feature of geojson.features) {
+      // Collect property fields
+      if (feature.properties) {
+        Object.keys(feature.properties).forEach((key) => fieldSet.add(key));
+      }
+      
+      // Filter to only Polygon/MultiPolygon
+      // GPX tracks/routes are typically LineStrings, so we need to convert closed paths to polygons
+      if (!feature.geometry) {
+        warnings.push({
+          code: 'EMPTY_GEOMETRY',
+          message: `Feature ${featureIndex} has no geometry`,
+          feature_index: featureIndex,
+        });
+        featureIndex++;
+        continue;
+      }
+      
+      const geomType = feature.geometry.type;
+      
+      // Handle LineString from GPX tracks/routes - convert to Polygon if closed
+      if (geomType === 'LineString') {
+        const coords = (feature.geometry as any).coordinates;
+        
+        // Check if the line is closed (first and last points are the same or very close)
+        if (coords.length >= 4) {
+          const first = coords[0];
+          const last = coords[coords.length - 1];
+          const isClosed = 
+            Math.abs(first[0] - last[0]) < 0.0001 && 
+            Math.abs(first[1] - last[1]) < 0.0001;
+          
+          if (isClosed) {
+            // Convert to Polygon
+            const polygonGeom: Polygon = {
+              type: 'Polygon',
+              coordinates: [coords],
+            };
+            
+            const normalizedGeom = normalizeGeometry(polygonGeom);
+            
+            features.push({
+              type: 'Feature',
+              properties: feature.properties || {},
+              geometry: normalizedGeom,
+            });
+            
+            featureIndex++;
+            continue;
+          } else {
+            warnings.push({
+              code: 'UNCLOSED_LINESTRING',
+              message: `Feature ${featureIndex} is a LineString that is not closed - skipping`,
+              feature_index: featureIndex,
+            });
+            featureIndex++;
+            continue;
+          }
+        } else {
+          warnings.push({
+            code: 'INSUFFICIENT_POINTS',
+            message: `Feature ${featureIndex} has insufficient points (${coords.length}) to form a polygon`,
+            feature_index: featureIndex,
+          });
+          featureIndex++;
+          continue;
+        }
+      }
+      
+      // Accept Polygon and MultiPolygon directly
+      if (geomType !== 'Polygon' && geomType !== 'MultiPolygon') {
+        errors.push({
+          code: PARCELLE_ERROR_CODES.UNSUPPORTED_GEOMETRY_TYPE,
+          message: `Feature ${featureIndex} has unsupported geometry type: ${geomType}`,
+          feature_index: featureIndex,
+          details: { type: geomType, expected: ['Polygon', 'MultiPolygon', 'LineString (closed)'] },
+        });
+        featureIndex++;
+        continue;
+      }
+      
+      // Normalize to MultiPolygon with correct ring orientation
+      const normalizedGeom = normalizeGeometry(
+        feature.geometry as Polygon | MultiPolygon
+      );
+      
+      features.push({
+        type: 'Feature',
+        properties: feature.properties || {},
+        geometry: normalizedGeom,
+      });
+      
+      featureIndex++;
+    }
+  } catch (err) {
+    errors.push({
+      code: PARCELLE_ERROR_CODES.VALIDATION_ERROR,
+      message: 'Failed to parse GPX content',
+      details: { reason: err instanceof Error ? err.message : 'Unknown error' },
+    });
+  }
+  
+  return {
+    features,
+    errors,
+    warnings,
+    availableFields: Array.from(fieldSet),
+  };
+}
+
+/**
+ * Parse a GPX file
+ * GPX (GPS eXchange Format) is an XML-based format for GPS data.
+ * Extracts tracks and routes as parcelle polygons (closed paths only).
+ * 
+ * @param content - GPX file content as string
+ * @returns Parsed features with normalized geometry
+ */
+export function parseGPX(content: string): GeoParseResult {
+  return parseGpxContent(content);
 }
 
 /**

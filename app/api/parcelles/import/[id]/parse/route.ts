@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { applyRateLimit, addSecurityHeaders } from '@/lib/security/middleware';
 import { parseShapefile } from '@/lib/services/shapefile-parser';
-import { parseKML, parseKMZ, parseGeoJSON } from '@/lib/services/geo-parser';
+import { parseKML, parseKMZ, parseGeoJSON, parseGPX } from '@/lib/services/geo-parser';
 import {
   computeFeatureHash,
   calculateAreaHa,
@@ -143,6 +143,10 @@ export async function POST(
         case 'geojson':
           const geojsonText = await fileData.text();
           parseResult = parseGeoJSON(geojsonText);
+          break;
+        case 'gpx':
+          const gpxText = await fileData.text();
+          parseResult = parseGPX(gpxText);
           break;
         default:
           return validationErrorResponse('file_type', `Unsupported file type: ${typedImportFile.file_type}`);

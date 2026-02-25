@@ -26,7 +26,7 @@ import {
   ParcelleErrorCodes,
 } from '@/lib/errors/parcelle-errors';
 import { parseShapefile } from '@/lib/services/shapefile-parser';
-import { parseKML, parseKMZ, parseGeoJSON } from '@/lib/services/geo-parser';
+import { parseKML, parseKMZ, parseGeoJSON, parseGPX } from '@/lib/services/geo-parser';
 import {
   computeFeatureHash,
   calculateAreaHa,
@@ -576,6 +576,10 @@ async function parseImportFile(
       case 'geojson':
         const geojsonText = await fileData.text();
         parseResult = parseGeoJSON(geojsonText);
+        break;
+      case 'gpx':
+        const gpxText = await fileData.text();
+        parseResult = parseGPX(gpxText);
         break;
       default:
         throw createParcelleError(

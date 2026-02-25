@@ -215,7 +215,7 @@ function ParcellesMapContent() {
   const handleBboxChange = useCallback((bbox: [number, number, number, number], zoom?: number) => {
     setCurrentBbox(bbox);
     if (zoom !== undefined) {
-      setMapZoom(zoom);
+      setMapZoom(Math.round(zoom)); // Round to integer for API validation
     }
   }, []);
 

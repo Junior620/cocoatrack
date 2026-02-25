@@ -3,7 +3,7 @@
 // CocoaTrack V2 - LeafletMap Component (Internal)
 // Actual Leaflet implementation - dynamically imported to avoid SSR issues
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 // Import leaflet-fullscreen plugin for fullscreen control
@@ -61,6 +61,8 @@ export function LeafletMap({
   const mapRef = useRef<L.Map | null>(null);
   const polygonLayerRef = useRef<L.GeoJSON | null>(null);
   const centroidLayerRef = useRef<L.LayerGroup | null>(null);
+  const baseTileLayerRef = useRef<L.TileLayer | null>(null);
+  const [mapStyle, setMapStyle] = useState<'streets' | 'satellite'>('streets');
   
   // Store onBboxChange in a ref to avoid stale closures in event listeners
   const onBboxChangeRef = useRef(onBboxChange);
@@ -119,10 +121,12 @@ export function LeafletMap({
     });
 
     // Add OpenStreetMap tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
+    
+    baseTileLayerRef.current = tileLayer;
 
     // Create layer groups
     polygonLayerRef.current = L.geoJSON(undefined, {
@@ -308,9 +312,89 @@ export function LeafletMap({
     }
   }, [selectedId, zoomToSelected, parcelles]);
 
+  // Handle map style toggle
+  const toggleMapStyle = useCallback(() => {
+    if (!mapRef.current || !baseTileLayerRef.current) return;
+    
+    // Remove current tile layer
+    mapRef.current.removeLayer(baseTileLayerRef.current);
+    
+    // Add new tile layer based on style
+    const newStyle = mapStyle === 'streets' ? 'satellite' : 'streets';
+    
+    let newTileLayer: L.TileLayer;
+    if (newStyle === 'satellite') {
+      // Use Esri World Imagery (free satellite tiles)
+      newTileLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+          maxZoom: 19,
+        }
+      ).addTo(mapRef.current);
+    } else {
+      // Use OpenStreetMap
+      newTileLayer = L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19,
+        }
+      ).addTo(mapRef.current);
+    }
+    
+    baseTileLayerRef.current = newTileLayer;
+    setMapStyle(newStyle);
+  }, [mapStyle]);
+
   return (
     <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="h-full w-full" />
+
+      {/* Map Style Toggle */}
+      <div className="absolute top-4 right-4 z-[1000]">
+        <button
+          onClick={toggleMapStyle}
+          className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-lg transition-colors hover:bg-gray-50"
+          title={mapStyle === 'streets' ? 'Vue satellite' : 'Vue carte'}
+        >
+          {mapStyle === 'streets' ? (
+            <>
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              Satellite
+            </>
+          ) : (
+            <>
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                />
+              </svg>
+              Carte
+            </>
+          )}
+        </button>
+      </div>
 
       {/* Legend */}
       <div className="absolute bottom-4 left-4 z-[1000] bg-white rounded-lg p-3 shadow-lg">

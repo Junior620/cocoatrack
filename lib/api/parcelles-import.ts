@@ -21,7 +21,7 @@ import type {
 } from '@/types/parcelles';
 import { PARCELLE_ERROR_CODES, PARCELLE_LIMITS } from '@/types/parcelles';
 import { parseShapefile } from '@/lib/services/shapefile-parser';
-import { parseKML, parseKMZ, parseGeoJSON } from '@/lib/services/geo-parser';
+import { parseKML, parseKMZ, parseGeoJSON, parseGPX } from '@/lib/services/geo-parser';
 import {
   computeFeatureHash,
   calculateAreaHa,
@@ -189,6 +189,8 @@ function getFileType(filename: string): ImportFileType | null {
     case 'geojson':
     case 'json':
       return 'geojson';
+    case 'gpx':
+      return 'gpx';
     default:
       return null;
   }
@@ -225,6 +227,7 @@ export const parcellesImportApi = {
    * - .kml (Keyhole Markup Language)
    * - .kmz (Compressed KML)
    * - .geojson / .json (GeoJSON)
+   * - .gpx (GPS eXchange Format)
    * 
    * Limits:
    * - Maximum file size: 50MB
@@ -257,7 +260,7 @@ export const parcellesImportApi = {
     if (!fileType) {
       throw {
         error_code: PARCELLE_ERROR_CODES.VALIDATION_ERROR,
-        message: 'Format de fichier non supporté. Formats acceptés : .zip (Shapefile), .kml, .kmz, .geojson',
+        message: 'Format de fichier non supporté. Formats acceptés : .zip (Shapefile), .kml, .kmz, .geojson, .gpx',
         details: {
           field: 'file',
           message: `File extension not supported: ${fileExtension}`,
@@ -419,20 +422,28 @@ export const parcellesImportApi = {
 
         xhr.open('POST', uploadUrl);
         xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
-        // Normalize MIME type for ZIP files (some browsers use application/x-zip-compressed)
-        const contentType = file.type === 'application/x-zip-compressed' 
-          ? 'application/zip' 
-          : (file.type || 'application/octet-stream');
+        // Normalize MIME type for special cases
+        let contentType = file.type || 'application/octet-stream';
+        if (file.type === 'application/x-zip-compressed') {
+          contentType = 'application/zip';
+        } else if (file.type === 'application/gpx+xml' || file.type === 'application/xml' || file.type === 'text/xml') {
+          // GPX files - use application/octet-stream as fallback for Supabase Storage
+          contentType = 'application/octet-stream';
+        }
         xhr.setRequestHeader('Content-Type', contentType);
         xhr.setRequestHeader('x-upsert', 'false');
         xhr.send(file);
       });
     } else {
       // Standard upload without progress tracking
-      // Normalize MIME type for ZIP files (some browsers use application/x-zip-compressed)
-      const contentType = file.type === 'application/x-zip-compressed' 
-        ? 'application/zip' 
-        : (file.type || 'application/octet-stream');
+      // Normalize MIME type for special cases
+      let contentType = file.type || 'application/octet-stream';
+      if (file.type === 'application/x-zip-compressed') {
+        contentType = 'application/zip';
+      } else if (file.type === 'application/gpx+xml' || file.type === 'application/xml' || file.type === 'text/xml') {
+        // GPX files - use application/octet-stream as fallback for Supabase Storage
+        contentType = 'application/octet-stream';
+      }
       
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -679,6 +690,10 @@ export const parcellesImportApi = {
         case 'geojson':
           const geojsonText = await fileData.text();
           parseResult = parseGeoJSON(geojsonText);
+          break;
+        case 'gpx':
+          const gpxText = await fileData.text();
+          parseResult = parseGPX(gpxText);
           break;
         default:
           throw {
@@ -1238,6 +1253,7 @@ export const parcellesImportApi = {
       kml: 'kml',
       kmz: 'kml',
       geojson: 'geojson',
+      gpx: 'gpx',
     };
     const source = sourceMap[importFile.file_type];
 
