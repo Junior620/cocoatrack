@@ -62,7 +62,9 @@ export function LeafletMap({
   const polygonLayerRef = useRef<L.GeoJSON | null>(null);
   const centroidLayerRef = useRef<L.LayerGroup | null>(null);
   const baseTileLayerRef = useRef<L.TileLayer | null>(null);
-  const [mapStyle, setMapStyle] = useState<'streets' | 'satellite'>('streets');
+  const labelsLayerRef = useRef<L.TileLayer | null>(null);
+  const [mapStyle, setMapStyle] = useState<'streets' | 'satellite' | 'hybrid'>('streets');
+  const [showLabels, setShowLabels] = useState(true);
   
   // Store onBboxChange in a ref to avoid stale closures in event listeners
   const onBboxChangeRef = useRef(onBboxChange);
@@ -319,11 +321,24 @@ export function LeafletMap({
     // Remove current tile layer
     mapRef.current.removeLayer(baseTileLayerRef.current);
     
-    // Add new tile layer based on style
-    const newStyle = mapStyle === 'streets' ? 'satellite' : 'streets';
+    // Remove labels layer if it exists
+    if (labelsLayerRef.current) {
+      mapRef.current.removeLayer(labelsLayerRef.current);
+      labelsLayerRef.current = null;
+    }
+    
+    // Cycle through: streets -> satellite -> hybrid -> streets
+    let newStyle: 'streets' | 'satellite' | 'hybrid';
+    if (mapStyle === 'streets') {
+      newStyle = 'satellite';
+    } else if (mapStyle === 'satellite') {
+      newStyle = 'hybrid';
+    } else {
+      newStyle = 'streets';
+    }
     
     let newTileLayer: L.TileLayer;
-    if (newStyle === 'satellite') {
+    if (newStyle === 'satellite' || newStyle === 'hybrid') {
       // Use Esri World Imagery (free satellite tiles)
       newTileLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -332,6 +347,21 @@ export function LeafletMap({
           maxZoom: 19,
         }
       ).addTo(mapRef.current);
+      
+      // Add labels overlay for hybrid mode or if showLabels is true in satellite mode
+      if (newStyle === 'hybrid' || (newStyle === 'satellite' && showLabels)) {
+        // Using CartoDB Positron labels with better contrast for satellite imagery
+        const labelsLayer = L.tileLayer(
+          'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+          {
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+            maxZoom: 19,
+            pane: 'shadowPane', // Render above the base layer but below markers
+          }
+        ).addTo(mapRef.current);
+        
+        labelsLayerRef.current = labelsLayer;
+      }
     } else {
       // Use OpenStreetMap
       newTileLayer = L.tileLayer(
@@ -345,18 +375,54 @@ export function LeafletMap({
     
     baseTileLayerRef.current = newTileLayer;
     setMapStyle(newStyle);
-  }, [mapStyle]);
+  }, [mapStyle, showLabels]);
+
+  // Toggle labels visibility (only in satellite mode)
+  const toggleLabels = useCallback(() => {
+    if (!mapRef.current || mapStyle !== 'satellite') return;
+    
+    const newShowLabels = !showLabels;
+    setShowLabels(newShowLabels);
+    
+    if (newShowLabels) {
+      // Add labels layer
+      if (!labelsLayerRef.current) {
+        const labelsLayer = L.tileLayer(
+          'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+          {
+            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+            maxZoom: 19,
+            pane: 'shadowPane',
+          }
+        ).addTo(mapRef.current);
+        
+        labelsLayerRef.current = labelsLayer;
+      }
+    } else {
+      // Remove labels layer
+      if (labelsLayerRef.current) {
+        mapRef.current.removeLayer(labelsLayerRef.current);
+        labelsLayerRef.current = null;
+      }
+    }
+  }, [mapStyle, showLabels]);
 
   return (
     <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="h-full w-full" />
 
       {/* Map Style Toggle */}
-      <div className="absolute top-4 right-4 z-[1000]">
+      <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
         <button
           onClick={toggleMapStyle}
           className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-lg transition-colors hover:bg-gray-50"
-          title={mapStyle === 'streets' ? 'Vue satellite' : 'Vue carte'}
+          title={
+            mapStyle === 'streets' 
+              ? 'Passer en vue satellite' 
+              : mapStyle === 'satellite'
+              ? 'Passer en vue hybride'
+              : 'Passer en vue carte'
+          }
         >
           {mapStyle === 'streets' ? (
             <>
@@ -374,6 +440,23 @@ export function LeafletMap({
                 />
               </svg>
               Satellite
+            </>
+          ) : mapStyle === 'satellite' ? (
+            <>
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z"
+                />
+              </svg>
+              Hybride
             </>
           ) : (
             <>
@@ -394,6 +477,34 @@ export function LeafletMap({
             </>
           )}
         </button>
+
+        {/* Labels Toggle (only visible in satellite mode) */}
+        {mapStyle === 'satellite' && (
+          <button
+            onClick={toggleLabels}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-lg transition-colors ${
+              showLabels
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+            title={showLabels ? 'Masquer les labels' : 'Afficher les labels'}
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+              />
+            </svg>
+            Labels
+          </button>
+        )}
       </div>
 
       {/* Legend */}
