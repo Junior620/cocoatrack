@@ -5,3 +5,4 @@ export * from './pdf-service';
 export * from './geometry-service';
 export * from './shapefile-parser';
 export * from './geo-parser';
+export * from './planteur-duplicate-detector';

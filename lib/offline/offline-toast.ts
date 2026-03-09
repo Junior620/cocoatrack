@@ -48,7 +48,8 @@ class ToastManager {
     this.toasts = [...this.toasts, toast];
     this.notifyListeners();
 
-    // Auto-dismiss after duration
+    // Auto-dismiss after duration (if duration > 0)
+    // Duration of 0 means manual dismiss only
     if (toast.duration !== undefined && toast.duration > 0) {
       setTimeout(() => {
         this.dismiss(id);

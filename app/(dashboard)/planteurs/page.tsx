@@ -6,7 +6,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Search, AlertTriangle, TrendingDown, Scale, MapPin } from 'lucide-react';
+import { Plus, Search, AlertTriangle, TrendingDown, Scale, MapPin, Upload, CheckCircle, X } from 'lucide-react';
 
 import { useAuth, hasPermission } from '@/lib/auth';
 import { planteursApi } from '@/lib/api/planteurs';
@@ -14,6 +14,10 @@ import type { PlanteurWithRelations, PlanteurFilters } from '@/lib/validations/p
 import type { PaginatedResult } from '@/types';
 import { ProgressBarCompact, AlertBadge } from '@/components/ui/ProgressBar';
 import { PageTransition, AnimatedSection } from '@/components/dashboard';
+import { ImportModal, PlanteurCheckbox, SelectAllCheckbox, BulkActionToolbar } from '@/components/planteurs';
+import { BulkAssignmentDialog } from '@/components/planteurs/BulkAssignmentDialog';
+import { PlanteurSelectionProvider, usePlanteurSelection } from '@/contexts/planteur-selection';
+import { ErrorBoundary, BulkAssignmentErrorFallback } from '@/components/common/ErrorBoundary';
 
 // Format weight with locale
 function formatWeight(kg: number | null | undefined): string {
@@ -37,14 +41,26 @@ function getLossLevel(percentage: number | null | undefined): 'success' | 'warni
 }
 
 export default function PlanteursPage() {
+  return (
+    <PlanteurSelectionProvider>
+      <PlanteursPageContent />
+    </PlanteurSelectionProvider>
+  );
+}
+
+function PlanteursPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const { clearSelection, selectedIds } = usePlanteurSelection();
 
   const [data, setData] = useState<PaginatedResult<PlanteurWithRelations> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const [isBulkAssignDialogOpen, setIsBulkAssignDialogOpen] = useState(false);
 
   // Parse filters from URL
   const filters: PlanteurFilters = {
@@ -125,6 +141,40 @@ export default function PlanteursPage() {
     updateFilters({ page });
   };
 
+  // Handle import completion
+  const handleImportComplete = useCallback(() => {
+    // Refresh the planteurs list while maintaining current filters
+    fetchPlanteurs();
+    
+    // Close the modal
+    setIsImportModalOpen(false);
+    
+    // Show success message
+    setImportSuccess(true);
+    
+    // Auto-hide success message after 5 seconds
+    setTimeout(() => {
+      setImportSuccess(false);
+    }, 5000);
+  }, [fetchPlanteurs]);
+
+  // Handle bulk assign button click (Requirement 2.2)
+  const handleBulkAssign = () => {
+    setIsBulkAssignDialogOpen(true);
+  };
+
+  // Handle bulk assignment success (Requirements 8.5, 10.2, 10.3)
+  const handleBulkAssignSuccess = useCallback(() => {
+    // Refresh the planteurs list
+    fetchPlanteurs();
+    
+    // Clear selection (Requirement 10.2)
+    clearSelection();
+    
+    // Close dialog (Requirement 10.3)
+    setIsBulkAssignDialogOpen(false);
+  }, [fetchPlanteurs, clearSelection]);
+
   // Count alerts
   const alertCount = data?.data.filter(p => {
     const usage = p.pourcentage_utilise;
@@ -153,13 +203,22 @@ export default function PlanteursPage() {
             </div>
           )}
           {canCreate && (
-            <Link
-              href="/planteurs/new"
-              className="inline-flex items-center rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 shadow-sm transition-colors"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nouveau planteur
-            </Link>
+            <>
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="inline-flex items-center rounded-xl bg-white border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Importer CSV
+              </button>
+              <Link
+                href="/planteurs/new"
+                className="inline-flex items-center rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 shadow-sm transition-colors"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nouveau planteur
+              </Link>
+            </>
           )}
         </div>
       </div>
@@ -192,6 +251,36 @@ export default function PlanteursPage() {
         </div>
       </AnimatedSection>
 
+      {/* Success Message */}
+      {importSuccess && (
+        <AnimatedSection animation="fadeUp" delay={0.1}>
+          <div className="rounded-xl bg-green-50 border border-green-200 p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-green-800">
+                  Import terminé avec succès
+                </h3>
+                <p className="mt-1 text-sm text-green-700">
+                  Les planteurs ont été importés et la liste a été mise à jour.
+                </p>
+              </div>
+              <div className="ml-auto pl-3">
+                <button
+                  onClick={() => setImportSuccess(false)}
+                  className="inline-flex rounded-md bg-green-50 p-1.5 text-green-500 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2 focus:ring-offset-green-50"
+                >
+                  <span className="sr-only">Fermer</span>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </AnimatedSection>
+      )}
+
       {/* Error state */}
       {error && (
         <div className="rounded-xl bg-red-50 border border-red-200 p-4">
@@ -214,11 +303,26 @@ export default function PlanteursPage() {
       {/* Data table */}
       {!loading && data && (
         <AnimatedSection animation="fadeUp" delay={0.2}>
+          {/* Bulk Action Toolbar (Requirements 1.4, 2.1) */}
+          {/* Wrapped with ErrorBoundary for graceful error handling */}
+          <ErrorBoundary>
+            <BulkActionToolbar
+              onBulkAssign={handleBulkAssign}
+              className="mb-4"
+            />
+          </ErrorBoundary>
+
           <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-gray-100">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left">
+                      {/* Select All Checkbox (Requirement 1.3) */}
+                      <SelectAllCheckbox
+                        planteurIds={data.data.map(p => p.id)}
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
                       Planteur
                     </th>
@@ -257,7 +361,7 @@ export default function PlanteursPage() {
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {data.data.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center">
+                      <td colSpan={10} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center">
                           <div className="p-3 bg-gray-100 rounded-full mb-3">
                             <Search className="h-6 w-6 text-gray-400" />
@@ -280,6 +384,10 @@ export default function PlanteursPage() {
                           key={planteur.id} 
                           className={`hover:bg-gray-50 transition-colors ${hasAlert ? 'bg-orange-50/30' : ''}`}
                         >
+                          <td className="px-4 py-3">
+                            {/* Planteur Checkbox (Requirements 1.1, 1.2) */}
+                            <PlanteurCheckbox planteurId={planteur.id} />
+                          </td>
                           <td className="whitespace-nowrap px-4 py-3">
                             <div className="flex items-center gap-3">
                               {hasAlert && (
@@ -407,6 +515,28 @@ export default function PlanteursPage() {
           )}
         </AnimatedSection>
       )}
+
+      {/* Import Modal */}
+      <ImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportComplete={handleImportComplete}
+      />
+
+      {/* Bulk Assignment Dialog (Requirement 2.2) */}
+      {/* Wrapped with ErrorBoundary for graceful error handling (Requirements 7.1, 7.4, 7.5) */}
+      <ErrorBoundary
+        fallback={(error, reset) => (
+          <BulkAssignmentErrorFallback error={error} reset={reset} />
+        )}
+      >
+        <BulkAssignmentDialog
+          isOpen={isBulkAssignDialogOpen}
+          selectedPlanteurIds={Array.from(selectedIds)}
+          onClose={() => setIsBulkAssignDialogOpen(false)}
+          onSuccess={handleBulkAssignSuccess}
+        />
+      </ErrorBoundary>
     </PageTransition>
   );
 }

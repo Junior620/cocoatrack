@@ -2,6 +2,8 @@
 // Re-exports all validation schemas
 
 export * from './planteur';
+export * from './planteur-import';
+export * from './planteur-bulk';
 export * from './chef-planteur';
 export * from './common';
 export * from './delivery';

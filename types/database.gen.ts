@@ -1039,6 +1039,63 @@ export type Database = {
           },
         ]
       }
+      planteur_import_files: {
+        Row: {
+          cooperative_id: string
+          created_at: string
+          created_by: string
+          file_path: string
+          file_size: number
+          filename: string
+          id: string
+          import_status: string
+          import_summary: Json | null
+          parse_result: Json | null
+          updated_at: string
+        }
+        Insert: {
+          cooperative_id: string
+          created_at?: string
+          created_by: string
+          file_path: string
+          file_size: number
+          filename: string
+          id?: string
+          import_status: string
+          import_summary?: Json | null
+          parse_result?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          cooperative_id?: string
+          created_at?: string
+          created_by?: string
+          file_path?: string
+          file_size?: number
+          filename?: string
+          id?: string
+          import_status?: string
+          import_summary?: Json | null
+          parse_result?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planteur_import_files_cooperative_id_fkey"
+            columns: ["cooperative_id"]
+            isOneToOne: false
+            referencedRelation: "cooperatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planteur_import_files_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       parcelles: {
         Row: {
           centroid: unknown

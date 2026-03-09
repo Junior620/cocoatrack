@@ -70,6 +70,38 @@ export {
   PARCELLE_LIMITS,
 } from './parcelles';
 
+// Re-export planteur import types
+export type {
+  ImportStatus as PlanteurImportStatus,
+  DuplicateAction,
+  PlanteurCSVData,
+  ValidationError as PlanteurValidationError,
+  DuplicateInfo,
+  ParsedRow as PlanteurParsedRow,
+  ParseResult as PlanteurParseResult,
+  ParseError as PlanteurParseError,
+  PlanteurImportFile,
+  RowAction,
+  ExecuteImportInput,
+  ImportError as PlanteurImportError,
+  ImportSummary,
+} from './planteur-import';
+
+// Re-export planteur bulk assignment types
+export type {
+  BulkAssignmentRequest,
+  BulkAssignmentError,
+  BulkAssignmentResponse,
+  BulkAssignmentAuditMetadata,
+  PlanteurSelectionState,
+  BulkAssignmentFormData,
+  BulkAssignmentDialogProps,
+  ConfirmationDialogProps,
+  BulkActionToolbarProps,
+  PlanteurCheckboxProps,
+  SelectAllCheckboxProps,
+} from './planteur-bulk';
+
 // Re-export validation types (only the ones that don't conflict with database.gen)
 export type {
   // Planteur validations
@@ -79,6 +111,9 @@ export type {
   PlanteurSearch,
   PlanteurStats,
   PlanteurWithRelations,
+  // Planteur bulk assignment validations
+  BulkAssignmentInput,
+  BulkAssignmentErrorCode,
   // Chef Planteur validations
   CreateChefPlanteurInput,
   UpdateChefPlanteurInput,
@@ -110,6 +145,23 @@ export {
   planteurSearchSchema,
   planteurWithRelationsSchema,
   planteurStatsSchema,
+  // Planteur import schemas - TODO: Uncomment when task 2.2 is complete
+  // planteurCSVDataSchema,
+  // validationErrorSchema as planteurValidationErrorSchema,
+  // duplicateInfoSchema,
+  // parsedRowSchema as planteurParsedRowSchema,
+  // parseErrorSchema as planteurParseErrorSchema,
+  // parseResultSchema as planteurParseResultSchema,
+  // planteurImportFileSchema,
+  // rowActionSchema,
+  // executeImportInputSchema,
+  // importErrorSchema as planteurImportErrorSchema,
+  // importSummarySchema,
+  // PLANTEUR_IMPORT_ERROR_MESSAGES,
+  // Planteur bulk assignment schemas
+  bulkAssignmentSchema,
+  BULK_ASSIGNMENT_ERROR_CODES,
+  BULK_ASSIGNMENT_ERROR_MESSAGES,
   // Chef Planteur schemas
   chefPlanteurSchema,
   createChefPlanteurSchema,
