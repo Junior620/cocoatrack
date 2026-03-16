@@ -214,6 +214,29 @@ function PreviewRow({
         )}
       </td>
 
+      {/* Âge */}
+      <td className="px-4 py-3 text-sm text-gray-600 text-right">
+        {row.data.age !== undefined ? (
+          `${row.data.age} ans`
+        ) : (
+          <span className="text-gray-400">-</span>
+        )}
+      </td>
+
+      {/* Genre */}
+      <td className="px-4 py-3 text-sm text-gray-600 text-center">
+        {row.data.genre ? (
+          <span className={cn(
+            'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+            row.data.genre === 'F' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
+          )}>
+            {row.data.genre === 'F' ? 'Féminin' : 'Masculin'}
+          </span>
+        ) : (
+          <span className="text-gray-400">-</span>
+        )}
+      </td>
+
       {/* Actions (for duplicates only) */}
       <td className="px-4 py-3 whitespace-nowrap">
         {row.duplicate_info && (
@@ -243,7 +266,7 @@ function RowDetails({ row }: { row: ParsedRow }) {
 
   return (
     <tr>
-      <td colSpan={8} className="px-4 py-2 bg-white">
+      <td colSpan={10} className="px-4 py-2 bg-white">
         {/* Validation Errors */}
         {row.validation_errors.length > 0 && (
           <div className="flex items-start gap-2 text-sm">
@@ -396,6 +419,12 @@ export function PreviewStep({
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Superficie
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Âge
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Genre
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                   Action
