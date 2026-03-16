@@ -19,6 +19,8 @@ describe('Planteur Import Validation', () => {
         CNI: 'CI123456',
         téléphone: '+2250701234567',
         superficie: '5.5',
+        age: '35',
+        genre: 'M',
       };
 
       const result = validatePlanteurRow(row);
@@ -31,6 +33,8 @@ describe('Planteur Import Validation', () => {
         CNI: 'CI123456',
         téléphone: '+2250701234567',
         superficie: 5.5,
+        age: 35,
+        genre: 'M',
       });
     });
 
@@ -179,6 +183,53 @@ describe('Planteur Import Validation', () => {
       expect(result.data?.nom).toBe('Konan');
       expect(result.data?.prénoms).toBe('Yao');
       expect(result.data?.CNI).toBe('CI123');
+    });
+
+    it('should accept genre F and M (case insensitive)', () => {
+      for (const genre of ['F', 'M', 'f', 'm']) {
+        const row = { nom: 'Konan', genre };
+        const result = validatePlanteurRow(row);
+        expect(result.isValid).toBe(true);
+        expect(result.data?.genre).toBe(genre.toUpperCase());
+      }
+    });
+
+    it('should reject invalid genre values', () => {
+      const row = { nom: 'Konan', genre: 'X' };
+      const result = validatePlanteurRow(row);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.find((e) => e.field === 'genre')?.code).toBe('INVALID_GENRE');
+    });
+
+    it('should accept valid age', () => {
+      const row = { nom: 'Konan', age: '42' };
+      const result = validatePlanteurRow(row);
+      expect(result.isValid).toBe(true);
+      expect(result.data?.age).toBe(42);
+    });
+
+    it('should reject negative or zero age', () => {
+      for (const age of ['-1', '0']) {
+        const row = { nom: 'Konan', age };
+        const result = validatePlanteurRow(row);
+        expect(result.isValid).toBe(false);
+        expect(result.errors.find((e) => e.field === 'age')?.code).toBe('INVALID_AGE');
+      }
+    });
+
+    it('should reject non-integer age', () => {
+      const row = { nom: 'Konan', age: '25.5' };
+      const result = validatePlanteurRow(row);
+      expect(result.isValid).toBe(false);
+      expect(result.errors.find((e) => e.field === 'age')?.code).toBe('INVALID_AGE');
+    });
+
+    it('should accept empty age and genre', () => {
+      const row = { nom: 'Konan', age: '', genre: '' };
+      const result = validatePlanteurRow(row);
+      expect(result.isValid).toBe(true);
+      expect(result.data?.age).toBeUndefined();
+      expect(result.data?.genre).toBeUndefined();
     });
 
     it('should accept valid phone formats', () => {

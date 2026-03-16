@@ -122,6 +122,56 @@ export const planteurCSVSchema = z.object({
         }),
     ])
     .optional(),
+
+  /**
+   * Age of the planteur in years (optional, positive integer)
+   */
+  age: z
+    .union([
+      z.number().int('L\'âge doit être un nombre entier').positive('L\'âge doit être un nombre positif'),
+      z
+        .string()
+        .transform((val, ctx) => {
+          const trimmed = val.trim();
+          if (trimmed === '') return undefined;
+          const num = parseInt(trimmed, 10);
+          if (isNaN(num) || String(num) !== trimmed) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'L\'âge doit être un nombre entier positif',
+            });
+            return z.NEVER;
+          }
+          if (num <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'L\'âge doit être un nombre positif',
+            });
+            return z.NEVER;
+          }
+          return num;
+        }),
+    ])
+    .optional(),
+
+  /**
+   * Gender of the planteur: F (Féminin) or M (Masculin) (optional)
+   */
+  genre: z
+    .string()
+    .transform((val, ctx) => {
+      const trimmed = val.trim().toUpperCase();
+      if (trimmed === '') return undefined;
+      if (trimmed !== 'F' && trimmed !== 'M') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Le genre doit être F (Féminin) ou M (Masculin)',
+        });
+        return z.NEVER;
+      }
+      return trimmed as 'F' | 'M';
+    })
+    .optional(),
 });
 
 /**
@@ -157,6 +207,8 @@ export function validatePlanteurRow(row: Record<string, string>): {
         CNI: result.data.CNI || undefined,
         téléphone: result.data.téléphone || undefined,
         superficie: result.data.superficie,
+        age: result.data.age,
+        genre: result.data.genre,
       };
 
       return {
@@ -215,6 +267,10 @@ function getErrorCode(field: string, zodCode: string): string {
       return 'INVALID_PHONE_FORMAT';
     case 'superficie':
       return 'INVALID_SUPERFICIE';
+    case 'age':
+      return 'INVALID_AGE';
+    case 'genre':
+      return 'INVALID_GENRE';
     default:
       return 'VALIDATION_ERROR';
   }

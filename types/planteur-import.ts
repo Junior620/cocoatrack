@@ -31,6 +31,8 @@ export interface PlanteurCSVData {
   CNI?: string;
   téléphone?: string;
   superficie?: number;
+  age?: number;
+  genre?: 'F' | 'M';
 }
 
 /**
