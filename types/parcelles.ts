@@ -1092,7 +1092,7 @@ export const PARCELLE_LIMITS = {
   MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024,
   
   /** Maximum number of features per import */
-  MAX_FEATURES_PER_IMPORT: 500,
+  MAX_FEATURES_PER_IMPORT: 2000,
   
   /** Maximum items per API page */
   MAX_PAGE_SIZE: 100,
