@@ -176,6 +176,24 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingImport) {
+      // Check if the existing import is resumable (not yet applied)
+      const { data: existingRecord } = await supabase
+        .from('parcel_import_files')
+        .select('*')
+        .eq('id', (existingImport as { id: string }).id)
+        .single();
+
+      if (existingRecord) {
+        const status = (existingRecord as { import_status: string }).import_status;
+        if (status !== 'applied') {
+          // Import exists but not yet applied — return it so the UI can resume
+          console.log(`[upload] Resuming existing import ${(existingImport as { id: string }).id} (status: ${status})`);
+          const response = NextResponse.json(existingRecord as ParcelImportFile, { status: 200 });
+          addSecurityHeaders(response);
+          return response;
+        }
+      }
+
       return duplicateFileResponse((existingImport as { id: string }).id);
     }
 

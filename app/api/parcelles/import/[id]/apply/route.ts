@@ -44,6 +44,9 @@ import { normalizePlanteurName } from '@/lib/api/parcelles-import';
 // Storage bucket name for parcelle imports
 const STORAGE_BUCKET = 'parcelle-imports';
 
+// Increase max duration for large imports (Vercel: up to 300s on Pro plan)
+export const maxDuration = 300;
+
 /**
  * POST /api/parcelles/import/[id]/apply
  * 
@@ -268,7 +271,6 @@ export async function POST(
         const rawName = attrs[planteurNameField];
         
         if (!rawName || String(rawName).trim() === '') {
-          // Empty name → orphan parcelle
           orphanFeatures.push(feature);
           continue;
         }
@@ -288,7 +290,6 @@ export async function POST(
       if (planteurNameMap.size > 0 && importCoopId) {
         const nameNorms = Array.from(planteurNameMap.keys());
         
-        // Query existing planteurs with matching name_norm in the same cooperative
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: existingPlanteurs } = await (supabase.from('planteurs') as any)
           .select('id, name, name_norm')
@@ -308,10 +309,8 @@ export async function POST(
 
       for (const [nameNorm, { name }] of Array.from(planteurNameMap.entries())) {
         if (existingPlanteursMap.has(nameNorm)) {
-          // Reuse existing planteur
           newPlanteursMap.set(nameNorm, existingPlanteursMap.get(nameNorm)!.id);
         } else {
-          // Create new planteur
           const planteurCode = `PLT-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
           
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -330,9 +329,7 @@ export async function POST(
             .single();
 
           if (createError) {
-            // Check for duplicate name_norm (race condition)
             if (createError.code === '23505' || createError.message?.includes('planteurs_unique_name_norm_per_coop')) {
-              // Try to fetch the existing planteur
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const { data: existing } = await (supabase.from('planteurs') as any)
                 .select('id')
@@ -347,7 +344,6 @@ export async function POST(
               }
             }
             console.error(`Failed to create planteur "${name}":`, createError.message);
-            // Skip all features for this planteur
             nbSkipped += planteurNameMap.get(nameNorm)!.features.length;
             continue;
           }
@@ -358,7 +354,30 @@ export async function POST(
         }
       }
 
-      // Step 4: Create parcelles for each planteur
+      // Step 4: Build bulk payload with batching optimization
+      // Collect all planteur IDs that have features
+      const planteurIds = Array.from(planteurNameMap.entries())
+        .map(([nameNorm]) => newPlanteursMap.get(nameNorm))
+        .filter((id): id is string => !!id);
+
+      // Fetch existing parcelle counts for ALL planteurs in one query
+      const existingCountsMap = new Map<string, number>();
+      if (planteurIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: countData } = await (supabase as any)
+          .rpc('get_parcelle_counts_by_planteur', { p_planteur_ids: planteurIds });
+
+        if (countData) {
+          for (const row of countData as Array<{ planteur_id: string; count: number }>) {
+            existingCountsMap.set(row.planteur_id, row.count);
+          }
+        }
+      }
+
+      // Build all payloads with pre-calculated codes
+      const allPayloads: Array<Record<string, unknown>> = [];
+      const planteurPayloadMap = new Map<string, number>(); // Track how many parcelles per planteur for logging
+
       for (const [nameNorm, { features: planteurFeatures }] of Array.from(planteurNameMap.entries())) {
         const planteurId = newPlanteursMap.get(nameNorm);
         if (!planteurId) {
@@ -366,54 +385,84 @@ export async function POST(
           continue;
         }
 
-        // Get existing parcelle count for code generation
-        const { count: existingCount } = await supabase
-          .from('parcelles')
-          .select('*', { count: 'exact', head: true })
-          .eq('planteur_id', planteurId);
+        const existingCount = existingCountsMap.get(planteurId) || 0;
+        const baseCounter = existingCount + 1;
 
-        let codeCounter = (existingCount || 0) + 1;
+        const payloads = planteurFeatures.map((feature, idx) =>
+          buildParcellePayload(feature, planteurId, baseCounter + idx, mapping, defaults, source)
+        );
 
-        for (const feature of planteurFeatures) {
-          const result = await createParcelle(
-            supabase,
-            feature,
-            planteurId,
-            codeCounter,
-            mapping,
-            defaults,
-            source,
-            importId,
-            user.id
-          );
+        allPayloads.push(...payloads);
+        planteurPayloadMap.set(planteurId, payloads.length);
+      }
 
-          if (result.success) {
-            createdIds.push(result.id!);
-            codeCounter++;
+      // Process in batches of 100 parcelles to avoid payload size limits
+      const BATCH_SIZE = 100;
+      const totalBatches = Math.ceil(allPayloads.length / BATCH_SIZE);
+      
+      console.log(`[BULK] Processing ${allPayloads.length} parcelles across ${planteurIds.length} planteurs in ${totalBatches} batches`);
+
+      for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+        const start = batchIdx * BATCH_SIZE;
+        const end = Math.min(start + BATCH_SIZE, allPayloads.length);
+        const batchPayload = allPayloads.slice(start, end);
+
+        console.log(`[BULK] Batch ${batchIdx + 1}/${totalBatches}: Processing ${batchPayload.length} parcelles`);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: bulkResults, error: bulkError } = await (supabase as any).rpc('bulk_create_parcelles', {
+          p_parcelles: batchPayload,
+          p_import_file_id: importId,
+          p_created_by: user.id,
+        });
+
+        if (bulkError) {
+          console.error(`[BULK ERROR] Batch ${batchIdx + 1} error:`, bulkError);
+          nbSkipped += batchPayload.length;
+          continue;
+        }
+
+        console.log(`[BULK] Batch ${batchIdx + 1} received ${(bulkResults as Array<unknown> || []).length} results`);
+
+        for (const row of (bulkResults as Array<{ id: string | null; success: boolean; error_message?: string }>) || []) {
+          if (row.success && row.id) {
+            createdIds.push(row.id);
           } else {
+            console.log(`[BULK] Skipped parcelle: success=${row.success}, error=${row.error_message || 'none'}`);
             nbSkipped++;
           }
         }
       }
 
-      // Step 5: Create orphan parcelles (features with empty planteur name)
-      for (const feature of orphanFeatures) {
-        const result = await createParcelle(
-          supabase,
-          feature,
-          null, // orphan - no planteur
-          0, // no code counter for orphans
-          mapping,
-          defaults,
-          source,
-          importId,
-          user.id
+      // Step 5: Bulk-create orphan parcelles (empty planteur name)
+      if (orphanFeatures.length > 0) {
+        const payload = orphanFeatures.map(feature =>
+          buildParcellePayload(feature, null, 0, mapping, defaults, source)
         );
 
-        if (result.success) {
-          createdIds.push(result.id!);
+        console.log(`[BULK] Calling bulk_create_parcelles for ${orphanFeatures.length} orphan parcelles`);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: bulkResults, error: bulkError } = await (supabase as any).rpc('bulk_create_parcelles', {
+          p_parcelles: payload,
+          p_import_file_id: importId,
+          p_created_by: user.id,
+        });
+
+        if (bulkError) {
+          console.error('[BULK ERROR] bulk_create_parcelles error for orphan features:', bulkError);
+          nbSkipped += orphanFeatures.length;
         } else {
-          nbSkipped++;
+          console.log(`[BULK] Received ${(bulkResults as Array<unknown> || []).length} results for orphan parcelles`);
+          
+          for (const row of (bulkResults as Array<{ id: string | null; success: boolean; error_message?: string }>) || []) {
+            if (row.success && row.id) {
+              createdIds.push(row.id);
+            } else {
+              console.log(`[BULK] Skipped orphan parcelle: success=${row.success}, error=${row.error_message || 'none'}`);
+              nbSkipped++;
+            }
+          }
         }
       }
     }
@@ -422,33 +471,27 @@ export async function POST(
     // MODE: orphan - Create all parcelles without planteur assignment
     // =========================================================================
     else if (mode === 'orphan') {
-      for (const feature of parsedFeatures) {
-        if (!feature.validation.ok) {
-          nbSkipped++;
-          continue;
-        }
+      const validFeatures = parsedFeatures.filter(f => f.validation.ok && !f.is_duplicate);
+      nbSkipped += parsedFeatures.length - validFeatures.length;
 
-        if (feature.is_duplicate) {
-          nbSkipped++;
-          continue;
-        }
+      const payload = validFeatures.map(feature =>
+        buildParcellePayload(feature, null, 0, mapping, defaults, source)
+      );
 
-        const result = await createParcelle(
-          supabase,
-          feature,
-          null, // orphan - no planteur
-          0, // no code counter for orphans
-          mapping,
-          defaults,
-          source,
-          importId,
-          user.id
-        );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: bulkResults, error: bulkError } = await (supabase as any).rpc('bulk_create_parcelles', {
+        p_parcelles: payload,
+        p_import_file_id: importId,
+        p_created_by: user.id,
+      });
 
-        if (result.success) {
-          createdIds.push(result.id!);
-        } else {
-          nbSkipped++;
+      if (bulkError) {
+        console.error('bulk_create_parcelles error (orphan mode):', bulkError.message);
+        nbSkipped += validFeatures.length;
+      } else {
+        for (const row of (bulkResults as Array<{ id: string | null; success: boolean }>) || []) {
+          if (row.success && row.id) createdIds.push(row.id);
+          else nbSkipped++;
         }
       }
     }
@@ -459,42 +502,34 @@ export async function POST(
     else if (mode === 'assign') {
       const planteurId = validatedInput.planteur_id!;
 
-      // Get existing parcelle count for code generation
       const { count: existingCount } = await supabase
         .from('parcelles')
         .select('*', { count: 'exact', head: true })
         .eq('planteur_id', planteurId);
 
-      let codeCounter = (existingCount || 0) + 1;
+      const baseCounter = (existingCount || 0) + 1;
 
-      for (const feature of parsedFeatures) {
-        if (!feature.validation.ok) {
-          nbSkipped++;
-          continue;
-        }
+      const validFeatures = parsedFeatures.filter(f => f.validation.ok && !f.is_duplicate);
+      nbSkipped += parsedFeatures.length - validFeatures.length;
 
-        if (feature.is_duplicate) {
-          nbSkipped++;
-          continue;
-        }
+      const payload = validFeatures.map((feature, idx) =>
+        buildParcellePayload(feature, planteurId, baseCounter + idx, mapping, defaults, source)
+      );
 
-        const result = await createParcelle(
-          supabase,
-          feature,
-          planteurId,
-          codeCounter,
-          mapping,
-          defaults,
-          source,
-          importId,
-          user.id
-        );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: bulkResults, error: bulkError } = await (supabase as any).rpc('bulk_create_parcelles', {
+        p_parcelles: payload,
+        p_import_file_id: importId,
+        p_created_by: user.id,
+      });
 
-        if (result.success) {
-          createdIds.push(result.id!);
-          codeCounter++;
-        } else {
-          nbSkipped++;
+      if (bulkError) {
+        console.error('bulk_create_parcelles error (assign mode):', bulkError.message);
+        nbSkipped += validFeatures.length;
+      } else {
+        for (const row of (bulkResults as Array<{ id: string | null; success: boolean }>) || []) {
+          if (row.success && row.id) createdIds.push(row.id);
+          else nbSkipped++;
         }
       }
     }
@@ -606,11 +641,28 @@ async function parseImportFile(
   // Process each feature
   const parsedFeatures: ParsedFeature[] = [];
 
+  // Pre-compute all feature hashes to only query relevant existing parcelles
+  const allHashes: string[] = [];
+  for (const feature of parseResult.features) {
+    if (!feature.geometry) continue;
+    try {
+      const h = await computeFeatureHash(feature.geometry as import('geojson').MultiPolygon);
+      allHashes.push(h);
+    } catch { /* skip */ }
+  }
+
+  // Query only parcelles with matching hashes (scoped to cooperative for performance)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existingParcelles } = await (supabase.from('parcelles') as any)
+  let existingParcellesQuery = (supabase.from('parcelles') as any)
     .select('id, feature_hash, planteur_id')
     .eq('is_active', true)
     .not('feature_hash', 'is', null);
+
+  if (allHashes.length > 0) {
+    existingParcellesQuery = existingParcellesQuery.in('feature_hash', allHashes);
+  }
+
+  const { data: existingParcelles } = await existingParcellesQuery;
 
   const existingHashMap = new Map<string, { id: string; planteur_id: string }>();
   if (existingParcelles) {
@@ -711,116 +763,69 @@ async function parseImportFile(
 }
 
 /**
- * Helper function to create a single parcelle
- * 
- * @param supabase - Supabase client
- * @param feature - Parsed feature to create parcelle from
- * @param planteurId - Planteur ID (null for orphan parcelles)
- * @param codeCounter - Counter for generating parcelle codes (0 for orphans)
- * @param mapping - Field mapping configuration
- * @param defaults - Default values for parcelle
- * @param source - Data source (shapefile, kml, geojson)
- * @param importFileId - Import file ID
- * @param userId - User ID who is creating the parcelle
- * @returns Object with success flag and optional parcelle ID
+ * Remove Z dimension from GeoJSON geometry (convert 3D to 2D)
  */
-async function createParcelle(
-  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+function remove3DCoordinates(geometry: import('geojson').MultiPolygon): import('geojson').MultiPolygon {
+  const convert = (coords: number[]): number[] => {
+    // If coordinate has Z dimension [x, y, z], return [x, y]
+    return coords.length > 2 ? [coords[0], coords[1]] : coords;
+  };
+
+  return {
+    type: 'MultiPolygon',
+    coordinates: geometry.coordinates.map(polygon =>
+      polygon.map(ring =>
+        ring.map(convert)
+      )
+    ),
+  };
+}
+
+/**
+ * Build a single parcelle payload object for bulk_create_parcelles RPC.
+ */
+function buildParcellePayload(
   feature: ParsedFeature,
   planteurId: string | null,
   codeCounter: number,
   mapping: { label_field?: string; code_field?: string; village_field?: string },
   defaults: { conformity_status?: string; certifications?: string[] },
   source: ParcelleSource,
-  importFileId: string,
-  userId: string
-): Promise<{ success: boolean; id?: string }> {
+): Record<string, unknown> {
   const attrs = feature.dbf_attributes || {};
 
-  // Get label from mapped field or use feature label
   let label = feature.label;
   if (mapping.label_field && attrs[mapping.label_field] !== undefined) {
     label = String(attrs[mapping.label_field]);
   }
 
-  // Get code from mapped field or generate (only for assigned parcelles)
   let code: string | null = null;
   if (planteurId) {
     if (mapping.code_field && attrs[mapping.code_field] !== undefined) {
       code = String(attrs[mapping.code_field]);
-    } else {
+    } else if (codeCounter > 0) {
       code = `PARC-${String(codeCounter).padStart(4, '0')}`;
     }
   }
 
-  // Get village from mapped field
   let village: string | null = null;
   if (mapping.village_field && attrs[mapping.village_field] !== undefined) {
     village = String(attrs[mapping.village_field]);
   }
 
-  // Prepare parcelle data for RPC call
-  const parcelleData = {
-    p_planteur_id: planteurId,
-    p_code: code,
-    p_label: label,
-    p_village: village,
-    p_geometry_geojson: JSON.stringify(feature.geom_geojson),
-    p_certifications: defaults.certifications || [],
-    p_conformity_status: defaults.conformity_status || 'informations_manquantes',
-    p_risk_flags: {},
-    p_source: source,
-    p_import_file_id: importFileId,
-    p_feature_hash: feature.feature_hash,
-    p_created_by: userId,
+  // Remove Z dimension if present (convert 3D to 2D)
+  const geometry2D = remove3DCoordinates(feature.geom_geojson);
+
+  return {
+    planteur_id: planteurId,
+    code,
+    label,
+    village,
+    geometry_geojson: JSON.stringify(geometry2D),
+    certifications: defaults.certifications || [],
+    conformity_status: defaults.conformity_status || 'informations_manquantes',
+    risk_flags: {},
+    source,
+    feature_hash: feature.feature_hash,
   };
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: created, error: insertError } = await supabase.rpc('create_parcelle', parcelleData as any);
-
-    if (insertError) {
-      const isUniqueViolation =
-        insertError.code === '23505' ||
-        insertError.message?.includes('uniq_active_parcelle_hash') ||
-        insertError.message?.includes('parcelles_code_unique') ||
-        insertError.message?.includes('duplicate key') ||
-        insertError.message?.includes('unique constraint') ||
-        insertError.message?.includes('violates unique constraint');
-
-      if (isUniqueViolation) {
-        return { success: false };
-      }
-
-      console.error(`Failed to create parcelle for feature ${feature.temp_id}:`, insertError.message);
-      return { success: false };
-    }
-
-    const createdResult = created as unknown;
-    if (createdResult && Array.isArray(createdResult) && createdResult.length > 0 && (createdResult[0] as { id?: string }).id) {
-      return { success: true, id: (createdResult[0] as { id: string }).id };
-    } else if (createdResult && typeof createdResult === 'object' && 'id' in createdResult) {
-      return { success: true, id: (createdResult as { id: string }).id };
-    }
-
-    return { success: false };
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    const errorCode = (err as { code?: string })?.code;
-
-    const isUniqueViolation =
-      errorCode === '23505' ||
-      errorMessage.includes('uniq_active_parcelle_hash') ||
-      errorMessage.includes('parcelles_code_unique') ||
-      errorMessage.includes('duplicate key') ||
-      errorMessage.includes('unique constraint') ||
-      errorMessage.includes('violates unique constraint');
-
-    if (isUniqueViolation) {
-      return { success: false };
-    }
-
-    console.error(`Error creating parcelle for feature ${feature.temp_id}:`, err);
-    return { success: false };
-  }
 }

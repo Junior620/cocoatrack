@@ -157,6 +157,7 @@ function NewParcelleContent() {
   }, []);
 
   // Handle apply import (V2 - supports all modes)
+  // Uses the server-side API route to avoid browser timeouts on large imports
   const handleApplyImport = useCallback(async () => {
     if (!importFile) {
       setApplyError('Aucun fichier d\'import sélectionné');
@@ -169,12 +170,9 @@ function NewParcelleContent() {
       return;
     }
 
-    if (importMode === 'auto_create') {
-      if (!planteurNameField) {
-        setApplyError('Veuillez sélectionner le champ contenant le nom du planteur');
-        return;
-      }
-      // Note: chef_planteur_id is optional - planteurs can be created without a supplier
+    if (importMode === 'auto_create' && !planteurNameField) {
+      setApplyError('Veuillez sélectionner le champ contenant le nom du planteur');
+      return;
     }
 
     setIsApplying(true);
@@ -185,36 +183,51 @@ function NewParcelleContent() {
       try {
         const refreshedImport = await parcellesImportApi.get(importFile.id);
         if (refreshedImport?.import_status === 'applied' && (refreshedImport.nb_applied || 0) > 0) {
-          // Import was successful, redirect to parcelles list
           router.push(`/parcelles?import_file_id=${importFile.id}`);
           return true;
         }
       } catch {
-        // Ignore error checking import status
+        // Ignore
       }
       return false;
     };
 
     try {
-      const result = await parcellesImportApi.applyV2(importFile.id, {
-        mode: importMode,
-        planteur_id: importMode === 'assign' ? selectedPlanteurId : undefined,
-        planteur_name_field: importMode === 'auto_create' ? planteurNameField : undefined,
-        default_chef_planteur_id: importMode === 'auto_create' ? selectedChefPlanteurId : undefined,
-        mapping: fieldMapping,
-        defaults: importDefaults,
+      // Call the server-side API route instead of the client-side applyV2
+      // This avoids browser timeouts for large imports (server has maxDuration=300s)
+      const response = await fetch(`/api/parcelles/import/${importFile.id}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: importMode,
+          planteur_id: importMode === 'assign' ? selectedPlanteurId : undefined,
+          planteur_name_field: importMode === 'auto_create' ? planteurNameField : undefined,
+          default_chef_planteur_id: importMode === 'auto_create' ? selectedChefPlanteurId : undefined,
+          mapping: fieldMapping,
+          defaults: importDefaults,
+        }),
       });
 
-      // Redirect based on result
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = (errorData as { message?: string })?.message || `Erreur serveur (${response.status})`;
+        
+        // Check if import was actually applied despite the error response
+        const redirected = await checkAndRedirect();
+        if (redirected) return;
+
+        setApplyError(errorMessage);
+        setIsApplying(false);
+        return;
+      }
+
+      const result = await response.json() as { nb_applied: number; nb_skipped: number; created_ids: string[] };
+
       if (result.nb_applied === 1 && result.created_ids.length === 1) {
-        // Single parcelle created - go to detail
         router.push(`/parcelles/${result.created_ids[0]}`);
       } else if (result.nb_applied > 0) {
-        // Multiple parcelles created - go to list filtered by import
         router.push(`/parcelles?import_file_id=${importFile.id}`);
       } else {
-        // No parcelles created (all duplicates) - check if import was already applied
-        // This can happen if the import succeeded but the response was lost
         const redirected = await checkAndRedirect();
         if (!redirected) {
           setApplyError(
@@ -225,18 +238,13 @@ function NewParcelleContent() {
       }
     } catch (err) {
       console.error('Apply import error:', err);
-      
-      // Check if import was actually applied despite the error
-      // This can happen with timeout errors where the operation succeeded
+
       const redirected = await checkAndRedirect();
-      if (redirected) {
-        return; // Successfully redirected, don't show error
-      }
-      
+      if (redirected) return;
+
       const errorMessage =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || 'Erreur lors de l\'import';
+        err instanceof Error ? err.message :
+        (err as { message?: string })?.message || 'Erreur lors de l\'import';
       setApplyError(errorMessage);
       setIsApplying(false);
     }

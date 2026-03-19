@@ -346,6 +346,22 @@ export const parcellesImportApi = {
     }
 
     if (existingImport) {
+      // Fetch the full import record to check if it's resumable
+      const { data: existingRecord } = await supabase
+        .from('parcel_import_files')
+        .select('*')
+        .eq('id', existingImport.id)
+        .single();
+
+      if (existingRecord) {
+        const status = (existingRecord as { import_status: string }).import_status;
+        if (status !== 'applied') {
+          // Import exists but not yet applied — return it so the caller can resume
+          console.log(`[parcellesImportApi.upload] Resuming existing import ${existingImport.id} (status: ${status})`);
+          return existingRecord as ParcelImportFile;
+        }
+      }
+
       throw {
         error_code: PARCELLE_ERROR_CODES.DUPLICATE_FILE,
         message: 'This file has already been uploaded',
@@ -1414,50 +1430,64 @@ export const parcellesImportApi = {
           .select('*', { count: 'exact', head: true })
           .eq('planteur_id', planteurId);
 
-        let codeCounter = (existingCount || 0) + 1;
+        const baseCounter = (existingCount || 0) + 1;
 
-        for (const feature of planteurFeatures) {
-          const result = await this._createParcelle(
-            supabase,
-            feature,
-            planteurId,
-            codeCounter,
-            mapping,
-            defaults,
-            source,
-            importId,
-            user.id,
-            planteurNameField // Pass for auto-detection
+        // Process in parallel batches of 10
+        const BATCH_SIZE = 10;
+        for (let i = 0; i < planteurFeatures.length; i += BATCH_SIZE) {
+          const batch = planteurFeatures.slice(i, i + BATCH_SIZE);
+          const results = await Promise.all(
+            batch.map((feature, idx) =>
+              this._createParcelle(
+                supabase,
+                feature,
+                planteurId,
+                baseCounter + i + idx,
+                mapping,
+                defaults,
+                source,
+                importId,
+                user.id,
+                planteurNameField
+              )
+            )
           );
-
-          if (result.success) {
-            createdIds.push(result.id!);
-            codeCounter++;
-          } else {
-            nbSkipped++;
+          for (const result of results) {
+            if (result.success) {
+              createdIds.push(result.id!);
+            } else {
+              nbSkipped++;
+            }
           }
         }
       }
 
       // Step 5: Create orphan parcelles (features with empty planteur name)
-      for (const feature of orphanFeatures) {
-        const result = await this._createParcelle(
-          supabase,
-          feature,
-          null, // orphan - no planteur
-          0, // no code counter for orphans
-          mapping,
-          defaults,
-          source,
-          importId,
-          user.id,
-          planteurNameField // Pass for auto-detection
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < orphanFeatures.length; i += BATCH_SIZE) {
+        const batch = orphanFeatures.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(feature =>
+            this._createParcelle(
+              supabase,
+              feature,
+              null,
+              0,
+              mapping,
+              defaults,
+              source,
+              importId,
+              user.id,
+              planteurNameField
+            )
+          )
         );
-
-        if (result.success) {
-          createdIds.push(result.id!);
-        } else {
-          nbSkipped++;
+        for (const result of results) {
+          if (result.success) {
+            createdIds.push(result.id!);
+          } else {
+            nbSkipped++;
+          }
         }
       }
     }
@@ -1466,34 +1496,34 @@ export const parcellesImportApi = {
     // MODE: orphan - Create all parcelles without planteur assignment
     // =========================================================================
     else if (mode === 'orphan') {
-      for (const feature of features) {
-        if (!feature.validation.ok) {
-          nbSkipped++;
-          continue;
-        }
+      const validFeatures = features.filter(f => f.validation.ok && !f.is_duplicate);
+      nbSkipped += features.length - validFeatures.length;
 
-        if (feature.is_duplicate) {
-          nbSkipped++;
-          continue;
-        }
-
-        const result = await this._createParcelle(
-          supabase,
-          feature,
-          null, // orphan - no planteur
-          0, // no code counter for orphans
-          mapping,
-          defaults,
-          source,
-          importId,
-          user.id,
-          undefined // No planteur name field for orphan mode
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < validFeatures.length; i += BATCH_SIZE) {
+        const batch = validFeatures.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(feature =>
+            this._createParcelle(
+              supabase,
+              feature,
+              null,
+              0,
+              mapping,
+              defaults,
+              source,
+              importId,
+              user.id,
+              undefined
+            )
+          )
         );
-
-        if (result.success) {
-          createdIds.push(result.id!);
-        } else {
-          nbSkipped++;
+        for (const result of results) {
+          if (result.success) {
+            createdIds.push(result.id!);
+          } else {
+            nbSkipped++;
+          }
         }
       }
     }
@@ -1510,37 +1540,38 @@ export const parcellesImportApi = {
         .select('*', { count: 'exact', head: true })
         .eq('planteur_id', planteurId);
 
-      let codeCounter = (existingCount || 0) + 1;
+      const baseCounter = (existingCount || 0) + 1;
 
-      for (const feature of features) {
-        if (!feature.validation.ok) {
-          nbSkipped++;
-          continue;
-        }
+      // Filter valid features first
+      const validFeatures = features.filter(f => f.validation.ok && !f.is_duplicate);
+      nbSkipped += features.length - validFeatures.length;
 
-        if (feature.is_duplicate) {
-          nbSkipped++;
-          continue;
-        }
-
-        const result = await this._createParcelle(
-          supabase,
-          feature,
-          planteurId,
-          codeCounter,
-          mapping,
-          defaults,
-          source,
-          importId,
-          user.id,
-          undefined // No planteur name field for assign mode
+      // Process in parallel batches of 10 to avoid timeouts
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < validFeatures.length; i += BATCH_SIZE) {
+        const batch = validFeatures.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map((feature, idx) =>
+            this._createParcelle(
+              supabase,
+              feature,
+              planteurId,
+              baseCounter + i + idx,
+              mapping,
+              defaults,
+              source,
+              importId,
+              user.id,
+              undefined
+            )
+          )
         );
-
-        if (result.success) {
-          createdIds.push(result.id!);
-          codeCounter++;
-        } else {
-          nbSkipped++;
+        for (const result of results) {
+          if (result.success) {
+            createdIds.push(result.id!);
+          } else {
+            nbSkipped++;
+          }
         }
       }
     }
