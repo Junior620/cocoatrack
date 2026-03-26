@@ -25,7 +25,7 @@ export const dashboardKeys = {
     [...dashboardKeys.all, 'entityCounts', cooperativeId] as const,
 };
 
-type Period = 'today' | 'week' | 'month' | 'year' | 'custom';
+type Period = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 
 /**
  * Hook to fetch dashboard metrics
@@ -42,7 +42,7 @@ export function useDashboardMetrics(filters: DashboardFilters = {}) {
  * Hook to fetch dashboard metrics with period comparison
  */
 export function useDashboardMetricsWithComparison(
-  period: Period = 'month',
+  period: Period = 'all',
   filters: DashboardFilters = {}
 ) {
   return useQuery({
@@ -88,7 +88,7 @@ export function useTopChefPlanteurs(filters: DashboardFilters = {}, limit: numbe
 /**
  * Hook to fetch complete dashboard data
  */
-export function useDashboardData(period: Period = 'month', filters: DashboardFilters = {}) {
+export function useDashboardData(period: Period = 'all', filters: DashboardFilters = {}) {
   return useQuery({
     queryKey: dashboardKeys.fullData(period, filters),
     queryFn: () => dashboardApi.getDashboardData(period, filters),

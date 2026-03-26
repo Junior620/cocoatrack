@@ -103,6 +103,12 @@ const navigation: NavItem[] = [
     icon: <ClipboardList className="h-5 w-5" />,
   },
   {
+    name: 'Reçus de collecte',
+    href: '/receipts',
+    icon: <FileText className="h-5 w-5" />,
+    permission: 'invoices:read',
+  },
+  {
     name: 'Factures',
     href: '/invoices',
     icon: <FileText className="h-5 w-5" />,

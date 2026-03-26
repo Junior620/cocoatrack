@@ -19,6 +19,7 @@
     "db:migrate": "supabase migration up"
   },
   "dependencies": {
+    "@aws-sdk/client-textract": "^3.1016.0",
     "@dicebear/collection": "^9.2.4",
     "@dicebear/core": "^9.2.4",
     "@sentry/nextjs": "^10.32.1",
@@ -28,6 +29,7 @@
     "@tmcw/togeojson": "^7.1.2",
     "@turf/turf": "^7.3.1",
     "@types/leaflet-draw": "^1.0.13",
+    "canvas": "^3.2.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "gsap": "^3.12.5",
@@ -42,6 +44,8 @@
     "mapbox-gl": "^3.8.0",
     "next": "16.1.1",
     "next-pwa": "^5.6.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.5.207",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",

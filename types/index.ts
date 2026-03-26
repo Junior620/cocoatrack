@@ -102,6 +102,24 @@ export type {
   SelectAllCheckboxProps,
 } from './planteur-bulk';
 
+// Re-export receipt import types
+export type {
+  ExtractionMethod,
+  PaymentMode,
+  ConfidenceLevel,
+  CollectionReceipt,
+  ProductLine,
+  LocationData,
+  PaymentData,
+  ReceiptData,
+  CreateReceiptResult,
+  ParsedReceipt,
+  DuplicateReceipt,
+  ReceiptNumberValidation,
+  UploadResult,
+  ExtractionResult,
+} from './receipts';
+
 // Re-export validation types (only the ones that don't conflict with database.gen)
 export type {
   // Planteur validations
@@ -133,6 +151,15 @@ export type {
   CreateInvoiceInput,
   InvoiceFilters,
   InvoiceWithRelations,
+  // Receipt validations
+  LocationDataInput,
+  ProductLineInput,
+  PaymentDataInput,
+  ReceiptDataInput,
+  ParsedReceiptInput,
+  UploadPdfInput,
+  ValidateReceiptNumberInput,
+  DetectDuplicatesInput,
 } from '../lib/validations';
 
 // Re-export validation schemas
@@ -180,6 +207,28 @@ export {
   // Invoice schemas
   createInvoiceSchema,
   invoiceFiltersSchema,
+  // Receipt schemas
+  extractionMethodSchema,
+  paymentModeSchema,
+  confidenceLevelSchema,
+  locationDataSchema,
+  productLineSchema,
+  paymentDataSchema,
+  receiptDataSchema,
+  parsedReceiptSchema,
+  uploadPdfSchema,
+  validateReceiptNumberSchema,
+  detectDuplicatesSchema,
+  // Receipt helper functions
+  calculateNetWeight,
+  calculateLineAmount,
+  calculateTotalAmount,
+  calculateBalance,
+  mapCommercialTypeToQualityGrade,
+  generateDeliveryCode,
+  validatePdfFileType,
+  validatePdfFileSize,
+  MAX_PDF_SIZE_BYTES,
   // Common schemas
   paginationSchema,
 } from '../lib/validations';

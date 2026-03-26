@@ -419,6 +419,10 @@ export const invoicesApi = {
       throw new Error(`Failed to update invoice: ${error.message}`);
     }
 
+    if (!data) {
+      throw new Error("Mise à jour refusée — vérifiez vos permissions sur cette facture.");
+    }
+
     return data;
   },
 
@@ -566,7 +570,8 @@ export const invoicesApi = {
 
     // Apply filters based on target type
     if (params.target_type === 'cooperative' && params.cooperative_id) {
-      query = query.eq('cooperative_id', params.cooperative_id);
+      // Include deliveries from this cooperative OR deliveries with no cooperative (from receipt imports)
+      query = query.or(`cooperative_id.eq.${params.cooperative_id},cooperative_id.is.null`);
     } else if (params.target_type === 'fournisseur' && params.chef_planteur_id) {
       // Filter by chef_planteur: get deliveries from planteurs belonging to this chef
       // First get planteur IDs for this chef_planteur

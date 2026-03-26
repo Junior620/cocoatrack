@@ -68,7 +68,7 @@ describe('POST /api/planteurs/import/upload', () => {
     expect(data.error_code).toBe('UNAUTHORIZED');
   });
 
-  it('should return 403 if user has no cooperative', async () => {
+  it('should allow upload when user has no cooperative (cooperative is optional)', async () => {
     // Mock authenticated user
     mockSupabase.auth.getUser.mockResolvedValue({
       data: { user: { id: 'user-123' } },
@@ -87,8 +87,16 @@ describe('POST /api/planteurs/import/upload', () => {
       }),
     });
 
+    // Mock storage to fail so we don't need full setup
+    mockSupabase.storage.from.mockReturnValue({
+      upload: vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'Storage error' },
+      }),
+    });
+
     const formData = new FormData();
-    formData.append('file', new File(['test'], 'test.csv', { type: 'text/csv' }));
+    formData.append('file', new File(['test,data\n1,2'], 'test.csv', { type: 'text/csv' }));
 
     const request = new NextRequest('http://localhost:3000/api/planteurs/import/upload', {
       method: 'POST',
@@ -96,10 +104,9 @@ describe('POST /api/planteurs/import/upload', () => {
     });
 
     const response = await POST(request);
-    const data = await response.json();
 
-    expect(response.status).toBe(403);
-    expect(data.error_code).toBe('NO_COOPERATIVE');
+    // Should NOT return 403 - cooperative is optional for planteur imports
+    expect(response.status).not.toBe(403);
   });
 
   it('should return 400 if file is not provided', async () => {

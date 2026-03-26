@@ -9,4 +9,5 @@ export * from './common';
 export * from './delivery';
 export * from './invoice';
 export * from './parcelle';
+export * from './receipt';
 export * from './user';

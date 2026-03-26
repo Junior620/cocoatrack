@@ -12,6 +12,9 @@ import { invoicesApi } from '@/lib/api/invoices';
 import { downloadInvoicePdf, uploadInvoicePdf } from '@/lib/services/pdf-service';
 import { createClient } from '@/lib/supabase/client';
 import type { InvoiceWithRelations, InvoiceDelivery, InvoiceSummary, InvoiceStatus } from '@/lib/validations/invoice';
+import { FileUploader } from '@/components/invoices/FileUploader';
+import { ScannedInvoicesList } from '@/components/invoices/ScannedInvoicesList';
+import type { ScannedInvoice } from '@/types/scanned-invoices';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -26,19 +29,23 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [scannedInvoicesCount, setScannedInvoicesCount] = useState(0);
+  const [scannedInvoicesKey, setScannedInvoicesKey] = useState(0);
 
   const canUpdate = user && hasPermission(user.role, 'invoices:update');
   const canExport = user && hasPermission(user.role, 'export:pdf');
+  const canDeleteScans = !!(user && user.role === 'admin');
 
   // Fetch invoice data
   const fetchInvoice = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [invoiceData, deliveriesData, summaryData] = await Promise.all([
+      const [invoiceData, deliveriesData, summaryData, scansData] = await Promise.all([
         invoicesApi.get(invoiceId),
         invoicesApi.getDeliveries(invoiceId),
         invoicesApi.getSummary(invoiceId),
+        fetch(`/api/invoices/${invoiceId}/scans`).then(res => res.ok ? res.json() : { data: [], total: 0 }),
       ]);
 
       if (!invoiceData) {
@@ -49,6 +56,7 @@ export default function InvoiceDetailPage() {
       setInvoice(invoiceData);
       setDeliveries(deliveriesData);
       setSummary(summaryData);
+      setScannedInvoicesCount(scansData.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch invoice');
     } finally {
@@ -136,6 +144,19 @@ export default function InvoiceDetailPage() {
       year: 'numeric',
     });
   };
+
+  // Handle scanned invoice upload complete
+  const handleUploadComplete = useCallback((scan: ScannedInvoice) => {
+    // Increment count
+    setScannedInvoicesCount((prev) => prev + 1);
+    // Force refresh of the list by updating key
+    setScannedInvoicesKey((prev) => prev + 1);
+  }, []);
+
+  // Handle scanned invoice upload error
+  const handleUploadError = useCallback((errorMessage: string) => {
+    setError(errorMessage);
+  }, []);
 
   // Get status badge color
   const getStatusColor = (status: InvoiceStatus) => {
@@ -446,6 +467,32 @@ export default function InvoiceDetailPage() {
           )}
         </dl>
       </div>
+
+      {/* Scanned Invoices Section */}
+      {(canUpdate || canDeleteScans) && (
+        <div className="rounded-lg bg-white p-6 shadow">
+          <h2 className="text-lg font-semibold text-gray-900 mb-6">Factures Scannées</h2>
+          
+          {/* File Uploader - Only show for managers and admins */}
+          {canUpdate && (
+            <div className="mb-6">
+              <FileUploader
+                invoiceId={invoiceId}
+                currentScanCount={scannedInvoicesCount}
+                onUploadComplete={handleUploadComplete}
+                onError={handleUploadError}
+              />
+            </div>
+          )}
+
+          {/* Scanned Invoices List */}
+          <ScannedInvoicesList
+            key={scannedInvoicesKey}
+            invoiceId={invoiceId}
+            canDelete={canDeleteScans}
+          />
+        </div>
+      )}
     </div>
   );
 }

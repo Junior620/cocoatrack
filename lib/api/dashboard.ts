@@ -75,7 +75,7 @@ function calculatePercentageChange(current: number, previous: number): number {
 }
 
 function getDateRange(
-  period: 'today' | 'week' | 'month' | 'year' | 'custom',
+  period: 'all' | 'today' | 'week' | 'month' | 'year' | 'last_year' | 'custom',
   customFrom?: string,
   customTo?: string
 ) {
@@ -84,6 +84,10 @@ function getDateRange(
   let to: Date = now;
 
   switch (period) {
+    case 'all':
+      // No date filter — return a very early date to cover everything
+      from = new Date('2000-01-01');
+      break;
     case 'today':
       from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       break;
@@ -96,6 +100,10 @@ function getDateRange(
       break;
     case 'year':
       from = new Date(now.getFullYear(), 0, 1);
+      break;
+    case 'last_year':
+      from = new Date(now.getFullYear() - 1, 0, 1);
+      to = new Date(now.getFullYear() - 1, 11, 31);
       break;
     case 'custom':
       from = customFrom ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1);
@@ -176,7 +184,7 @@ async function getMetrics(filters: DashboardFilters = {}): Promise<DashboardMetr
 }
 
 async function getMetricsWithComparison(
-  period: 'today' | 'week' | 'month' | 'year' | 'custom' = 'month',
+  period: 'all' | 'today' | 'week' | 'month' | 'year' | 'last_year' | 'custom' = 'all',
   filters: DashboardFilters = {}
 ): Promise<DashboardMetricsWithComparison> {
   const { from, to } = getDateRange(period, filters.dateFrom, filters.dateTo);
@@ -377,7 +385,7 @@ async function getTopChefPlanteurs(
 }
 
 async function getDashboardData(
-  period: 'today' | 'week' | 'month' | 'year' | 'custom' = 'month',
+  period: 'all' | 'today' | 'week' | 'month' | 'year' | 'custom' = 'all',
   filters: DashboardFilters = {}
 ): Promise<DashboardData> {
   const { from, to } = getDateRange(period, filters.dateFrom, filters.dateTo);

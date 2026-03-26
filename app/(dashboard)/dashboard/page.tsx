@@ -27,14 +27,16 @@ import {
 import { useAuth } from '@/lib/auth';
 import { RefreshCw, Calendar } from 'lucide-react';
 
-type Period = 'today' | 'week' | 'month' | 'year';
+type Period = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
 type Metric = 'deliveries' | 'weightKg' | 'amountXAF';
 
 const periodLabels: Record<Period, string> = {
+  all: 'Toutes les données',
   today: "Aujourd'hui",
   week: 'Cette semaine',
   month: 'Ce mois',
   year: 'Cette année',
+  custom: 'Personnalisé',
 };
 
 const metricLabels: Record<Metric, string> = {
@@ -44,12 +46,19 @@ const metricLabels: Record<Metric, string> = {
 };
 
 export default function DashboardPage() {
-  const [period, setPeriod] = useState<Period>('month');
+  const [period, setPeriod] = useState<Period>('all');
   const [chartMetric, setChartMetric] = useState<Metric>('weightKg');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const { user } = useAuth();
   const cooperativeId = user?.cooperative_id ?? undefined;
 
-  const filters = { cooperativeId };
+  const filters = {
+    cooperativeId,
+    ...(period === 'custom' && customFrom && customTo
+      ? { dateFrom: customFrom, dateTo: customTo }
+      : {}),
+  };
 
   // Fetch data
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = 
@@ -104,6 +113,24 @@ export default function DashboardPage() {
               ))}
             </select>
           </div>
+
+          {period === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+              <span className="text-gray-400 text-sm">→</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+            </div>
+          )}
 
           <button
             onClick={refresh}

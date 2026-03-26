@@ -11,6 +11,8 @@ import { useAuth, hasPermission } from '@/lib/auth';
 import { deliveriesApi } from '@/lib/api/deliveries';
 import type { DeliveryWithRelations, DeliveryFilters } from '@/lib/validations/delivery';
 import type { PaginatedResult, QualityGrade, PaymentStatus } from '@/types';
+import { ReceiptImportButton } from '@/components/receipts/ReceiptImportButton';
+import { showSuccessToast } from '@/lib/offline/offline-toast';
 
 export default function DeliveriesPage() {
   const router = useRouter();
@@ -134,6 +136,15 @@ export default function DeliveriesPage() {
         </div>
         {canCreate && (
           <div className="flex gap-2">
+            <ReceiptImportButton
+              onImportComplete={(deliveryCount) => {
+                showSuccessToast(
+                  `${deliveryCount} livraison${deliveryCount > 1 ? 's' : ''} créée${deliveryCount > 1 ? 's' : ''} avec succès`,
+                  5000
+                );
+                fetchDeliveries();
+              }}
+            />
             <Link
               href="/deliveries/batch"
               className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

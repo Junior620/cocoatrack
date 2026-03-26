@@ -1929,8 +1929,8 @@ describe('Integration: Limit Enforcement', () => {
    */
 
   describe('Feature Limit', () => {
-    it('should reject import with more than 500 features', () => {
-      const featureCount = 501;
+    it('should reject import with more than the max features limit', () => {
+      const featureCount = PARCELLE_LIMITS.MAX_FEATURES_PER_IMPORT + 1;
       
       const exceedsLimit = featureCount > PARCELLE_LIMITS.MAX_FEATURES_PER_IMPORT;
       expect(exceedsLimit).toBe(true);
@@ -1945,12 +1945,12 @@ describe('Integration: Limit Enforcement', () => {
         },
       };
       
-      expect(error.details.limit).toBe(500);
-      expect(error.details.actual).toBe(501);
+      expect(error.details.limit).toBe(PARCELLE_LIMITS.MAX_FEATURES_PER_IMPORT);
+      expect(error.details.actual).toBe(PARCELLE_LIMITS.MAX_FEATURES_PER_IMPORT + 1);
     });
 
-    it('should allow import with exactly 500 features', () => {
-      const featureCount = 500;
+    it('should allow import with exactly the max features limit', () => {
+      const featureCount = PARCELLE_LIMITS.MAX_FEATURES_PER_IMPORT;
       
       const exceedsLimit = featureCount > PARCELLE_LIMITS.MAX_FEATURES_PER_IMPORT;
       expect(exceedsLimit).toBe(false);
