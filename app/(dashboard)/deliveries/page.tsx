@@ -22,6 +22,7 @@ export default function DeliveriesPage() {
   const [data, setData] = useState<PaginatedResult<DeliveryWithRelations> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updatingPayment, setUpdatingPayment] = useState<string | null>(null);
 
   // Parse filters from URL
   const filters: DeliveryFilters = {
@@ -121,6 +122,24 @@ export default function DeliveriesPage() {
         return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Handle payment status update
+  const handleMarkAsPaid = async (deliveryId: string) => {
+    if (!confirm('Marquer cette livraison comme payée ?')) {
+      return;
+    }
+
+    setUpdatingPayment(deliveryId);
+    try {
+      await deliveriesApi.updatePaymentStatus(deliveryId, 'paid');
+      showSuccessToast('Livraison marquée comme payée');
+      fetchDeliveries();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update payment status');
+    } finally {
+      setUpdatingPayment(null);
     }
   };
 
@@ -323,12 +342,28 @@ export default function DeliveriesPage() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                        <Link
-                          href={`/deliveries/${delivery.id}`}
-                          className="text-primary-600 hover:text-primary-900"
-                        >
-                          Voir
-                        </Link>
+                        <div className="flex items-center justify-end gap-3">
+                          {delivery.payment_status === 'pending' && (
+                            <button
+                              onClick={() => handleMarkAsPaid(delivery.id)}
+                              disabled={updatingPayment === delivery.id}
+                              className="text-green-600 hover:text-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Marquer comme payé"
+                            >
+                              {updatingPayment === delivery.id ? (
+                                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></span>
+                              ) : (
+                                <CheckIcon className="h-5 w-5" />
+                              )}
+                            </button>
+                          )}
+                          <Link
+                            href={`/deliveries/${delivery.id}`}
+                            className="text-primary-600 hover:text-primary-900"
+                          >
+                            Voir
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -414,6 +449,19 @@ function BatchIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M5 13l4 4L19 7"
       />
     </svg>
   );

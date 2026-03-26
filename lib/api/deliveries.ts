@@ -450,6 +450,52 @@ export const deliveriesApi = {
   },
 
   /**
+   * Update payment status of a delivery
+   * @param id - Delivery ID
+   * @param status - New payment status ('paid', 'partial', 'pending')
+   * @param amountPaid - Amount paid (optional, defaults to total_amount for 'paid' status)
+   */
+  async updatePaymentStatus(
+    id: string,
+    status: PaymentStatus,
+    amountPaid?: number
+  ): Promise<Delivery> {
+    const supabase = createClient();
+
+    // If marking as paid and no amount specified, get the total_amount
+    let paymentAmount = amountPaid;
+    if (status === 'paid' && !amountPaid) {
+      const { data: delivery } = await supabase
+        .from('deliveries')
+        .select('total_amount')
+        .eq('id', id)
+        .single();
+      
+      if (delivery) {
+        paymentAmount = Number(delivery.total_amount);
+      }
+    }
+
+    const updateData: DeliveryUpdate = {
+      payment_status: status,
+      ...(paymentAmount !== undefined && { payment_amount_paid: paymentAmount }),
+    };
+
+    const { data, error } = await supabase
+      .from('deliveries')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update payment status: ${error.message}`);
+    }
+
+    return data;
+  },
+
+  /**
    * Sync operation for offline support
    * Uses the sync_operation RPC function
    */

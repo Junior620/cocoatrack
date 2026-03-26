@@ -23,6 +23,7 @@ export default function DeliveryDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
   const canEdit = user && hasPermission(user.role, 'deliveries:update');
 
@@ -104,6 +105,25 @@ export default function DeliveryDetailPage() {
         return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Handle payment status update
+  const handleMarkAsPaid = async () => {
+    if (!confirm('Marquer cette livraison comme payée ?')) {
+      return;
+    }
+
+    setUpdatingPayment(true);
+    setError(null);
+    try {
+      await deliveriesApi.updatePaymentStatus(deliveryId, 'paid');
+      // Refresh delivery data
+      await fetchDelivery();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update payment status');
+    } finally {
+      setUpdatingPayment(false);
     }
   };
 
@@ -208,13 +228,33 @@ export default function DeliveryDetailPage() {
                 </span>
               </dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <dt className="text-sm text-gray-500">Statut paiement</dt>
-              <dd>
+              <dd className="flex items-center gap-2">
                 <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getPaymentStatusColor(delivery.payment_status)}`}>
                   {delivery.payment_status === 'paid' ? 'Payé' : 
                    delivery.payment_status === 'partial' ? 'Partiel' : 'En attente'}
                 </span>
+                {delivery.payment_status === 'pending' && canEdit && (
+                  <button
+                    onClick={handleMarkAsPaid}
+                    disabled={updatingPayment}
+                    className="inline-flex items-center rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Marquer comme payé"
+                  >
+                    {updatingPayment ? (
+                      <>
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-solid border-current border-r-transparent mr-1"></span>
+                        Mise à jour...
+                      </>
+                    ) : (
+                      <>
+                        <CheckIcon className="h-3 w-3 mr-1" />
+                        Marquer payé
+                      </>
+                    )}
+                  </button>
+                )}
               </dd>
             </div>
             {delivery.payment_amount_paid > 0 && (
@@ -227,8 +267,77 @@ export default function DeliveryDetailPage() {
             )}
             {delivery.notes && (
               <div className="border-t pt-4">
-                <dt className="text-sm text-gray-500">Notes</dt>
-                <dd className="mt-1 text-sm text-gray-900">{delivery.notes}</dd>
+                <dt className="text-sm font-medium text-gray-700 mb-3">Informations d'import</dt>
+                <dd>
+                  {(() => {
+                    try {
+                      // Try to parse as JSON and display as table
+                      const parsed = JSON.parse(delivery.notes);
+                      return (
+                        <div className="overflow-hidden rounded-lg border border-gray-200">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
+                                  Champ
+                                </th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Valeur
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {Object.entries(parsed).map(([key, value]) => (
+                                <tr key={key} className="hover:bg-gray-50">
+                                  <td className="px-4 py-2 text-sm font-medium text-gray-700 capitalize align-top">
+                                    {key.replace(/_/g, ' ')}
+                                  </td>
+                                  <td className="px-4 py-2 text-sm text-gray-600">
+                                    {typeof value === 'object' && value !== null ? (
+                                      key === 'location' ? (
+                                        // Special handling for location object - display as nested table
+                                        <div className="overflow-hidden rounded border border-gray-200">
+                                          <table className="min-w-full">
+                                            <tbody className="divide-y divide-gray-200">
+                                              {Object.entries(value as Record<string, unknown>).map(([locKey, locValue]) => (
+                                                <tr key={locKey} className="hover:bg-gray-50">
+                                                  <td className="px-3 py-1.5 text-xs font-medium text-gray-600 capitalize bg-gray-50 w-1/3">
+                                                    {locKey.replace(/_/g, ' ')}
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-xs text-gray-700">
+                                                    {String(locValue) || '-'}
+                                                  </td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      ) : (
+                                        // Other objects displayed as formatted JSON
+                                        <pre className="text-xs bg-gray-50 p-2 rounded">
+                                          {JSON.stringify(value, null, 2)}
+                                        </pre>
+                                      )
+                                    ) : (
+                                      String(value)
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    } catch {
+                      // If not JSON, display as plain text
+                      return (
+                        <div className="text-sm text-gray-600 bg-gray-50 rounded-md p-3 whitespace-pre-wrap break-words">
+                          {delivery.notes}
+                        </div>
+                      );
+                    }
+                  })()}
+                </dd>
               </div>
             )}
           </dl>
@@ -430,5 +539,19 @@ function EditDeliveryModal({
         </form>
       </div>
     </div>
+  );
+}
+
+// Icons
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M5 13l4 4L19 7"
+      />
+    </svg>
   );
 }

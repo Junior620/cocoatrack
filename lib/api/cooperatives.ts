@@ -331,4 +331,82 @@ export const cooperativesApi = {
       code: coopResult.code,
     };
   },
+
+  /**
+   * Update an existing cooperative
+   */
+  async update(id: string, data: { name?: string; code?: string; address?: string; phone?: string }): Promise<void> {
+    const supabase = createClient();
+
+    const updateData: Record<string, string | null> = {};
+    if (data.name) updateData.name = data.name;
+    if (data.code !== undefined) updateData.code = data.code || null;
+    if (data.address !== undefined) updateData.address = data.address || null;
+    if (data.phone !== undefined) updateData.phone = data.phone || null;
+
+    const { error } = await supabase
+      .from('cooperatives')
+      .update(updateData as never)
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Échec de la mise à jour : ${error.message}`);
+    }
+  },
+
+  /**
+   * Delete a cooperative
+   * Checks for dependencies and handles them appropriately
+   */
+  async delete(id: string): Promise<void> {
+    const supabase = createClient();
+
+    // Check for dependencies
+    const [
+      { data: profiles },
+      { count: planteursCount },
+      { count: fournisseursCount },
+      { count: deliveriesCount },
+    ] = await Promise.all([
+      supabase.from('profiles').select('id, full_name').eq('cooperative_id', id),
+      supabase.from('planteurs').select('*', { count: 'exact', head: true }).eq('cooperative_id', id),
+      supabase.from('chef_planteurs').select('*', { count: 'exact', head: true }).eq('cooperative_id', id),
+      supabase.from('deliveries').select('*', { count: 'exact', head: true }).eq('cooperative_id', id),
+    ]);
+
+    // Build error message with blocking dependencies (planteurs, fournisseurs, deliveries)
+    const blockingDeps: string[] = [];
+    if (planteursCount && planteursCount > 0) blockingDeps.push(`${planteursCount} planteur(s)`);
+    if (fournisseursCount && fournisseursCount > 0) blockingDeps.push(`${fournisseursCount} fournisseur(s)`);
+    if (deliveriesCount && deliveriesCount > 0) blockingDeps.push(`${deliveriesCount} livraison(s)`);
+
+    if (blockingDeps.length > 0) {
+      throw new Error(
+        `Impossible de supprimer cette coopérative car elle est liée à : ${blockingDeps.join(', ')}. ` +
+        `Veuillez d'abord supprimer ou réassigner ces éléments.`
+      );
+    }
+
+    // Handle profiles: set their cooperative_id to NULL instead of blocking
+    if (profiles && profiles.length > 0) {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ cooperative_id: null } as never)
+        .eq('cooperative_id', id);
+
+      if (updateError) {
+        throw new Error(`Échec de la mise à jour des utilisateurs : ${updateError.message}`);
+      }
+    }
+
+    // No blocking dependencies, safe to delete
+    const { error } = await supabase
+      .from('cooperatives')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Échec de la suppression : ${error.message}`);
+    }
+  },
 };

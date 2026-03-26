@@ -13,6 +13,12 @@ import {
   Search,
   AlertTriangle,
   Eye,
+  Trash2,
+  CheckSquare,
+  Square,
+  Plus,
+  Edit,
+  X,
 } from 'lucide-react';
 
 import { cooperativesApi, type CooperativeStats, type CooperativeGlobalStats } from '@/lib/api/cooperatives';
@@ -41,6 +47,21 @@ export default function CooperativesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCoop, setEditingCoop] = useState<CooperativeStats | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    code: '',
+    region: '',
+    address: '',
+    phone: '',
+  });
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -70,6 +91,121 @@ export default function CooperativesPage() {
     (coop.code && coop.code.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  // Toggle selection
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  // Toggle all
+  const toggleAll = () => {
+    if (selectedIds.size === filteredCooperatives.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCooperatives.map(c => c.id)));
+    }
+  };
+
+  // Delete single cooperative
+  const handleDeleteSingle = async (id: string) => {
+    setDeleteTarget(id);
+    setShowDeleteConfirm(true);
+  };
+
+  // Delete selected cooperatives
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    setDeleteTarget('bulk');
+    setShowDeleteConfirm(true);
+  };
+
+  // Confirm delete
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      if (deleteTarget === 'bulk') {
+        // Delete multiple
+        await Promise.all(
+          Array.from(selectedIds).map(id => cooperativesApi.delete(id))
+        );
+        setSelectedIds(new Set());
+      } else if (deleteTarget) {
+        // Delete single
+        await cooperativesApi.delete(deleteTarget);
+      }
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Échec de la suppression');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  // Open create modal
+  const handleCreate = () => {
+    setFormData({ name: '', code: '', region: '', address: '', phone: '' });
+    setShowCreateModal(true);
+  };
+
+  // Open edit modal
+  const handleEdit = (coop: CooperativeStats) => {
+    setEditingCoop(coop);
+    setFormData({
+      name: coop.name,
+      code: coop.code || '',
+      region: coop.region || '',
+      address: coop.address || '',
+      phone: coop.phone || '',
+    });
+    setShowEditModal(true);
+  };
+
+  // Save cooperative (create or update)
+  const handleSave = async () => {
+    if (!formData.name.trim()) {
+      setError('Le nom de la coopérative est requis');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (showEditModal && editingCoop) {
+        // Update existing cooperative
+        await cooperativesApi.update(editingCoop.id, {
+          name: formData.name,
+          code: formData.code || undefined,
+          address: formData.address || undefined,
+          phone: formData.phone || undefined,
+        });
+      } else {
+        // Create new cooperative
+        await cooperativesApi.create({
+          name: formData.name,
+          code: formData.code || undefined,
+          address: formData.address || undefined,
+          phone: formData.phone || undefined,
+        });
+      }
+      await fetchData();
+      setShowCreateModal(false);
+      setShowEditModal(false);
+      setEditingCoop(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Échec de l\'enregistrement');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const allSelected = filteredCooperatives.length > 0 && selectedIds.size === filteredCooperatives.length;
+
   return (
     <PageTransition className="space-y-6">
       {/* Header */}
@@ -79,6 +215,25 @@ export default function CooperativesPage() {
           <p className="mt-1 text-sm text-gray-500">
             Vue agrégée des coopératives et leurs statistiques
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              disabled={deleting}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+              Supprimer ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={handleCreate}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Nouvelle Coopérative
+          </button>
         </div>
       </div>
 
@@ -170,6 +325,18 @@ export default function CooperativesPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left">
+                      <button
+                        onClick={toggleAll}
+                        className="text-gray-600 hover:text-gray-900 transition-colors"
+                      >
+                        {allSelected ? (
+                          <CheckSquare className="h-5 w-5" />
+                        ) : (
+                          <Square className="h-5 w-5" />
+                        )}
+                      </button>
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
                       <div className="flex items-center gap-2">
                         <Building2 className="h-4 w-4" />
@@ -208,7 +375,7 @@ export default function CooperativesPage() {
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {filteredCooperatives.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center">
+                      <td colSpan={8} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center">
                           <div className="p-3 bg-gray-100 rounded-full mb-3">
                             <Building2 className="h-6 w-6 text-gray-400" />
@@ -224,12 +391,25 @@ export default function CooperativesPage() {
                     filteredCooperatives.map((coop) => {
                       const lossLevel = getLossLevel(coop.pourcentage_pertes);
                       const hasHighLoss = coop.pourcentage_pertes > 10;
+                      const isSelected = selectedIds.has(coop.id);
                       
                       return (
                         <tr 
                           key={coop.id} 
-                          className={`hover:bg-gray-50 transition-colors ${hasHighLoss ? 'bg-red-50/30' : ''}`}
+                          className={`hover:bg-gray-50 transition-colors ${hasHighLoss ? 'bg-red-50/30' : ''} ${isSelected ? 'bg-primary-50/30' : ''}`}
                         >
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleSelection(coop.id)}
+                              className="text-gray-600 hover:text-gray-900 transition-colors"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="h-5 w-5 text-primary-600" />
+                              ) : (
+                                <Square className="h-5 w-5" />
+                              )}
+                            </button>
+                          </td>
                           <td className="whitespace-nowrap px-4 py-3">
                             <div className="flex items-center gap-3">
                               {hasHighLoss && (
@@ -265,13 +445,26 @@ export default function CooperativesPage() {
                             )}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
-                            <Link
-                              href={`/cooperatives/${coop.id}`}
-                              className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-900 font-medium"
-                            >
-                              <Eye className="h-4 w-4" />
-                              Voir
-                            </Link>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleEdit(coop)}
+                                className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-900 font-medium"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <Link
+                                href={`/cooperatives/${coop.id}`}
+                                className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-900 font-medium"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Link>
+                              <button
+                                onClick={() => handleDeleteSingle(coop.id)}
+                                className="inline-flex items-center gap-1 text-red-600 hover:text-red-900 font-medium"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -282,6 +475,178 @@ export default function CooperativesPage() {
             </div>
           </div>
         </AnimatedSection>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !deleting) {
+              setShowDeleteConfirm(false);
+              setDeleteTarget(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Confirmer la suppression
+              </h3>
+            </div>
+            <p className="text-sm text-gray-700 mb-6 leading-relaxed">
+              {deleteTarget === 'bulk'
+                ? `Êtes-vous sûr de vouloir supprimer ${selectedIds.size} coopérative(s) ? Cette action est irréversible.`
+                : 'Êtes-vous sûr de vouloir supprimer cette coopérative ? Cette action est irréversible.'}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteTarget(null);
+                }}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors font-medium"
+              >
+                {deleting ? 'Suppression...' : 'Suppression'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Modal */}
+      {(showCreateModal || showEditModal) && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !saving) {
+              setShowCreateModal(false);
+              setShowEditModal(false);
+              setEditingCoop(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {showEditModal ? 'Modifier la coopérative' : 'Nouvelle coopérative'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setShowEditModal(false);
+                  setEditingCoop(null);
+                }}
+                disabled={saving}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nom <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  placeholder="Nom de la coopérative"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Code
+                </label>
+                <input
+                  type="text"
+                  value={formData.code}
+                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  placeholder="Code unique (optionnel)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Région
+                </label>
+                <input
+                  type="text"
+                  value={formData.region}
+                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  placeholder="Région"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Adresse
+                </label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  placeholder="Adresse complète"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Téléphone
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  placeholder="+225 XX XX XX XX XX"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setShowEditModal(false);
+                  setEditingCoop(null);
+                }}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !formData.name.trim()}
+                className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors font-medium"
+              >
+                {saving ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </PageTransition>
   );
