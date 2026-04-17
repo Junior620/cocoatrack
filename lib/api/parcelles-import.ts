@@ -1894,4 +1894,33 @@ export const parcellesImportApi = {
       return { success: false };
     }
   },
+
+  /**
+   * Delete a failed import file record and its storage file
+   * Used when user clicks "Réessayer" to clean up failed imports
+   */
+  async deleteImport(importId: string): Promise<void> {
+    const supabase = createClient();
+
+    // Get the storage path before deleting
+    const { data: importFile } = await supabase
+      .from('parcel_import_files')
+      .select('storage_url')
+      .eq('id', importId)
+      .single();
+
+    // Delete from storage if we have the path
+    if (importFile?.storage_url) {
+      await supabase.storage
+        .from(STORAGE_BUCKET)
+        .remove([importFile.storage_url])
+        .catch(() => {}); // Non bloquant
+    }
+
+    // Delete the record
+    await supabase
+      .from('parcel_import_files')
+      .delete()
+      .eq('id', importId);
+  },
 };

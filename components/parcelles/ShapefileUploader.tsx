@@ -533,6 +533,12 @@ export function ShapefileUploader({
 
   // Reset the uploader
   const handleReset = useCallback(() => {
+    // Si un import failed existe en base, le supprimer pour éviter les conflits
+    if (importFile && importFile.import_status === 'failed') {
+      parcellesImportApi.deleteImport?.(importFile.id).catch(() => {
+        // Non bloquant
+      });
+    }
     setState('idle');
     setProgress(0);
     setError(null);
@@ -540,15 +546,13 @@ export function ShapefileUploader({
     setImportFile(null);
     setParseReport(null);
     setAvailableFields([]);
-    // Reset mode-specific selections
     setPlanteurNameField(undefined);
-    // Reset auto-create preview
     setAutoCreatePreview(null);
     setAutoCreatePreviewError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, []);
+  }, [importFile]);
 
   // Get status icon
   const getStatusIcon = () => {
