@@ -796,8 +796,8 @@ export function ImportPreview({
       </div>
 
 
-      {/* Action Buttons */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+      {/* Action Buttons - sticky en bas pour éviter de scroller */}
+      <div className="sticky bottom-0 z-10 flex items-center justify-between bg-white border-t border-gray-200 shadow-lg p-4 -mx-4 px-4">
         <div className="text-sm text-gray-600">
           {stats.valid > 0 ? (
             <span>
