@@ -48,9 +48,6 @@ import { normalizePlanteurName } from '@/lib/api/parcelles-import';
 // Storage bucket name for parcelle imports
 const STORAGE_BUCKET = 'parcelle-imports';
 
-// Increase max duration for large imports (Vercel: up to 300s on Pro plan)
-export const maxDuration = 300;
-
 /**
  * POST /api/parcelles/import/[id]/apply
  * 
