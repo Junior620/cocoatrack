@@ -391,6 +391,8 @@ export interface FieldMapping {
   code_field?: string;
   /** DBF field to use for parcelle village */
   village_field?: string;
+  /** DBF field to use for parcelle region */
+  region_field?: string;
   /** DBF field to use for conformity status (auto-detection if not set) */
   conformity_status_field?: string;
 }
@@ -1112,18 +1114,18 @@ export interface ImportFileListResponse {
  * Enforced by API and database constraints
  */
 export const PARCELLE_LIMITS = {
-  /** Maximum upload file size in bytes (50MB) */
-  MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024,
-  
-  /** Maximum number of features per import */
-  MAX_FEATURES_PER_IMPORT: 2000,
-  
+  /** Maximum upload file size in bytes (200MB pour les gros imports) */
+  MAX_FILE_SIZE_BYTES: 200 * 1024 * 1024,
+
+  /** Maximum number of features per import (25 000 pour les imports massifs) */
+  MAX_FEATURES_PER_IMPORT: 25000,
+
   /** Maximum items per API page */
   MAX_PAGE_SIZE: 100,
-  
+
   /** Default items per API page */
   DEFAULT_PAGE_SIZE: 20,
-  
+
   /** Maximum rows for export */
   MAX_EXPORT_ROWS: 50000,
   

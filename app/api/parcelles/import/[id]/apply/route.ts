@@ -2,6 +2,10 @@
 // POST /api/parcelles/import/[id]/apply - Apply parsed features to create parcelles
 // Supports V2 import modes: auto_create, orphan, assign
 
+// Timeout étendu pour les gros imports (25 000+ polygones)
+// Vercel Pro/Enterprise: jusqu'à 300s, Hobby: 60s max
+export const maxDuration = 300;
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { applyRateLimit, addSecurityHeaders } from '@/lib/security/middleware';
@@ -285,22 +289,39 @@ export async function POST(
       }
 
       // Step 2: Match with existing planteurs by name_norm
+      // Cherche dans la coopérative ET parmi les planteurs orphelins (cooperative_id IS NULL)
       const existingPlanteursMap = new Map<string, { id: string; name: string }>();
       
-      if (planteurNameMap.size > 0 && importCoopId) {
+      if (planteurNameMap.size > 0) {
         const nameNorms = Array.from(planteurNameMap.keys());
         
+        // Requête 1 : planteurs de la coopérative
+        let coopPlanteurs: Array<{ id: string; name: string; name_norm: string }> = [];
+        if (importCoopId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data } = await (supabase.from('planteurs') as any)
+            .select('id, name, name_norm')
+            .eq('cooperative_id', importCoopId)
+            .eq('is_active', true)
+            .in('name_norm', nameNorms);
+          coopPlanteurs = data || [];
+        }
+
+        // Requête 2 : planteurs orphelins (sans coopérative) — issus d'imports CSV sans coop
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existingPlanteurs } = await (supabase.from('planteurs') as any)
+        const { data: orphanPlanteurs } = await (supabase.from('planteurs') as any)
           .select('id, name, name_norm')
-          .eq('cooperative_id', importCoopId)
+          .is('cooperative_id', null)
           .eq('is_active', true)
           .in('name_norm', nameNorms);
 
-        if (existingPlanteurs) {
-          for (const p of existingPlanteurs as Array<{ id: string; name: string; name_norm: string }>) {
-            existingPlanteursMap.set(p.name_norm, { id: p.id, name: p.name });
-          }
+        // Priorité : planteur de la coopérative > planteur orphelin
+        for (const p of (orphanPlanteurs || []) as Array<{ id: string; name: string; name_norm: string }>) {
+          existingPlanteursMap.set(p.name_norm, { id: p.id, name: p.name });
+        }
+        // Les planteurs de la coopérative écrasent les orphelins si même name_norm
+        for (const p of coopPlanteurs) {
+          existingPlanteursMap.set(p.name_norm, { id: p.id, name: p.name });
         }
       }
 
@@ -396,8 +417,9 @@ export async function POST(
         planteurPayloadMap.set(planteurId, payloads.length);
       }
 
-      // Process in batches of 100 parcelles to avoid payload size limits
-      const BATCH_SIZE = 100;
+      // Process in batches of 500 parcelles
+      // Pour 25 000 polygones : 50 batches au lieu de 250 avec batch=100
+      const BATCH_SIZE = 500;
       const totalBatches = Math.ceil(allPayloads.length / BATCH_SIZE);
       
       console.log(`[BULK] Processing ${allPayloads.length} parcelles across ${planteurIds.length} planteurs in ${totalBatches} batches`);
@@ -788,8 +810,8 @@ function buildParcellePayload(
   feature: ParsedFeature,
   planteurId: string | null,
   codeCounter: number,
-  mapping: { label_field?: string; code_field?: string; village_field?: string },
-  defaults: { conformity_status?: string; certifications?: string[] },
+  mapping: { label_field?: string; code_field?: string; village_field?: string; region_field?: string },
+  defaults: { conformity_status?: string; certifications?: string[]; region?: string },
   source: ParcelleSource,
 ): Record<string, unknown> {
   const attrs = feature.dbf_attributes || {};
@@ -813,6 +835,12 @@ function buildParcellePayload(
     village = String(attrs[mapping.village_field]);
   }
 
+  // Region : depuis le mapping DBF ou depuis les defaults
+  let region: string | null = defaults.region || null;
+  if (mapping.region_field && attrs[mapping.region_field] !== undefined) {
+    region = String(attrs[mapping.region_field]);
+  }
+
   // Remove Z dimension if present (convert 3D to 2D)
   const geometry2D = remove3DCoordinates(feature.geom_geojson);
 
@@ -821,6 +849,7 @@ function buildParcellePayload(
     code,
     label,
     village,
+    region,
     geometry_geojson: JSON.stringify(geometry2D),
     certifications: defaults.certifications || [],
     conformity_status: defaults.conformity_status || 'informations_manquantes',

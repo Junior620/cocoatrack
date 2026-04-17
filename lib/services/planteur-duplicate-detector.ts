@@ -147,26 +147,56 @@ export async function detectDuplicatesBatch(
   }
 
   // Query for all existing planteurs with matching name_norm in the cooperative
+  // Also check orphan planteurs (cooperative_id IS NULL) created via CSV import without coop
   // Note: name_norm may not be in generated types yet, so we use type assertion
-  const { data: existingPlanteurs, error: queryError } = await supabase
+  let allExistingPlanteurs: Array<{ id: string; name: string; code: string; name_norm: string }> = [];
+
+  // Search in cooperative
+  const { data: coopPlanteurs, error: queryError } = await supabase
     .from('planteurs')
     .select('id, name, code, name_norm' as any)
     .eq('cooperative_id', cooperativeId)
     .eq('is_active', true)
-    .in('name_norm' as any, normalizedNames);
+    .in('name_norm' as any, normalizedNames) as { data: any[] | null; error: any };
 
   if (queryError) {
     console.error('Error querying for duplicate planteurs:', queryError);
     throw new Error(`Failed to check for duplicate planteurs: ${queryError.message}`);
   }
 
-  if (!existingPlanteurs || existingPlanteurs.length === 0) {
+  // Also search orphan planteurs (no cooperative)
+  const { data: orphanPlanteurs } = await supabase
+    .from('planteurs')
+    .select('id, name, code, name_norm' as any)
+    .is('cooperative_id', null)
+    .eq('is_active', true)
+    .in('name_norm' as any, normalizedNames) as { data: any[] | null; error: any };
+
+  // Merge: cooperative planteurs take priority over orphans
+  const nameNormSeen = new Set<string>();
+  for (const p of (orphanPlanteurs || [])) {
+    if (!nameNormSeen.has(p.name_norm)) {
+      allExistingPlanteurs.push(p);
+      nameNormSeen.add(p.name_norm);
+    }
+  }
+  for (const p of (coopPlanteurs || [])) {
+    // Overwrite orphan if same name_norm
+    const idx = allExistingPlanteurs.findIndex(e => e.name_norm === p.name_norm);
+    if (idx >= 0) {
+      allExistingPlanteurs[idx] = p;
+    } else {
+      allExistingPlanteurs.push(p);
+    }
+  }
+
+  if (allExistingPlanteurs.length === 0) {
     return results;
   }
 
   // Build a map of name_norm to existing planteur
   const nameNormMap = new Map<string, any>();
-  for (const planteur of existingPlanteurs) {
+  for (const planteur of allExistingPlanteurs) {
     // Use the first match if multiple exist (shouldn't happen due to unique constraint)
     if (!nameNormMap.has((planteur as any).name_norm)) {
       nameNormMap.set((planteur as any).name_norm, planteur);

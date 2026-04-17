@@ -1,6 +1,8 @@
 // CocoaTrack V2 - Parcelles Import Parse API Route
 // POST /api/parcelles/import/[id]/parse - Parse an uploaded import file
 
+export const maxDuration = 300;
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { applyRateLimit, addSecurityHeaders } from '@/lib/security/middleware';

@@ -185,27 +185,39 @@ export async function POST(
     }
 
     // Match with existing planteurs by name_norm
+    // Cherche dans la coopérative ET parmi les planteurs orphelins (cooperative_id IS NULL)
     const importCoopId = typedImportFile.cooperative_id || null;
     const existingPlanteursMap = new Map<string, { id: string; name: string }>();
 
-    if (planteurNameMap.size > 0 && importCoopId) {
+    if (planteurNameMap.size > 0) {
       const nameNorms = Array.from(planteurNameMap.keys());
 
-      // Query existing planteurs with matching name_norm in the same cooperative
+      // Requête 1 : planteurs de la coopérative
+      let coopPlanteurs: Array<{ id: string; name: string; name_norm: string }> = [];
+      if (importCoopId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase.from('planteurs') as any)
+          .select('id, name, name_norm')
+          .eq('cooperative_id', importCoopId)
+          .eq('is_active', true)
+          .in('name_norm', nameNorms);
+        coopPlanteurs = data || [];
+      }
+
+      // Requête 2 : planteurs orphelins (sans coopérative) — issus d'imports CSV sans coop
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existingPlanteurs, error: queryError } = await (supabase.from('planteurs') as any)
+      const { data: orphanData } = await (supabase.from('planteurs') as any)
         .select('id, name, name_norm')
-        .eq('cooperative_id', importCoopId)
+        .is('cooperative_id', null)
         .eq('is_active', true)
         .in('name_norm', nameNorms);
 
-      if (queryError) {
-        console.error('Failed to query existing planteurs:', queryError.message);
-        // Continue without matching - all will be treated as new
-      } else if (existingPlanteurs) {
-        for (const p of existingPlanteurs as Array<{ id: string; name: string; name_norm: string }>) {
-          existingPlanteursMap.set(p.name_norm, { id: p.id, name: p.name });
-        }
+      // Priorité : planteur de la coopérative > planteur orphelin
+      for (const p of (orphanData || []) as Array<{ id: string; name: string; name_norm: string }>) {
+        existingPlanteursMap.set(p.name_norm, { id: p.id, name: p.name });
+      }
+      for (const p of coopPlanteurs) {
+        existingPlanteursMap.set(p.name_norm, { id: p.id, name: p.name });
       }
     }
 
