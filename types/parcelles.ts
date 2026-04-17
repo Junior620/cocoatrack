@@ -1117,8 +1117,8 @@ export const PARCELLE_LIMITS = {
   /** Maximum upload file size in bytes (200MB pour les gros imports) */
   MAX_FILE_SIZE_BYTES: 200 * 1024 * 1024,
 
-  /** Maximum number of features per import (25 000 pour les imports massifs) */
-  MAX_FEATURES_PER_IMPORT: 25000,
+  /** Maximum number of features per import (30 000 pour les imports massifs) */
+  MAX_FEATURES_PER_IMPORT: 30000,
 
   /** Maximum items per API page */
   MAX_PAGE_SIZE: 100,
