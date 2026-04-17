@@ -3,7 +3,7 @@
 // CocoaTrack V2 - LeafletMap Component (Internal)
 // Actual Leaflet implementation - dynamically imported to avoid SSR issues
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 // Import leaflet-fullscreen plugin for fullscreen control
@@ -46,7 +46,14 @@ interface LeafletMapProps {
   zoomToSelected?: boolean;
 }
 
-export function LeafletMap({
+export interface LeafletMapHandle {
+  /** Programmatically zoom to a parcelle by id (e.g. from a list click) */
+  zoomToParcelle: (id: string) => void;
+  /** Fly to a bounding box [minLng, minLat, maxLng, maxLat] */
+  flyToBbox: (bbox: [number, number, number, number]) => void;
+}
+
+export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function LeafletMap({
   parcelles,
   selectedId,
   onSelect,
@@ -56,7 +63,7 @@ export function LeafletMap({
   enableFullscreen = true,
   zoomToFit = false,
   zoomToSelected = false,
-}: LeafletMapProps) {
+}, ref: React.Ref<LeafletMapHandle>) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const polygonLayerRef = useRef<L.GeoJSON | null>(null);
@@ -65,12 +72,49 @@ export function LeafletMap({
   const labelsLayerRef = useRef<L.TileLayer | null>(null);
   const [mapStyle, setMapStyle] = useState<'streets' | 'satellite' | 'hybrid'>('streets');
   const [showLabels, setShowLabels] = useState(true);
-  
+  // Track whether the last zoom-to-selected was user-initiated (from list click)
+  // vs a map interaction, to avoid re-locking the view on dezoom
+  const userSelectedRef = useRef(false);
+  const prevSelectedIdRef = useRef<string | undefined>(undefined);
+  // Track if the initial fit-to-bounds has already been done
+  const hasInitialFitRef = useRef(false);
+
   // Store onBboxChange in a ref to avoid stale closures in event listeners
   const onBboxChangeRef = useRef(onBboxChange);
   useEffect(() => {
     onBboxChangeRef.current = onBboxChange;
   }, [onBboxChange]);
+
+  // Keep parcelles accessible in imperative handle without stale closure
+  const parcellesRef = useRef(parcelles);
+  useEffect(() => {
+    parcellesRef.current = parcelles;
+  }, [parcelles]);
+
+  // Expose zoomToParcelle for parent components (e.g. list click)
+  useImperativeHandle(ref, () => ({
+    zoomToParcelle: (id: string) => {
+      if (!mapRef.current) return;
+      const parcelle = parcellesRef.current.find((p) => p.id === id);
+      if (!parcelle?.geometry) return;
+      const tempLayer = L.geoJSON(parcelle.geometry as GeoJSON.Geometry);
+      const bounds = tempLayer.getBounds();
+      if (bounds.isValid()) {
+        mapRef.current.flyToBounds(bounds, {
+          padding: [80, 80],
+          duration: 0.5,
+          maxZoom: 16,
+        });
+      }
+    },
+    flyToBbox: (bbox: [number, number, number, number]) => {
+      if (!mapRef.current) return;
+      const bounds = L.latLngBounds([bbox[1], bbox[0]], [bbox[3], bbox[2]]);
+      if (bounds.isValid()) {
+        mapRef.current.flyToBounds(bounds, { padding: [20, 20], duration: 0.8 });
+      }
+    },
+  }));
 
   // Get color for conformity status
   const getPolygonColor = useCallback((status: string): string => {
@@ -213,15 +257,30 @@ export function LeafletMap({
           });
 
           // Handle click - show popup AND highlight in list
+          // We track mousedown position to distinguish a real click from a zoom gesture
+          let mouseDownPos: L.Point | null = null;
+          layer.on('mousedown', (e) => {
+            mouseDownPos = mapRef.current?.latLngToContainerPoint(e.latlng) ?? null;
+          });
           layer.on('click', (e) => {
+            // If the mouse moved more than 5px between mousedown and click,
+            // it was likely a drag/zoom gesture — ignore it
+            if (mouseDownPos && mapRef.current) {
+              const clickPos = mapRef.current.latLngToContainerPoint(e.latlng);
+              const dist = mouseDownPos.distanceTo(clickPos);
+              if (dist > 5) return;
+            }
+
             // Open popup at click location
-            // For polygon layers, we need to set the popup's latlng before opening
             const popup = layer.getPopup();
             if (popup) {
               popup.setLatLng(e.latlng);
               layer.openPopup();
             }
             
+            // Mark as user-initiated selection so zoomToSelected fires
+            userSelectedRef.current = true;
+
             // Notify parent to highlight in list
             if (onSelect) {
               onSelect(parcelle);
@@ -271,11 +330,15 @@ export function LeafletMap({
       });
     }
 
-    // Zoom to fit if requested or if there's only one parcelle
+    // Zoom to fit if requested — but only on first load, not on every bbox refetch
+    // We use a ref to track if we've already done the initial fit
     if (zoomToFit || parcelles.length === 1) {
-      const bounds = geoJsonLayer.getBounds();
-      if (bounds.isValid()) {
-        mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+      if (!hasInitialFitRef.current) {
+        hasInitialFitRef.current = true;
+        const bounds = geoJsonLayer.getBounds();
+        if (bounds.isValid()) {
+          mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+        }
       }
     }
   }, [parcelles, selectedId, showCentroids, zoomToFit, onSelect, getPolygonColor, formatPopupContent]);
@@ -297,6 +360,15 @@ export function LeafletMap({
   // Zoom to selected parcelle when selectedId changes (if zoomToSelected is enabled)
   useEffect(() => {
     if (!mapRef.current || !selectedId || !zoomToSelected) return;
+
+    // Only fly to the parcelle if the selection actually changed
+    // AND it was triggered by the user (not by a map zoom/pan side effect)
+    if (selectedId === prevSelectedIdRef.current) return;
+    prevSelectedIdRef.current = selectedId;
+
+    // Only animate if the user explicitly clicked a parcelle or list item
+    if (!userSelectedRef.current) return;
+    userSelectedRef.current = false;
 
     const selectedParcelle = parcelles.find((p) => p.id === selectedId);
     if (!selectedParcelle?.geometry) return;
@@ -339,24 +411,28 @@ export function LeafletMap({
     
     let newTileLayer: L.TileLayer;
     if (newStyle === 'satellite' || newStyle === 'hybrid') {
-      // Use Esri World Imagery (free satellite tiles)
+      // Google Satellite — meilleure couverture mondiale, y compris Afrique
       newTileLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         {
-          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-          maxZoom: 19,
+          attribution: '&copy; Google Maps',
+          subdomains: ['0', '1', '2', '3'],
+          maxZoom: 21,
+          tileSize: 256,
         }
       ).addTo(mapRef.current);
       
       // Add labels overlay for hybrid mode or if showLabels is true in satellite mode
       if (newStyle === 'hybrid' || (newStyle === 'satellite' && showLabels)) {
-        // Using CartoDB Positron labels with better contrast for satellite imagery
+        // Google hybrid labels overlay (routes + labels sur satellite)
         const labelsLayer = L.tileLayer(
-          'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+          'https://mt{s}.google.com/vt/lyrs=h&x={x}&y={y}&z={z}',
           {
-            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-            maxZoom: 19,
-            pane: 'shadowPane', // Render above the base layer but below markers
+            attribution: '&copy; Google Maps',
+            subdomains: ['0', '1', '2', '3'],
+            maxZoom: 21,
+            tileSize: 256,
+            pane: 'shadowPane',
           }
         ).addTo(mapRef.current);
         
@@ -388,10 +464,12 @@ export function LeafletMap({
       // Add labels layer
       if (!labelsLayerRef.current) {
         const labelsLayer = L.tileLayer(
-          'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+          'https://mt{s}.google.com/vt/lyrs=h&x={x}&y={y}&z={z}',
           {
-            attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-            maxZoom: 19,
+            attribution: '&copy; Google Maps',
+            subdomains: ['0', '1', '2', '3'],
+            maxZoom: 21,
+            tileSize: 256,
             pane: 'shadowPane',
           }
         ).addTo(mapRef.current);
@@ -519,7 +597,7 @@ export function LeafletMap({
       </div>
     </div>
   );
-}
+});
 
 // Legend item component
 function LegendItem({ color, label }: { color: string; label: string }) {

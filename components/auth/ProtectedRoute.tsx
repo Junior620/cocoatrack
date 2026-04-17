@@ -13,19 +13,12 @@ import type { Permission, ExtendedUserRole } from '@/lib/auth/permissions';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  /** Required role(s) to access this route */
   requiredRoles?: ExtendedUserRole[];
-  /** Required permission to access this route (format: 'resource:action') */
   requiredPermission?: Permission;
-  /** Fallback component to show while loading */
   fallback?: React.ReactNode;
-  /** URL to redirect to if unauthorized */
   redirectTo?: string;
 }
 
-/**
- * Protects a route based on authentication and optional role/permission requirements
- */
 export function ProtectedRoute({
   children,
   requiredRoles,
@@ -38,22 +31,16 @@ export function ProtectedRoute({
 
   useEffect(() => {
     if (isLoading) return;
-
-    // Redirect if not authenticated
     if (!isAuthenticated || !user) {
       router.push(redirectTo);
       return;
     }
-
-    // Check role requirement
     if (requiredRoles && requiredRoles.length > 0) {
       if (!requiredRoles.includes(user.role as ExtendedUserRole)) {
         router.push('/unauthorized');
         return;
       }
     }
-
-    // Check permission requirement
     if (requiredPermission) {
       if (!hasPermission(user.role as ExtendedUserRole, requiredPermission)) {
         router.push('/unauthorized');
@@ -62,36 +49,27 @@ export function ProtectedRoute({
     }
   }, [isLoading, isAuthenticated, user, requiredRoles, requiredPermission, router, redirectTo]);
 
-  // Show loading state
+  // If we already have a user (from server-side initialProfile),
+  // render children immediately — avoids spinner and hydration mismatch.
+  if (user && isAuthenticated) {
+    if (requiredRoles && requiredRoles.length > 0) {
+      if (!requiredRoles.includes(user.role as ExtendedUserRole)) return null;
+    }
+    if (requiredPermission) {
+      if (!hasPermission(user.role as ExtendedUserRole, requiredPermission)) return null;
+    }
+    return <>{children}</>;
+  }
+
+  // Still loading with no user yet — only shown on very first load without server profile
   if (isLoading) {
     return fallback || <LoadingSpinner />;
   }
 
-  // Don't render children if not authenticated
-  if (!isAuthenticated || !user) {
-    return fallback || <LoadingSpinner />;
-  }
-
-  // Check role requirement
-  if (requiredRoles && requiredRoles.length > 0) {
-    if (!requiredRoles.includes(user.role as ExtendedUserRole)) {
-      return null;
-    }
-  }
-
-  // Check permission requirement
-  if (requiredPermission) {
-    if (!hasPermission(user.role as ExtendedUserRole, requiredPermission)) {
-      return null;
-    }
-  }
-
-  return <>{children}</>;
+  // Not authenticated — redirect handled by useEffect
+  return fallback || <LoadingSpinner />;
 }
 
-/**
- * Default loading spinner component
- */
 function LoadingSpinner() {
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -100,18 +78,12 @@ function LoadingSpinner() {
   );
 }
 
-/**
- * Hook to check if current user has a specific permission
- */
 export function useHasPermission(permission: Permission): boolean {
   const { user } = useAuth();
   if (!user) return false;
   return hasPermission(user.role as ExtendedUserRole, permission);
 }
 
-/**
- * Hook to check if current user has one of the required roles
- */
 export function useHasRole(roles: ExtendedUserRole[]): boolean {
   const { user } = useAuth();
   if (!user) return false;

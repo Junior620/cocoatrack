@@ -1,6 +1,6 @@
-nom,prénoms,CNI,téléphone,superficie
-Nkômô,Pàul Bîyà,CM123456789,+237670123456,5.5
-Mbàrgà,Marié Clàiré,CM987654321,+237699876543,3.2
-Fôudà,Jéàn Piérré,CM456789123,+237671111111,7.8
-Ngônô,Bérthé,CM789123456,+237682222222,4.5
-Àtàngànà,Jôséph,CM321654987,+237673333333,6.1
+nom,prénoms,CNI,téléphone,superficie,age,genre
+Nkômô,Pàul Bîyà,CM123456789,+237670123456,5.5,42,M
+Mbàrgà,Marié Clàiré,CM987654321,+237699876543,3.2,35,F
+Fôudà,Jéàn Piérré,CM456789123,+237671111111,7.8,51,M
+Ngônô,Bérthé,CM789123456,+237682222222,4.5,28,F
+Àtàngànà,Jôséph,CM321654987,+237673333333,6.1,47,M

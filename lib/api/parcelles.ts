@@ -41,6 +41,7 @@ interface ListParcellesRow {
   code: string;
   label: string | null;
   village: string | null;
+  region: string | null;
   geometry_geojson: Record<string, unknown>;
   centroid_lat: number;
   centroid_lng: number;
@@ -71,6 +72,7 @@ interface GetParcelleRow {
   code: string;
   label: string | null;
   village: string | null;
+  region: string | null;
   geometry_geojson: Record<string, unknown>;
   centroid_lat: number;
   centroid_lng: number;
@@ -101,6 +103,7 @@ function transformRpcRow(row: ListParcellesRow): ParcelleWithPlanteur {
     code: row.code,
     label: row.label,
     village: row.village,
+    region: row.region,
     geometry: row.geometry_geojson as unknown as Parcelle['geometry'],
     centroid: {
       lat: row.centroid_lat,
@@ -176,6 +179,7 @@ export const parcellesApi = {
       conformity_status,
       certification,
       village,
+      region,
       source,
       import_file_id,
       search,
@@ -208,6 +212,9 @@ export const parcellesApi = {
     }
     if (village) {
       rpcParams.p_village = village;
+    }
+    if (region) {
+      rpcParams.p_region = region;
     }
     if (source) {
       rpcParams.p_source = source;
@@ -295,6 +302,7 @@ export const parcellesApi = {
       code: row.code,
       label: row.label,
       village: row.village,
+      region: row.region,
       geometry: row.geometry_geojson as unknown as Parcelle['geometry'],
       centroid: {
         lat: row.centroid_lat,
@@ -421,6 +429,7 @@ export const parcellesApi = {
       code: row.code,
       label: row.label,
       village: row.village,
+      region: row.region,
       geometry: row.geometry_geojson as unknown as Parcelle['geometry'],
       centroid: {
         lat: row.centroid_lat,
@@ -567,6 +576,7 @@ export const parcellesApi = {
       code: row.code,
       label: row.label,
       village: row.village,
+      region: row.region,
       geometry: row.geometry_geojson as unknown as Parcelle['geometry'],
       centroid: {
         lat: row.centroid_lat,

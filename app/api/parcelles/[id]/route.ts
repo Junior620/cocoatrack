@@ -30,6 +30,7 @@ interface GetParcelleRow {
   code: string;
   label: string | null;
   village: string | null;
+  region: string | null;
   geometry_geojson: Record<string, unknown>;
   centroid_lat: number;
   centroid_lng: number;
@@ -60,6 +61,7 @@ function transformRpcRow(row: GetParcelleRow): ParcelleWithPlanteur {
     code: row.code,
     label: row.label,
     village: row.village,
+    region: row.region,
     geometry: row.geometry_geojson as unknown as Parcelle['geometry'],
     centroid: {
       lat: row.centroid_lat,

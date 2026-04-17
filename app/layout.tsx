@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 
 import { Providers } from './providers';
 import { WebVitalsReporter } from '@/components/analytics/WebVitals';
+import { getUserProfile } from '@/lib/supabase/server';
 
 import './globals.css';
 
@@ -46,15 +47,21 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Fetch profile server-side so AuthProvider starts with data immediately
+  // This eliminates the full-screen loading spinner on every page load
+  const initialProfile = await getUserProfile().catch(() => null);
+
   return (
     <html lang="fr" className={inter.variable}>
       <body className="min-h-screen bg-gray-50 font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers initialProfile={initialProfile}>
+          {children}
+        </Providers>
         <WebVitalsReporter />
       </body>
     </html>

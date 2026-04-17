@@ -301,6 +301,7 @@ export const parcellesGroupedApi = {
       code: row.code,
       label: row.label,
       village: row.village,
+      region: (row as Record<string, unknown>).region as string | null ?? null,
       geometry: row.geometry as unknown as Parcelle['geometry'],
       centroid: {
         lat: row.centroid_lat,
@@ -350,6 +351,7 @@ export const parcellesGroupedApi = {
       code: row.code,
       label: row.label,
       village: row.village,
+      region: (row as Record<string, unknown>).region as string | null ?? null,
       geometry: row.geometry as unknown as Parcelle['geometry'],
       centroid: {
         lat: row.centroid_lat,

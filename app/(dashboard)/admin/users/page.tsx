@@ -39,6 +39,8 @@ function UsersContent() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState<SuccessMessage | null>(null);
   const [resendingEmailFor, setResendingEmailFor] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<Profile | null>(null);
 
   const supabase = createClient();
 
@@ -49,7 +51,7 @@ function UsersContent() {
 
     try {
       const [usersResult, coopsResult] = await Promise.all([
-        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*').eq('is_active', true).order('created_at', { ascending: false }),
         supabase.from('cooperatives').select('*').order('name'),
       ]);
 
@@ -144,6 +146,24 @@ function UsersContent() {
       setError(err instanceof Error ? err.message : 'Erreur lors de l\'envoi de l\'email');
     } finally {
       setResendingEmailFor(null);
+    }
+  };
+
+  // Supprimer un utilisateur
+  const handleDeleteUser = async (userId: string) => {
+    setDeletingUserId(userId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur lors de la suppression');
+      // Retirer l'utilisateur de la liste
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      setConfirmDeleteUser(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -369,12 +389,22 @@ function UsersContent() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setEditingUser(user)}
-                      className="text-primary-600 hover:text-primary-900"
-                    >
-                      Modifier
-                    </button>
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="text-primary-600 hover:text-primary-900"
+                      >
+                        Modifier
+                      </button>
+                      {user.is_active && user.role !== 'admin' && (
+                        <button
+                          onClick={() => setConfirmDeleteUser(user)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Désactiver
+                        </button>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
@@ -391,18 +421,13 @@ function UsersContent() {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            {/* Backdrop */}
             <div
               className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
               onClick={() => setShowCreateModal(false)}
             />
-
-            {/* Modal Panel */}
             <div className="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Créer un utilisateur
-                </h3>
+                <h3 className="text-lg font-semibold text-gray-900">Créer un utilisateur</h3>
                 <button
                   onClick={() => setShowCreateModal(false)}
                   className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
@@ -417,6 +442,57 @@ function UsersContent() {
                 onSuccess={handleUserCreated}
                 onCancel={() => setShowCreateModal(false)}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeleteUser && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setConfirmDeleteUser(null)} />
+            <div className="relative bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Désactiver l&apos;utilisateur</h3>
+                  <p className="text-sm text-gray-500">Le compte sera désactivé et les sessions révoquées</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-700 mb-6">
+                Êtes-vous sûr de vouloir désactiver <strong>{confirmDeleteUser.full_name}</strong> ({confirmDeleteUser.email}) ?
+                Son compte sera désactivé et ses sessions révoquées. Ses données (livraisons, parcelles) seront conservées.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmDeleteUser(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => handleDeleteUser(confirmDeleteUser.id)}
+                  disabled={deletingUserId === confirmDeleteUser.id}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {deletingUserId === confirmDeleteUser.id ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Suppression...
+                    </>
+                  ) : (
+                    'Désactiver le compte'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -92,6 +92,24 @@ export const PARCELLE_SOURCE_LABELS: Record<ParcelleSource, string> = {
 };
 
 /**
+ * The 10 regions of Cameroon
+ */
+export const CAMEROON_REGIONS = [
+  'Adamaoua',
+  'Centre',
+  'Est',
+  'Extrême-Nord',
+  'Littoral',
+  'Nord',
+  'Nord-Ouest',
+  'Ouest',
+  'Sud',
+  'Sud-Ouest',
+] as const;
+
+export type CameroonRegion = (typeof CAMEROON_REGIONS)[number];
+
+/**
  * Allowed certifications for parcelles
  * 
  * CENTRALIZED WHITELIST - Used in:
@@ -232,6 +250,9 @@ export interface Parcelle {
   
   /** Village location */
   village: string | null;
+  
+  /** Region (one of the 10 Cameroon regions) */
+  region: string | null;
   
   /** Polygon geometry as GeoJSON MultiPolygon (always MultiPolygon in storage) */
   geometry: MultiPolygon;
@@ -458,6 +479,9 @@ export interface ParcelleFilters {
   
   /** Filter by village name (exact match) */
   village?: string;
+
+  /** Filter by region (one of the 10 Cameroon regions) */
+  region?: string;
   
   /** Filter by data source (manual, shapefile, kml, geojson) */
   source?: ParcelleSource;

@@ -31,13 +31,29 @@ import {
   CERTIFICATIONS_WHITELIST, 
   CERTIFICATION_LABELS,
   PARCELLE_SOURCE_VALUES,
-  PARCELLE_SOURCE_LABELS
+  PARCELLE_SOURCE_LABELS,
+  CAMEROON_REGIONS,
 } from '@/types/parcelles';
 import type { PaginatedResult } from '@/types';
 import { ParcelleMap } from '@/components/parcelles/ParcelleMap';
+import type { ParcelleMapHandle } from '@/components/parcelles/ParcelleMap';
 
 // Debounce delay for bbox changes (ms)
 const BBOX_DEBOUNCE_DELAY = 300;
+
+// Bounding boxes des 10 régions du Cameroun [minLng, minLat, maxLng, maxLat]
+const CAMEROON_REGION_BBOX: Record<string, [number, number, number, number]> = {
+  'Adamaoua':     [11.5,  6.5, 15.5, 8.5],
+  'Centre':       [10.5,  3.0, 13.5, 6.5],
+  'Est':          [13.5,  2.0, 16.2, 6.5],
+  'Extrême-Nord': [13.5,  9.5, 15.2, 13.0],
+  'Littoral':     [ 9.2,  3.5, 10.8, 5.5],
+  'Nord':         [12.5,  7.5, 15.5, 10.5],
+  'Nord-Ouest':   [ 9.5,  5.5, 11.0, 7.5],
+  'Ouest':        [ 9.8,  4.5, 11.2, 6.5],
+  'Sud':          [ 9.5,  1.5, 16.2, 3.5],
+  'Sud-Ouest':    [ 8.5,  3.5, 10.0, 5.5],
+};
 
 export default function ParcellesMapPage() {
   return (
@@ -66,6 +82,8 @@ function ParcellesMapContent() {
   
   // Ref for debounce timer
   const bboxDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref to the map for programmatic zoom (region fly-to)
+  const mapRef = useRef<ParcelleMapHandle>(null);
   
   // Filter options state
   const [villages, setVillages] = useState<string[]>([]);
@@ -75,15 +93,15 @@ function ParcellesMapContent() {
   // Parse filters from URL
   const filters: ParcelleFilters = useMemo(() => ({
     page: 1,
-    pageSize: 100, // Load more for map view
+    pageSize: 100,
     search: searchParams.get('search') || undefined,
     conformity_status: (searchParams.get('conformity_status') as ConformityStatus) || undefined,
     certification: (searchParams.get('certification') as Certification) || undefined,
     village: searchParams.get('village') || undefined,
+    // region est utilisé uniquement pour zoomer la carte, pas pour filtrer les données
     source: (searchParams.get('source') as ParcelleSource) || undefined,
     import_file_id: searchParams.get('import_file_id') || undefined,
     is_active: true,
-    // Use debounced bbox to prevent excessive API calls during map movement
     bbox: debouncedBbox ? `${debouncedBbox[0]},${debouncedBbox[1]},${debouncedBbox[2]},${debouncedBbox[3]}` : undefined,
     zoom: mapZoom,
   }), [searchParams, debouncedBbox, mapZoom]);
@@ -250,6 +268,7 @@ function ParcellesMapContent() {
     searchParams.get('conformity_status') ||
     searchParams.get('certification') ||
     searchParams.get('village') ||
+    searchParams.get('region') ||
     searchParams.get('source') ||
     searchParams.get('import_file_id')
   );
@@ -397,6 +416,32 @@ function ParcellesMapContent() {
                       {villages.map((village) => (
                         <option key={village} value={village}>
                           {village}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Region Filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Région
+                    </label>
+                    <select
+                      value={searchParams.get('region') || ''}
+                      onChange={(e) => {
+                        const region = e.target.value;
+                        updateFilters({ region: region || undefined });
+                        // Zoom la carte sur la région sélectionnée
+                        if (region && CAMEROON_REGION_BBOX[region]) {
+                          mapRef.current?.flyToBbox(CAMEROON_REGION_BBOX[region]);
+                        }
+                      }}
+                      className="w-full rounded-lg border border-gray-200 py-2 pl-3 pr-8 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    >
+                      <option value="">Toutes les régions</option>
+                      {CAMEROON_REGIONS.map((region) => (
+                        <option key={region} value={region}>
+                          {region}
                         </option>
                       ))}
                     </select>
@@ -558,6 +603,7 @@ function ParcellesMapContent() {
 
         {/* Map */}
         <ParcelleMap
+          ref={mapRef}
           parcelles={mapParcelles}
           selectedId={selectedParcelleId || undefined}
           onSelect={handleParcelleSelect}

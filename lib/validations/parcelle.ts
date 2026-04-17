@@ -482,7 +482,9 @@ export const parcelleFiltersSchema = z.object({
   certification: certificationSchema.optional(),
   
   village: z.string().max(100, 'Village must be at most 100 characters').optional(),
-  
+
+  region: z.string().max(100, 'Region must be at most 100 characters').optional(),
+
   source: parcelleSourceSchema.optional(),
   
   import_file_id: z.string().uuid('Invalid import file ID').optional(),

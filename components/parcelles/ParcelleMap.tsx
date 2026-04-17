@@ -8,8 +8,9 @@
 // - React hooks for interactivity
 
 import dynamic from 'next/dynamic';
-import { useMemo } from 'react';
+import { useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import type { Parcelle } from '@/types/parcelles';
+import type { LeafletMapHandle } from './LeafletMap';
 
 // Dynamically import Leaflet components to avoid SSR issues
 // Leaflet requires window/document which don't exist during SSR
@@ -27,8 +28,6 @@ const LeafletMap = dynamic(
     ),
   }
 );
-
-// Color mapping for conformity status (CocoaTrack brand colors)
 export const CONFORMITY_COLORS: Record<string, string> = {
   conforme: '#6FAF3D',              // CocoaTrack green
   en_cours: '#E68A1F',              // CocoaTrack orange
@@ -61,6 +60,13 @@ export interface ParcelleMapProps {
   zoomToSelected?: boolean;
 }
 
+export interface ParcelleMapHandle {
+  /** Zoom to a specific parcelle by id */
+  zoomToParcelle: (id: string) => void;
+  /** Fly to a bounding box [minLng, minLat, maxLng, maxLat] */
+  flyToBbox: (bbox: [number, number, number, number]) => void;
+}
+
 /**
  * ParcelleMap - Interactive map component for displaying agricultural parcelles
  * 
@@ -71,8 +77,9 @@ export interface ParcelleMapProps {
  * - Bbox filtering callback for map movement
  * - Zoom-to-fit for single parcelle view
  * - Fullscreen control
+ * - Ref handle: zoomToParcelle(id) to programmatically zoom from a list
  */
-export function ParcelleMap({
+export const ParcelleMap = forwardRef<ParcelleMapHandle, ParcelleMapProps>(function ParcelleMap({
   parcelles,
   selectedId,
   onSelect,
@@ -84,13 +91,26 @@ export function ParcelleMap({
   enableFullscreen = true,
   zoomToFit = false,
   zoomToSelected = false,
-}: ParcelleMapProps) {
+}, ref) {
+  const leafletRef = useRef<LeafletMapHandle>(null);
+
+  // Forward zoomToParcelle to the inner LeafletMap
+  useImperativeHandle(ref, () => ({
+    zoomToParcelle: (id: string) => {
+      leafletRef.current?.zoomToParcelle(id);
+    },
+    flyToBbox: (bbox: [number, number, number, number]) => {
+      leafletRef.current?.flyToBbox(bbox);
+    },
+  }));
+
   // Memoize parcelles data to prevent unnecessary re-renders
   const parcellesData = useMemo(() => parcelles, [parcelles]);
 
   return (
     <div className={`relative overflow-hidden rounded-lg ${className}`} style={{ height }}>
       <LeafletMap
+        ref={leafletRef}
         parcelles={parcellesData}
         selectedId={selectedId}
         onSelect={onSelect}
@@ -103,6 +123,6 @@ export function ParcelleMap({
       />
     </div>
   );
-}
+});
 
 export default ParcelleMap;

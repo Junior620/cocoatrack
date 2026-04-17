@@ -8,12 +8,14 @@ import { useState } from 'react';
 
 import { AuthProvider } from '@/lib/auth';
 import { ServiceWorkerProvider } from '@/components/pwa';
+import type { Profile } from '@/types/database.gen';
 
 interface ProvidersProps {
   children: React.ReactNode;
+  initialProfile?: Profile | null;
 }
 
-export function Providers({ children }: ProvidersProps) {
+export function Providers({ children, initialProfile }: ProvidersProps) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -30,7 +32,7 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
+      <AuthProvider initialProfile={initialProfile}>
         <ServiceWorkerProvider>{children}</ServiceWorkerProvider>
       </AuthProvider>
     </QueryClientProvider>
