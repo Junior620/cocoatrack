@@ -411,11 +411,11 @@ export function ShapefileUploader({
         setProgress((prev) => Math.min(prev + 5, 90));
       }, 300);
 
-      // Add timeout for parsing (60 seconds max)
+      // Add timeout for parsing (5 minutes max pour les gros imports)
       console.log('[ShapefileUploader] Starting parse...');
       const parsePromise = parcellesImportApi.parse(uploadedFile.id);
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Le parsing a pris trop de temps (timeout 60s). Veuillez réessayer avec un fichier plus petit.')), 60000);
+        setTimeout(() => reject(new Error('Le parsing a pris trop de temps (timeout 300s). Veuillez réessayer.')), 300000);
       });
 
       const parseResult = await Promise.race([parsePromise, timeoutPromise]);
