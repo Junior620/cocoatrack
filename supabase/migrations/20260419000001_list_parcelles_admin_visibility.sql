@@ -53,6 +53,7 @@ LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
+SET row_security = off
 AS $$
 DECLARE
   v_offset INTEGER;
