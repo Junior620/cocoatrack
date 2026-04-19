@@ -78,8 +78,9 @@ function ParcellesContent() {
   };
 
   // Parse sort from URL
+  // Default sort: planteur name ascending (shows parcelles with planteurs first)
   const sortConfig: SortConfig = {
-    column: (searchParams.get('sortBy') as SortConfig['column']) || 'code',
+    column: (searchParams.get('sortBy') as SortConfig['column']) || 'planteur',
     direction: (searchParams.get('sortOrder') as 'asc' | 'desc') || 'asc',
   };
 
