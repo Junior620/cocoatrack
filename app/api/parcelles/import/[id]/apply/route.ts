@@ -322,52 +322,57 @@ export async function POST(
         }
       }
 
-      // Step 3: Create new planteurs for names that don't exist
+      // Step 3: Create new planteurs for names that don't exist — en batch
       const newPlanteursMap = new Map<string, string>(); // name_norm → planteur_id
 
+      // Séparer les planteurs existants des nouveaux
+      const planteursToCreate: Array<{ nameNorm: string; name: string }> = [];
       for (const [nameNorm, { name }] of Array.from(planteurNameMap.entries())) {
         if (existingPlanteursMap.has(nameNorm)) {
           newPlanteursMap.set(nameNorm, existingPlanteursMap.get(nameNorm)!.id);
         } else {
-          const planteurCode = `PLT-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-          
+          planteursToCreate.push({ nameNorm, name });
+        }
+      }
+
+      // Créer tous les nouveaux planteurs en une seule requête batch
+      if (planteursToCreate.length > 0) {
+        const insertData = planteursToCreate.map(({ name }) => ({
+          name,
+          code: `PLT-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+          cooperative_id: importCoopId,
+          chef_planteur_id: defaultChefPlanteurId,
+          auto_created: true,
+          created_via_import_id: importId,
+          is_active: true,
+          created_by: user.id,
+        }));
+
+        // Insérer par batches de 500 pour éviter les limites de payload
+        const PLANTEUR_BATCH = 500;
+        for (let i = 0; i < insertData.length; i += PLANTEUR_BATCH) {
+          const batch = insertData.slice(i, i + PLANTEUR_BATCH);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: newPlanteur, error: createError } = await (supabase.from('planteurs') as any)
-            .insert({
-              name,
-              code: planteurCode,
-              cooperative_id: importCoopId,
-              chef_planteur_id: defaultChefPlanteurId,
-              auto_created: true,
-              created_via_import_id: importId,
-              is_active: true,
-              created_by: user.id,
-            })
-            .select('id')
-            .single();
+          const { data: created, error: batchError } = await (supabase.from('planteurs') as any)
+            .insert(batch)
+            .select('id, name_norm');
 
-          if (createError) {
-            if (createError.code === '23505' || createError.message?.includes('planteurs_unique_name_norm_per_coop')) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const { data: existing } = await (supabase.from('planteurs') as any)
-                .select('id')
-                .eq('cooperative_id', importCoopId)
-                .eq('name_norm', nameNorm)
-                .eq('is_active', true)
-                .single();
-              
-              if (existing) {
-                newPlanteursMap.set(nameNorm, (existing as { id: string }).id);
-                continue;
-              }
+          if (batchError) {
+            console.error(`[BATCH] Error creating planteurs batch ${i}:`, batchError.message);
+            // En cas d'erreur, essayer de récupérer les existants
+            const batchNorms = planteursToCreate.slice(i, i + PLANTEUR_BATCH).map(p => p.nameNorm);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: existing } = await (supabase.from('planteurs') as any)
+              .select('id, name_norm')
+              .in('name_norm', batchNorms)
+              .eq('is_active', true);
+            for (const p of (existing || []) as Array<{ id: string; name_norm: string }>) {
+              newPlanteursMap.set(p.name_norm, p.id);
             }
-            console.error(`Failed to create planteur "${name}":`, createError.message);
-            nbSkipped += planteurNameMap.get(nameNorm)!.features.length;
-            continue;
-          }
-
-          if (newPlanteur) {
-            newPlanteursMap.set(nameNorm, (newPlanteur as { id: string }).id);
+          } else {
+            for (const p of (created || []) as Array<{ id: string; name_norm: string }>) {
+              newPlanteursMap.set(p.name_norm, p.id);
+            }
           }
         }
       }
