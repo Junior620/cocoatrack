@@ -400,7 +400,7 @@ export function ImportPreview({
   const canApply = stats.valid > 0 && !isApplying;
 
   return (
-    <div className={cn('space-y-6', className)}>
+    <div className={cn('space-y-6 pb-20', className)}>
       {/* Import Summary Banner */}
       <div className="bg-gradient-to-r from-primary-50 to-primary-100/50 rounded-xl p-4 border border-primary-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -796,8 +796,8 @@ export function ImportPreview({
       </div>
 
 
-      {/* Action Buttons - sticky en bas pour éviter de scroller */}
-      <div className="sticky bottom-0 z-10 flex items-center justify-between bg-white border-t border-gray-200 shadow-lg p-4 -mx-4 px-4">
+      {/* Action Buttons - fixed en bas du viewport, toujours visible */}
+      <div className="fixed bottom-0 left-0 right-0 lg:left-20 xl:left-72 z-50 flex items-center justify-between bg-white border-t border-gray-200 shadow-lg px-6 py-4">
         <div className="text-sm text-gray-600">
           {stats.valid > 0 ? (
             <span>

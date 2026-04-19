@@ -337,9 +337,11 @@ export async function POST(
 
       // Créer tous les nouveaux planteurs en une seule requête batch
       if (planteursToCreate.length > 0) {
-        const insertData = planteursToCreate.map(({ name }) => ({
+        const baseTimestamp = Date.now();
+        const insertData = planteursToCreate.map(({ name }, idx) => ({
           name,
-          code: `PLT-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+          // Code unique : timestamp de base + index pour éviter les doublons dans le batch
+          code: `PLT-${baseTimestamp}-${idx.toString().padStart(5, '0')}`,
           cooperative_id: importCoopId,
           chef_planteur_id: defaultChefPlanteurId,
           auto_created: true,
