@@ -523,6 +523,12 @@ export interface ParcelleFilters {
    * Automatically set to true when zoom <= 10 or bbox area > 10000 km²
    */
   simplify?: boolean;
+
+  /** Sort column (code, planteur, village, surface_hectares, conformity_status, created_at) */
+  sortBy?: string;
+
+  /** Sort direction (asc or desc) */
+  sortOrder?: 'asc' | 'desc';
 }
 
 /**

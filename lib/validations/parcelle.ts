@@ -518,6 +518,10 @@ export const parcelleFiltersSchema = z.object({
     .optional(),
   
   simplify: z.boolean().optional(),
+
+  sortBy: z.string().optional(),
+
+  sortOrder: z.enum(['asc', 'desc']).optional(),
 });
 
 export type ParcelleFiltersInput = z.input<typeof parcelleFiltersSchema>;

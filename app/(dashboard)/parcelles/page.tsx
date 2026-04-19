@@ -91,14 +91,18 @@ function ParcellesContent() {
     setLoading(true);
     setError(null);
     try {
-      const result = await parcellesApi.list(filters);
+      const result = await parcellesApi.list({
+        ...filters,
+        sortBy: sortConfig.column,
+        sortOrder: sortConfig.direction,
+      });
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Échec du chargement des parcelles');
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filters)]);
+  }, [filters.page, filters.pageSize, filters.search, filters.conformity_status, filters.certification, filters.village, filters.source, filters.import_file_id, filters.is_active, sortConfig.column, sortConfig.direction]);
 
   // Fetch KPIs
   const fetchKPIs = useCallback(async () => {

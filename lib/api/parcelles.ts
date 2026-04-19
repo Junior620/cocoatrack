@@ -187,6 +187,8 @@ export const parcellesApi = {
       is_active,
       zoom,
       simplify,
+      sortBy,
+      sortOrder,
     } = validatedFilters;
 
     // Determine if geometry should be simplified based on zoom/bbox
@@ -198,6 +200,8 @@ export const parcellesApi = {
       p_page: page,
       p_page_size: pageSize,
       p_simplify: shouldSimplify,
+      p_sort_by: sortBy || 'created_at',
+      p_sort_order: sortOrder || 'desc',
     };
 
     // Add optional filters
