@@ -1026,22 +1026,17 @@ export interface ParcelleKPIStats {
 export async function getParcelleKPIs(): Promise<ParcelleKPIStats> {
   const supabase = getTypedClient();
 
-  // Query to get counts by conformity status and total hectares
-  // Uses RLS to filter by cooperative
-  const { data, error } = await supabase
-    .from('parcelles')
-    .select('conformity_status, surface_hectares')
-    .eq('is_active', true);
+  // Utiliser la RPC get_parcelle_kpis qui respecte les permissions admin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('get_parcelle_kpis');
 
   if (error) {
     throw new Error(`Failed to fetch parcelle KPIs: ${error.message}`);
   }
 
-  // Type the rows explicitly
-  const rows = (data || []) as Array<{ conformity_status: string; surface_hectares: number }>;
-  
-  // Calculate statistics
-  const total = rows.length;
+  const rows = (data || []) as Array<{ conformity_status: string; count: number; total_hectares: number }>;
+
+  let total = 0;
   let conformes = 0;
   let non_conformes = 0;
   let en_cours = 0;
@@ -1049,28 +1044,21 @@ export async function getParcelleKPIs(): Promise<ParcelleKPIStats> {
   let total_hectares = 0;
 
   for (const row of rows) {
-    total_hectares += Number(row.surface_hectares) || 0;
-    
+    const count = Number(row.count) || 0;
+    total += count;
+    total_hectares += Number(row.total_hectares) || 0;
+
     switch (row.conformity_status) {
-      case 'conforme':
-        conformes++;
-        break;
-      case 'non_conforme':
-        non_conformes++;
-        break;
-      case 'en_cours':
-        en_cours++;
-        break;
-      case 'informations_manquantes':
-        informations_manquantes++;
-        break;
+      case 'conforme': conformes = count; break;
+      case 'non_conforme': non_conformes = count; break;
+      case 'en_cours': en_cours = count; break;
+      case 'informations_manquantes': informations_manquantes = count; break;
     }
   }
 
-  // Calculate percentages (avoid division by zero)
   const calcPct = (count: number): number => {
     if (total === 0) return 0;
-    return Math.round((count / total) * 100 * 10) / 10; // 1 decimal place
+    return Math.round((count / total) * 100 * 10) / 10;
   };
 
   return {
