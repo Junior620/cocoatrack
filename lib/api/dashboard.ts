@@ -141,44 +141,26 @@ async function getMetrics(filters: DashboardFilters = {}): Promise<DashboardMetr
   const supabase = createClient();
   const { cooperativeId, dateFrom, dateTo } = filters;
 
-  let query = supabase
-    .from('dashboard_aggregates')
-    .select('total_deliveries, total_weight_kg, total_amount_xaf');
-
-  if (cooperativeId) {
-    query = query.eq('cooperative_id', cooperativeId);
-  }
-  if (dateFrom) {
-    query = query.gte('period_date', dateFrom);
-  }
-  if (dateTo) {
-    query = query.lte('period_date', dateTo);
-  }
-
-  const { data, error } = await query;
+  // Use RPC function to get metrics including NULL cooperative deliveries
+  const { data, error } = await supabase.rpc('get_dashboard_metrics_all', {
+    p_cooperative_id: cooperativeId || null,
+    p_date_from: dateFrom || null,
+    p_date_to: dateTo || null,
+  });
 
   if (error) {
     throw new Error(`Failed to fetch dashboard metrics: ${error.message}`);
   }
 
-  const aggregated = (data || []).reduce(
-    (acc, row) => {
-      const r = row as { total_deliveries: number; total_weight_kg: number; total_amount_xaf: number };
-      acc.totalDeliveries += r.total_deliveries;
-      acc.totalWeightKg += Number(r.total_weight_kg);
-      acc.totalAmountXAF += Number(r.total_amount_xaf);
-      return acc;
-    },
-    { totalDeliveries: 0, totalWeightKg: 0, totalAmountXAF: 0 }
-  );
+  const result = data?.[0] || { total_deliveries: 0, total_weight_kg: 0, total_amount_xaf: 0 };
 
   return {
-    totalDeliveries: aggregated.totalDeliveries,
-    totalWeightKg: Math.round(aggregated.totalWeightKg * 100) / 100,
-    totalAmountXAF: aggregated.totalAmountXAF,
+    totalDeliveries: Number(result.total_deliveries),
+    totalWeightKg: Math.round(Number(result.total_weight_kg) * 100) / 100,
+    totalAmountXAF: Number(result.total_amount_xaf),
     averagePricePerKg:
-      aggregated.totalWeightKg > 0
-        ? Math.round((aggregated.totalAmountXAF / aggregated.totalWeightKg) * 100) / 100
+      Number(result.total_weight_kg) > 0
+        ? Math.round((Number(result.total_amount_xaf) / Number(result.total_weight_kg)) * 100) / 100
         : 0,
   };
 }
@@ -222,8 +204,9 @@ async function getDailyTrend(filters: DashboardFilters = {}): Promise<TimeSeries
   const supabase = createClient();
   const { cooperativeId, dateFrom, dateTo } = filters;
 
+  // Use dashboard_all_deliveries view to include NULL cooperative deliveries
   let query = supabase
-    .from('dashboard_aggregates')
+    .from('dashboard_all_deliveries')
     .select('period_date, total_deliveries, total_weight_kg, total_amount_xaf')
     .order('period_date', { ascending: true });
 
@@ -243,15 +226,28 @@ async function getDailyTrend(filters: DashboardFilters = {}): Promise<TimeSeries
     throw new Error(`Failed to fetch daily trend: ${error.message}`);
   }
 
-  return (data || []).map((row) => {
+  // Group by date (sum across cooperatives if needed)
+  const dateMap = new Map<string, TimeSeriesPoint>();
+  
+  for (const row of data || []) {
     const r = row as { period_date: string; total_deliveries: number; total_weight_kg: number; total_amount_xaf: number };
-    return {
-      date: r.period_date,
-      deliveries: r.total_deliveries,
-      weightKg: Number(r.total_weight_kg),
-      amountXAF: Number(r.total_amount_xaf),
-    };
-  });
+    const existing = dateMap.get(r.period_date);
+    
+    if (existing) {
+      existing.deliveries += r.total_deliveries;
+      existing.weightKg += Number(r.total_weight_kg);
+      existing.amountXAF += Number(r.total_amount_xaf);
+    } else {
+      dateMap.set(r.period_date, {
+        date: r.period_date,
+        deliveries: r.total_deliveries,
+        weightKg: Number(r.total_weight_kg),
+        amountXAF: Number(r.total_amount_xaf),
+      });
+    }
+  }
+
+  return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 async function getTopPlanteurs(
@@ -511,40 +507,28 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
     pendingChefsQuery = pendingChefsQuery.eq('cooperative_id', cooperativeId);
   }
 
-  // Get today's deliveries from dashboard_aggregates
-  let todayQuery = supabase
-    .from('dashboard_aggregates')
-    .select('total_deliveries, total_weight_kg')
-    .eq('period_date', today);
-  
-  if (cooperativeId) {
-    todayQuery = todayQuery.eq('cooperative_id', cooperativeId);
-  }
+  // Get today's deliveries using RPC (includes NULL cooperative deliveries)
+  const todayMetricsQuery = supabase.rpc('get_dashboard_metrics_all', {
+    p_cooperative_id: cooperativeId || null,
+    p_date_from: today,
+    p_date_to: today,
+  });
 
   const [planteursResult, chefsResult, pendingResult, todayResult] = await Promise.all([
     planteursQuery,
     chefPlanteursQuery,
     pendingChefsQuery,
-    todayQuery,
+    todayMetricsQuery,
   ]);
 
-  // Aggregate today's data
-  const todayData = (todayResult.data || []).reduce(
-    (acc, row) => {
-      const r = row as { total_deliveries: number; total_weight_kg: number };
-      acc.deliveries += r.total_deliveries;
-      acc.weight += Number(r.total_weight_kg);
-      return acc;
-    },
-    { deliveries: 0, weight: 0 }
-  );
+  const todayData = todayResult.data?.[0] || { total_deliveries: 0, total_weight_kg: 0 };
 
   return {
     planteursActifs: planteursResult.count || 0,
     chefPlanteursActifs: chefsResult.count || 0,
     chefPlanteursEnAttente: pendingResult.count || 0,
-    livraisonsAujourdhui: todayData.deliveries,
-    poidsAujourdhui: Math.round(todayData.weight * 100) / 100,
+    livraisonsAujourdhui: Number(todayData.total_deliveries),
+    poidsAujourdhui: Math.round(Number(todayData.total_weight_kg) * 100) / 100,
   };
 }
 
