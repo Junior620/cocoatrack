@@ -527,14 +527,32 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
     pendingChefsQuery = pendingChefsQuery.eq('cooperative_id', cooperativeId);
   }
 
-  // Count total parcelles (non-archived)
-  let parcellesQuery = supabase
-    .from('parcelles')
-    .select('id', { count: 'exact', head: true })
-    .eq('is_archived', false);
+  // Count total parcelles (active, non-archived)
+  // Note: parcelles don't have cooperative_id directly, they link via planteur
+  let parcellesCount = 0;
   
   if (cooperativeId) {
-    parcellesQuery = parcellesQuery.eq('cooperative_id', cooperativeId);
+    // Use a different approach: query planteurs first to get their IDs
+    const { data: planteurIds } = await supabase
+      .from('planteurs')
+      .select('id')
+      .eq('cooperative_id', cooperativeId);
+    
+    if (planteurIds && planteurIds.length > 0) {
+      const { count } = await supabase
+        .from('parcelles')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .in('planteur_id', planteurIds.map((p: any) => p.id));
+      parcellesCount = count || 0;
+    }
+  } else {
+    // No cooperative filter, count all active parcelles
+    const { count } = await supabase
+      .from('parcelles')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true);
+    parcellesCount = count || 0;
   }
 
   // Get today's deliveries using RPC (includes NULL cooperative deliveries)
@@ -546,11 +564,10 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
   
   const todayMetricsQuery = supabase.rpc('get_dashboard_metrics_all', params as any);
 
-  const [planteursResult, chefsResult, pendingResult, parcellesResult, todayResult] = await Promise.all([
+  const [planteursResult, chefsResult, pendingResult, todayResult] = await Promise.all([
     planteursQuery,
     chefPlanteursQuery,
     pendingChefsQuery,
-    parcellesQuery,
     todayMetricsQuery,
   ]);
 
@@ -566,7 +583,7 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
     chefPlanteursEnAttente: pendingResult.count || 0,
     livraisonsAujourdhui: Number(todayData.total_deliveries),
     poidsAujourdhui: Math.round(Number(todayData.total_weight_kg) * 100) / 100,
-    totalParcelles: parcellesResult.count || 0,
+    totalParcelles: parcellesCount,
   };
 }
 
