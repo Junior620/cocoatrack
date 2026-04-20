@@ -4,6 +4,19 @@
 
 import { createClient } from '@/lib/supabase/client';
 
+// Type definition for the RPC function (until types are regenerated)
+type GetDashboardMetricsAllParams = {
+  p_cooperative_id?: string | null;
+  p_date_from?: string | null;
+  p_date_to?: string | null;
+};
+
+type GetDashboardMetricsAllResult = {
+  total_deliveries: number;
+  total_weight_kg: number;
+  total_amount_xaf: number;
+};
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -142,17 +155,23 @@ async function getMetrics(filters: DashboardFilters = {}): Promise<DashboardMetr
   const { cooperativeId, dateFrom, dateTo } = filters;
 
   // Use RPC function to get metrics including NULL cooperative deliveries
-  const { data, error } = await supabase.rpc('get_dashboard_metrics_all', {
+  const params: GetDashboardMetricsAllParams = {
     p_cooperative_id: cooperativeId || null,
     p_date_from: dateFrom || null,
     p_date_to: dateTo || null,
-  });
+  };
+
+  const { data, error } = await supabase.rpc('get_dashboard_metrics_all', params as any);
 
   if (error) {
     throw new Error(`Failed to fetch dashboard metrics: ${error.message}`);
   }
 
-  const result = data?.[0] || { total_deliveries: 0, total_weight_kg: 0, total_amount_xaf: 0 };
+  const result: GetDashboardMetricsAllResult = (data as any)?.[0] || { 
+    total_deliveries: 0, 
+    total_weight_kg: 0, 
+    total_amount_xaf: 0 
+  };
 
   return {
     totalDeliveries: Number(result.total_deliveries),
@@ -508,11 +527,13 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
   }
 
   // Get today's deliveries using RPC (includes NULL cooperative deliveries)
-  const todayMetricsQuery = supabase.rpc('get_dashboard_metrics_all', {
+  const params: GetDashboardMetricsAllParams = {
     p_cooperative_id: cooperativeId || null,
     p_date_from: today,
     p_date_to: today,
-  });
+  };
+  
+  const todayMetricsQuery = supabase.rpc('get_dashboard_metrics_all', params as any);
 
   const [planteursResult, chefsResult, pendingResult, todayResult] = await Promise.all([
     planteursQuery,
@@ -521,7 +542,11 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
     todayMetricsQuery,
   ]);
 
-  const todayData = todayResult.data?.[0] || { total_deliveries: 0, total_weight_kg: 0 };
+  const todayData: GetDashboardMetricsAllResult = (todayResult.data as any)?.[0] || { 
+    total_deliveries: 0, 
+    total_weight_kg: 0,
+    total_amount_xaf: 0
+  };
 
   return {
     planteursActifs: planteursResult.count || 0,
