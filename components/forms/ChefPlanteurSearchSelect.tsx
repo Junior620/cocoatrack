@@ -50,8 +50,27 @@ export default function ChefPlanteurSearchSelect({
         clearTimeout(searchTimeoutRef.current);
       }
 
-      // If no search term, load first 100 chef planteurs
+      // If no search term, load first 100 chef planteurs or just the selected one
       if (!searchTerm.trim()) {
+        // If we have a selected chef planteur, keep it in the list
+        if (value) {
+          setIsSearching(true);
+          const supabase = createClient();
+          
+          // Fetch the selected chef planteur
+          const { data: selectedData } = await supabase
+            .from('chef_planteurs')
+            .select('id, name, code, cooperative_id')
+            .eq('id', value)
+            .single();
+
+          if (selectedData) {
+            setChefPlanteurs([selectedData]);
+          }
+          setIsSearching(false);
+          return;
+        }
+
         setIsSearching(true);
         const supabase = createClient();
 
@@ -109,7 +128,7 @@ export default function ChefPlanteurSearchSelect({
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [searchTerm, cooperativeId]);
+  }, [searchTerm, cooperativeId, value]);
 
   // Normalize string for search (remove accents, lowercase)
   const normalizeString = (str: string): string => {
