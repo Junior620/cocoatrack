@@ -40,7 +40,7 @@ export default function ChefPlanteurSearchSelect({
   const [isSearching, setIsSearching] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch chef planteurs based on search term (server-side search)
   useEffect(() => {
