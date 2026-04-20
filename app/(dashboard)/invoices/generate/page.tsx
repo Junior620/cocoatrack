@@ -11,6 +11,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { invoicesApi } from '@/lib/api/invoices';
 import { createClient } from '@/lib/supabase/client';
+import PlanteurSearchSelect from '@/components/forms/PlanteurSearchSelect';
+import ChefPlanteurSearchSelect from '@/components/forms/ChefPlanteurSearchSelect';
 
 // Invoice target type
 type InvoiceTargetType = 'cooperative' | 'fournisseur' | 'planteur';
@@ -19,21 +21,6 @@ interface Cooperative {
   id: string;
   name: string;
   code: string;
-}
-
-interface ChefPlanteur {
-  id: string;
-  name: string;
-  code: string;
-  cooperative_id: string | null;
-}
-
-interface Planteur {
-  id: string;
-  name: string;
-  code: string;
-  cooperative_id: string | null;
-  chef_planteur_id: string | null;
 }
 
 interface AvailableDelivery {
@@ -56,8 +43,6 @@ export default function GenerateInvoicePage() {
   
   // Entity lists
   const [cooperatives, setCooperatives] = useState<Cooperative[]>([]);
-  const [chefPlanteurs, setChefPlanteurs] = useState<ChefPlanteur[]>([]);
-  const [planteurs, setPlanteurs] = useState<Planteur[]>([]);
   
   // Selected entities
   const [selectedCooperative, setSelectedCooperative] = useState<string>('');
@@ -75,8 +60,6 @@ export default function GenerateInvoicePage() {
   // Loading states
   const [loading, setLoading] = useState(false);
   const [loadingDeliveries, setLoadingDeliveries] = useState(false);
-  const [loadingChefPlanteurs, setLoadingChefPlanteurs] = useState(false);
-  const [loadingPlanteurs, setLoadingPlanteurs] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
@@ -100,71 +83,6 @@ export default function GenerateInvoicePage() {
 
     fetchCooperatives();
   }, [user?.cooperative_id]);
-
-  // Fetch chef planteurs when cooperative changes or target type is fournisseur
-  useEffect(() => {
-    const fetchChefPlanteurs = async () => {
-      if (targetType !== 'fournisseur') return;
-      
-      setLoadingChefPlanteurs(true);
-      const supabase = createClient();
-      
-      let query = supabase
-        .from('chef_planteurs')
-        .select('id, name, code, cooperative_id')
-        .eq('is_active', true)
-        .order('name');
-      
-      // Filter by cooperative if selected
-      if (selectedCooperative) {
-        query = query.eq('cooperative_id', selectedCooperative);
-      }
-
-      const { data, error } = await query;
-
-      if (!error && data) {
-        setChefPlanteurs(data);
-      }
-      setLoadingChefPlanteurs(false);
-    };
-
-    fetchChefPlanteurs();
-  }, [targetType, selectedCooperative]);
-
-  // Fetch planteurs when target type is planteur
-  useEffect(() => {
-    const fetchPlanteurs = async () => {
-      if (targetType !== 'planteur') return;
-      
-      setLoadingPlanteurs(true);
-      const supabase = createClient();
-      
-      let query = supabase
-        .from('planteurs')
-        .select('id, name, code, cooperative_id, chef_planteur_id')
-        .eq('is_active', true)
-        .order('name');
-      
-      // Filter by cooperative if selected
-      if (selectedCooperative) {
-        query = query.eq('cooperative_id', selectedCooperative);
-      }
-      
-      // Filter by chef planteur if selected
-      if (selectedChefPlanteur) {
-        query = query.eq('chef_planteur_id', selectedChefPlanteur);
-      }
-
-      const { data, error } = await query;
-
-      if (!error && data) {
-        setPlanteurs(data);
-      }
-      setLoadingPlanteurs(false);
-    };
-
-    fetchPlanteurs();
-  }, [targetType, selectedCooperative, selectedChefPlanteur]);
 
   // Fetch available deliveries when period changes
   const fetchAvailableDeliveries = useCallback(async () => {
@@ -408,53 +326,34 @@ export default function GenerateInvoicePage() {
             {/* Chef Planteur selector (for fournisseur or planteur type) */}
             {(targetType === 'fournisseur' || targetType === 'planteur') && (
               <div>
-                <label htmlFor="chefPlanteur" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="chefPlanteur" className="block text-sm font-medium text-gray-700 mb-1">
                   Fournisseur (Chef Planteur) {targetType === 'planteur' && '(optionnel - pour filtrer)'}
                 </label>
-                <select
-                  id="chefPlanteur"
+                <ChefPlanteurSearchSelect
                   value={selectedChefPlanteur}
-                  onChange={(e) => {
-                    setSelectedChefPlanteur(e.target.value);
+                  onChange={(value) => {
+                    setSelectedChefPlanteur(value);
                     setSelectedPlanteur('');
                   }}
-                  disabled={loadingChefPlanteurs}
-                  className="mt-1 block w-full rounded-md border border-gray-300 py-2 pl-3 pr-10 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100"
-                >
-                  <option value="">
-                    {loadingChefPlanteurs ? 'Chargement...' : 'Sélectionner un fournisseur'}
-                  </option>
-                  {chefPlanteurs.map((chef) => (
-                    <option key={chef.id} value={chef.id}>
-                      {chef.name} ({chef.code})
-                    </option>
-                  ))}
-                </select>
+                  cooperativeId={selectedCooperative}
+                  placeholder="Rechercher un fournisseur..."
+                />
               </div>
             )}
 
             {/* Planteur selector (for planteur type) */}
             {targetType === 'planteur' && (
               <div>
-                <label htmlFor="planteur" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="planteur" className="block text-sm font-medium text-gray-700 mb-1">
                   Planteur
                 </label>
-                <select
-                  id="planteur"
+                <PlanteurSearchSelect
                   value={selectedPlanteur}
-                  onChange={(e) => setSelectedPlanteur(e.target.value)}
-                  disabled={loadingPlanteurs}
-                  className="mt-1 block w-full rounded-md border border-gray-300 py-2 pl-3 pr-10 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100"
-                >
-                  <option value="">
-                    {loadingPlanteurs ? 'Chargement...' : 'Sélectionner un planteur'}
-                  </option>
-                  {planteurs.map((planteur) => (
-                    <option key={planteur.id} value={planteur.id}>
-                      {planteur.name} ({planteur.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedPlanteur}
+                  cooperativeId={selectedCooperative}
+                  chefPlanteurId={selectedChefPlanteur}
+                  placeholder="Rechercher un planteur..."
+                />
               </div>
             )}
 

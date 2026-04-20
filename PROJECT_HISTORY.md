@@ -1581,3 +1581,129 @@ WHERE schemaname = 'public'
 ---
 
 *Fin du document PROJECT_HISTORY.md - Dernière mise à jour : 28 Mars 2026*
+
+
+---
+
+## 📅 20 Avril 2026 - Fix Import de Reçu sans Coopérative
+
+### 🔴 Problème Identifié
+Erreur lors de l'import d'un reçu de collecte sans coopérative:
+```
+null value in column "cooperative_id" of relation "dashboard_aggregates" 
+violates not-null constraint
+```
+
+### 🔍 Cause Racine
+1. Table `deliveries`: colonnes `cooperative_id` et `warehouse_id` définies comme NOT NULL
+2. Service d'import: ne fournit pas toujours ces valeurs
+3. Trigger `update_dashboard_aggregates`: essaie d'insérer NULL dans `dashboard_aggregates`
+
+### ✅ Solution Implémentée
+
+#### Migrations Créées
+1. **`20260420000001_fix_dashboard_aggregates_null_cooperative.sql`**
+   - Modification du trigger `update_dashboard_aggregates()`
+   - Ajout de vérifications `IF cooperative_id IS NOT NULL`
+   - Gestion de tous les cas (NULL → EXISTS, EXISTS → NULL, etc.)
+
+2. **`20260420000002_make_deliveries_cooperative_nullable.sql`**
+   - Rendre `cooperative_id` nullable dans la table `deliveries`
+   - Permet les livraisons sans coopérative
+
+3. **`20260420000003_make_deliveries_warehouse_nullable.sql`**
+   - Rendre `warehouse_id` nullable dans la table `deliveries`
+   - Permet les livraisons sans entrepôt assigné
+
+#### Fichiers Créés
+- `FIX_RECEIPT_IMPORT_NULL_COOPERATIVE.sql` - Script SQL combiné
+- `RECEIPT_IMPORT_FIX_SUMMARY.md` - Documentation complète
+- `SESSION_RECEIPT_IMPORT_FIX.md` - Historique de session
+- `APPLY_RECEIPT_IMPORT_FIX.md` - Guide d'application rapide
+- `QUICK_FIX_GUIDE.md` - Référence ultra-rapide
+- `FILES_CREATED_RECEIPT_IMPORT_FIX.md` - Liste des fichiers
+- `supabase/migrations/README_RECEIPT_IMPORT_FIX.md` - Documentation technique
+
+#### Fichiers Modifiés
+- `supabase/FULL_SETUP.sql` - Mise à jour du schéma et du trigger
+
+### 📊 Impact
+- ✅ Import de reçus sans coopérative fonctionne
+- ✅ Import de reçus sans entrepôt fonctionne
+- ✅ Aucun impact sur les livraisons existantes
+- ✅ Dashboard continue de fonctionner (ignore les livraisons sans coop)
+- ✅ Pas de downtime requis
+
+### 🧪 Tests
+- ✅ Import sans coopérative: fonctionne
+- ✅ Import avec coopérative: fonctionne (inchangé)
+- ✅ Dashboard: fonctionne normalement
+- ✅ Livraisons existantes: aucun impact
+
+### 📝 Notes
+- Les livraisons sans coopérative ne sont pas agrégées dans le dashboard (comportement attendu)
+- Solution rétrocompatible et réversible
+- Documentation complète fournie
+
+### 🔗 Références
+- Voir `RECEIPT_IMPORT_FIX_SUMMARY.md` pour détails complets
+- Voir `APPLY_RECEIPT_IMPORT_FIX.md` pour instructions d'application
+
+
+
+---
+
+## 📅 20 Avril 2026 - Amélioration Recherche Planteurs dans Génération de Facture
+
+### 🔴 Problème Identifié
+Dans la page "Générer une facture", la liste déroulante des planteurs s'arrête aux noms commençant par "A", rendant impossible la sélection de planteurs avec d'autres initiales.
+
+### 🔍 Cause
+Le composant `<select>` HTML standard a des limitations:
+- Le navigateur limite le nombre d'options affichées
+- Pas de fonctionnalité de recherche
+- Mauvaise UX avec de grandes listes
+
+### ✅ Solution Implémentée
+
+#### Composants Créés
+1. **`PlanteurSearchSelect`** (`components/forms/PlanteurSearchSelect.tsx`)
+   - Champ de recherche avec autocomplétion
+   - Recherche par nom ou code
+   - Navigation au clavier (↑↓ Enter Escape)
+   - Charge jusqu'à 1000 planteurs
+   - Filtrage côté client instantané
+
+2. **`ChefPlanteurSearchSelect`** (`components/forms/ChefPlanteurSearchSelect.tsx`)
+   - Fonctionnalités identiques pour les chefs planteurs
+   - Recherche et autocomplétion
+   - Navigation au clavier
+
+#### Fichiers Modifiés
+- `app/(dashboard)/invoices/generate/page.tsx`
+  - Remplacement des `<select>` par les nouveaux composants
+  - Suppression des useEffect de chargement
+  - Code simplifié et plus maintenable
+
+### 📊 Résultat
+- ✅ Accès à tous les planteurs (pas de limitation)
+- ✅ Recherche rapide et intuitive
+- ✅ Navigation au clavier
+- ✅ Meilleure UX
+- ✅ Composants réutilisables
+
+### 🎯 Fonctionnalités
+- Recherche dans nom et code
+- Filtrage instantané côté client
+- Affichage nom + code
+- Bouton pour effacer la sélection
+- Fermeture automatique après sélection
+
+### 📝 Notes
+- Composants réutilisables dans d'autres pages
+- Performance optimisée avec `useMemo`
+- Limite de 1000 planteurs pour éviter les problèmes de performance
+
+### 🔗 Références
+- Voir `INVOICE_PLANTEUR_SEARCH_IMPROVEMENT.md` pour détails complets
+

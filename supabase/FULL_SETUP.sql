@@ -140,8 +140,8 @@ CREATE TABLE public.deliveries (
   code TEXT NOT NULL UNIQUE,
   planteur_id UUID NOT NULL REFERENCES public.planteurs(id),
   chef_planteur_id UUID NOT NULL REFERENCES public.chef_planteurs(id),
-  cooperative_id UUID NOT NULL REFERENCES public.cooperatives(id),
-  warehouse_id UUID NOT NULL REFERENCES public.warehouses(id),
+  cooperative_id UUID REFERENCES public.cooperatives(id), -- Nullable: deliveries can exist without a cooperative
+  warehouse_id UUID REFERENCES public.warehouses(id), -- Nullable: warehouse can be assigned later
   weight_kg NUMERIC(10,2) NOT NULL,
   price_per_kg NUMERIC(10,2) NOT NULL,
   total_amount BIGINT NOT NULL,
@@ -802,30 +802,10 @@ BEGIN
     v_new_coop_id := NEW.cooperative_id;
   END IF;
 
+  -- Skip aggregation if cooperative_id is NULL
   IF TG_OP = 'DELETE' THEN
-    INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
-    VALUES (v_old_coop_id, v_old_day, -1, -OLD.weight_kg, -OLD.total_amount)
-    ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
-      total_deliveries = dashboard_aggregates.total_deliveries - 1,
-      total_weight_kg = dashboard_aggregates.total_weight_kg - OLD.weight_kg,
-      total_amount_xaf = dashboard_aggregates.total_amount_xaf - OLD.total_amount,
-      updated_at = NOW();
-    RETURN OLD;
-  END IF;
-
-  IF TG_OP = 'INSERT' THEN
-    INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
-    VALUES (v_new_coop_id, v_new_day, 1, NEW.weight_kg, NEW.total_amount)
-    ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
-      total_deliveries = dashboard_aggregates.total_deliveries + 1,
-      total_weight_kg = dashboard_aggregates.total_weight_kg + NEW.weight_kg,
-      total_amount_xaf = dashboard_aggregates.total_amount_xaf + NEW.total_amount,
-      updated_at = NOW();
-    RETURN NEW;
-  END IF;
-
-  IF TG_OP = 'UPDATE' THEN
-    IF v_old_day != v_new_day OR v_old_coop_id != v_new_coop_id THEN
+    -- Only aggregate if old cooperative exists
+    IF v_old_coop_id IS NOT NULL THEN
       INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
       VALUES (v_old_coop_id, v_old_day, -1, -OLD.weight_kg, -OLD.total_amount)
       ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
@@ -833,7 +813,13 @@ BEGIN
         total_weight_kg = dashboard_aggregates.total_weight_kg - OLD.weight_kg,
         total_amount_xaf = dashboard_aggregates.total_amount_xaf - OLD.total_amount,
         updated_at = NOW();
-      
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    -- Only aggregate if new cooperative exists
+    IF v_new_coop_id IS NOT NULL THEN
       INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
       VALUES (v_new_coop_id, v_new_day, 1, NEW.weight_kg, NEW.total_amount)
       ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
@@ -841,18 +827,64 @@ BEGIN
         total_weight_kg = dashboard_aggregates.total_weight_kg + NEW.weight_kg,
         total_amount_xaf = dashboard_aggregates.total_amount_xaf + NEW.total_amount,
         updated_at = NOW();
-    ELSE
-      UPDATE public.dashboard_aggregates SET
-        total_weight_kg = total_weight_kg + (NEW.weight_kg - OLD.weight_kg),
-        total_amount_xaf = total_amount_xaf + (NEW.total_amount - OLD.total_amount),
-        updated_at = NOW()
-      WHERE cooperative_id = v_new_coop_id AND period_date = v_new_day;
-      
-      IF NOT FOUND THEN
-        INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
-        VALUES (v_new_coop_id, v_new_day, 1, NEW.weight_kg, NEW.total_amount);
-      END IF;
     END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    -- Handle case where cooperative changes or is NULL
+    IF v_old_coop_id IS NOT NULL AND v_new_coop_id IS NOT NULL THEN
+      -- Both cooperatives exist
+      IF v_old_day != v_new_day OR v_old_coop_id != v_new_coop_id THEN
+        -- Date or cooperative changed
+        INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
+        VALUES (v_old_coop_id, v_old_day, -1, -OLD.weight_kg, -OLD.total_amount)
+        ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
+          total_deliveries = dashboard_aggregates.total_deliveries - 1,
+          total_weight_kg = dashboard_aggregates.total_weight_kg - OLD.weight_kg,
+          total_amount_xaf = dashboard_aggregates.total_amount_xaf - OLD.total_amount,
+          updated_at = NOW();
+        
+        INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
+        VALUES (v_new_coop_id, v_new_day, 1, NEW.weight_kg, NEW.total_amount)
+        ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
+          total_deliveries = dashboard_aggregates.total_deliveries + 1,
+          total_weight_kg = dashboard_aggregates.total_weight_kg + NEW.weight_kg,
+          total_amount_xaf = dashboard_aggregates.total_amount_xaf + NEW.total_amount,
+          updated_at = NOW();
+      ELSE
+        -- Only weight or amount changed
+        UPDATE public.dashboard_aggregates SET
+          total_weight_kg = total_weight_kg + (NEW.weight_kg - OLD.weight_kg),
+          total_amount_xaf = total_amount_xaf + (NEW.total_amount - OLD.total_amount),
+          updated_at = NOW()
+        WHERE cooperative_id = v_new_coop_id AND period_date = v_new_day;
+        
+        IF NOT FOUND THEN
+          INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
+          VALUES (v_new_coop_id, v_new_day, 1, NEW.weight_kg, NEW.total_amount);
+        END IF;
+      END IF;
+    ELSIF v_old_coop_id IS NOT NULL AND v_new_coop_id IS NULL THEN
+      -- Cooperative removed, decrement old
+      INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
+      VALUES (v_old_coop_id, v_old_day, -1, -OLD.weight_kg, -OLD.total_amount)
+      ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
+        total_deliveries = dashboard_aggregates.total_deliveries - 1,
+        total_weight_kg = dashboard_aggregates.total_weight_kg - OLD.weight_kg,
+        total_amount_xaf = dashboard_aggregates.total_amount_xaf - OLD.total_amount,
+        updated_at = NOW();
+    ELSIF v_old_coop_id IS NULL AND v_new_coop_id IS NOT NULL THEN
+      -- Cooperative added, increment new
+      INSERT INTO public.dashboard_aggregates (cooperative_id, period_date, total_deliveries, total_weight_kg, total_amount_xaf)
+      VALUES (v_new_coop_id, v_new_day, 1, NEW.weight_kg, NEW.total_amount)
+      ON CONFLICT (cooperative_id, period_date) DO UPDATE SET
+        total_deliveries = dashboard_aggregates.total_deliveries + 1,
+        total_weight_kg = dashboard_aggregates.total_weight_kg + NEW.weight_kg,
+        total_amount_xaf = dashboard_aggregates.total_amount_xaf + NEW.total_amount,
+        updated_at = NOW();
+    END IF;
+    -- If both are NULL, do nothing
     RETURN NEW;
   END IF;
 
