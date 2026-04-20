@@ -3,7 +3,7 @@
 // CocoaTrack V2 - Enhanced KPI Grid Component
 // Displays all dashboard KPIs with gradients and sparklines
 
-import { Package as PackageIcon, Scale, CircleDollarSign, TrendingUp, Users, UsersRound, CalendarCheck } from 'lucide-react';
+import { Package as PackageIcon, Scale, CircleDollarSign, TrendingUp, Users, UsersRound, CalendarCheck, Map } from 'lucide-react';
 import { KPICard, formatCurrency, formatWeight } from './KPICard';
 import type { DashboardMetricsWithComparison, TimeSeriesPoint, EntityCounts } from '@/lib/api/dashboard';
 
@@ -104,18 +104,18 @@ export function KPIGrid({
         <KPICard
           title="Chef Planteurs"
           value={entityCounts?.chefPlanteursActifs ?? 0}
-          subtitle="validés"
+          subtitle={`${entityCounts?.chefPlanteursEnAttente ?? 0} en attente`}
           loading={entityCountsLoading}
           icon={<UsersRound className="h-5 w-5" />}
           gradient="blue"
           animateCounter={true}
         />
         <KPICard
-          title="En attente"
-          value={entityCounts?.chefPlanteursEnAttente ?? 0}
-          subtitle="à valider"
+          title="Parcelles"
+          value={entityCounts?.totalParcelles ?? 0}
+          subtitle="enregistrées"
           loading={entityCountsLoading}
-          icon={<UsersRound className="h-5 w-5" />}
+          icon={<Map className="h-5 w-5" />}
           gradient="purple"
           animateCounter={true}
         />

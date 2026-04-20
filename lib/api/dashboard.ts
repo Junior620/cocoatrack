@@ -490,6 +490,7 @@ export interface EntityCounts {
   chefPlanteursEnAttente: number;
   livraisonsAujourdhui: number;
   poidsAujourdhui: number;
+  totalParcelles: number;
 }
 
 async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
@@ -526,6 +527,16 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
     pendingChefsQuery = pendingChefsQuery.eq('cooperative_id', cooperativeId);
   }
 
+  // Count total parcelles (non-archived)
+  let parcellesQuery = supabase
+    .from('parcelles')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_archived', false);
+  
+  if (cooperativeId) {
+    parcellesQuery = parcellesQuery.eq('cooperative_id', cooperativeId);
+  }
+
   // Get today's deliveries using RPC (includes NULL cooperative deliveries)
   const params: GetDashboardMetricsAllParams = {
     p_cooperative_id: cooperativeId || null,
@@ -535,10 +546,11 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
   
   const todayMetricsQuery = supabase.rpc('get_dashboard_metrics_all', params as any);
 
-  const [planteursResult, chefsResult, pendingResult, todayResult] = await Promise.all([
+  const [planteursResult, chefsResult, pendingResult, parcellesResult, todayResult] = await Promise.all([
     planteursQuery,
     chefPlanteursQuery,
     pendingChefsQuery,
+    parcellesQuery,
     todayMetricsQuery,
   ]);
 
@@ -554,6 +566,7 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
     chefPlanteursEnAttente: pendingResult.count || 0,
     livraisonsAujourdhui: Number(todayData.total_deliveries),
     poidsAujourdhui: Math.round(Number(todayData.total_weight_kg) * 100) / 100,
+    totalParcelles: parcellesResult.count || 0,
   };
 }
 
