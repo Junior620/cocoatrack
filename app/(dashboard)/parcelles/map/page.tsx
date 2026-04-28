@@ -35,8 +35,7 @@ import {
   CAMEROON_REGIONS,
 } from '@/types/parcelles';
 import type { PaginatedResult } from '@/types';
-import { ParcelleMap } from '@/components/parcelles/ParcelleMap';
-import type { ParcelleMapHandle } from '@/components/parcelles/ParcelleMap';
+import { MapViewSwitcher } from '@/components/parcelles/MapViewSwitcher';
 
 // Debounce delay for bbox changes (ms)
 const BBOX_DEBOUNCE_DELAY = 300;
@@ -83,7 +82,8 @@ function ParcellesMapContent() {
   // Ref for debounce timer
   const bboxDebounceRef = useRef<NodeJS.Timeout | null>(null);
   // Ref to the map for programmatic zoom (region fly-to)
-  const mapRef = useRef<ParcelleMapHandle>(null);
+  // Note: MapViewSwitcher doesn't expose ref yet, but we keep this for future enhancement
+  const mapRef = useRef<any>(null);
   
   // Filter options state
   const [villages, setVillages] = useState<string[]>([]);
@@ -602,17 +602,13 @@ function ParcellesMapContent() {
         )}
 
         {/* Map */}
-        <ParcelleMap
-          ref={mapRef}
+        <MapViewSwitcher
           parcelles={mapParcelles}
-          selectedId={selectedParcelleId || undefined}
+          selectedId={selectedParcelleId}
           onSelect={handleParcelleSelect}
           onBboxChange={handleBboxChange}
-          showCentroids={false}
           height="100%"
-          enableFullscreen={true}
-          zoomToSelected={true}
-          className="h-full"
+          defaultProvider="leaflet"
         />
 
         {/* Bbox Loading Indicator */}

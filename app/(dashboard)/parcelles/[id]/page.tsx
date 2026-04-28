@@ -6,6 +6,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Mountain as MountainIcon } from 'lucide-react';
 
 import { ProtectedRoute } from '@/components/auth';
 import { useAuth, hasPermission } from '@/lib/auth';
@@ -51,6 +52,7 @@ function ParcelleDetailContent() {
   const certDropdownRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [calculatingElevation, setCalculatingElevation] = useState(false);
 
   const canEdit = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:update');
   const canArchive = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:delete');
@@ -177,6 +179,44 @@ function ParcelleDetailContent() {
       setEditedLabel(parcelle.label || '');
       setEditedVillage(parcelle.village || '');
       setEditedCertifications(parcelle.certifications || []);
+    }
+  };
+
+  // Handle calculate elevation
+  const handleCalculateElevation = async () => {
+    if (!parcelle) return;
+    
+    setCalculatingElevation(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`/api/parcelles/${parcelleId}/elevation`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erreur lors du calcul de l\'élévation');
+      }
+      
+      const result = await response.json();
+      
+      // Refresh parcelle data to show new elevation
+      await fetchParcelle();
+      
+      // Show success message with details
+      alert(
+        `Élévation calculée avec succès!\n\n` +
+        `Altitude moyenne: ${result.data.elevation_meters}m\n` +
+        `Pente moyenne: ${result.data.slope_percent}%\n` +
+        `Altitude min: ${result.data.min_elevation}m\n` +
+        `Altitude max: ${result.data.max_elevation}m\n` +
+        `Points échantillonnés: ${result.data.points_sampled}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors du calcul de l\'élévation');
+    } finally {
+      setCalculatingElevation(false);
     }
   };
 
@@ -411,6 +451,27 @@ function ParcelleDetailContent() {
               Archiver
             </button>
           )}
+          {/* Calculate Elevation Button */}
+          {canEdit && parcelle.is_active && (
+            <button
+              onClick={handleCalculateElevation}
+              disabled={calculatingElevation}
+              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              title="Calculer l'altitude et la pente avec Google Elevation API"
+            >
+              {calculatingElevation ? (
+                <>
+                  <LoadingSpinner className="mr-2 h-4 w-4" />
+                  Calcul en cours...
+                </>
+              ) : (
+                <>
+                  <MountainIcon className="mr-2 h-4 w-4" />
+                  {parcelle.elevation_meters ? 'Recalculer Élévation' : 'Calculer Élévation'}
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -460,6 +521,43 @@ function ParcelleDetailContent() {
             <DetailRow label="Identifiant Producteur" value={parcelle.planteur.code} />
             <DetailRow label="Identifiant Interne" value={parcelle.code} />
             <DetailRow label="Surface" value={`${parcelle.surface_hectares.toFixed(4)} hectares`} />
+            
+            {/* Elevation and Slope */}
+            {parcelle.elevation_meters && (
+              <>
+                <div className="flex justify-between border-b border-gray-100 pb-2">
+                  <dt className="text-sm text-gray-500">Altitude</dt>
+                  <dd className={`text-sm font-medium ${
+                    parcelle.elevation_meters < 200 || parcelle.elevation_meters > 800
+                      ? 'text-orange-600'
+                      : 'text-green-600'
+                  }`}>
+                    {parcelle.elevation_meters} m
+                    {parcelle.elevation_meters < 200 && ' ⚠️ Trop bas'}
+                    {parcelle.elevation_meters > 800 && ' ⚠️ Trop haut'}
+                    {parcelle.elevation_meters >= 200 && parcelle.elevation_meters <= 800 && ' ✓ Optimal'}
+                  </dd>
+                </div>
+                {parcelle.slope_percent !== null && parcelle.slope_percent !== undefined && (
+                  <div className="flex justify-between border-b border-gray-100 pb-2">
+                    <dt className="text-sm text-gray-500">Pente</dt>
+                    <dd className={`text-sm font-medium ${
+                      parcelle.slope_percent > 30
+                        ? 'text-red-600'
+                        : parcelle.slope_percent > 15
+                        ? 'text-orange-600'
+                        : 'text-green-600'
+                    }`}>
+                      {parcelle.slope_percent}%
+                      {parcelle.slope_percent > 30 && ' ⚠️ Très forte'}
+                      {parcelle.slope_percent > 15 && parcelle.slope_percent <= 30 && ' ⚠️ Forte'}
+                      {parcelle.slope_percent <= 15 && ' ✓ Modérée'}
+                    </dd>
+                  </div>
+                )}
+              </>
+            )}
+            
             <DetailRow 
               label="Centroïde" 
               value={`${formatCoordinate(parcelle.centroid.lat)}, ${formatCoordinate(parcelle.centroid.lng)}`} 

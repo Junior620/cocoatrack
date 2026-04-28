@@ -44,6 +44,8 @@ interface LeafletMapProps {
   zoomToFit?: boolean;
   /** When true, automatically zoom to the selected parcelle when selectedId changes */
   zoomToSelected?: boolean;
+  /** Tile layer to use: 'osm' for OpenStreetMap, 'satellite' for Esri World Imagery */
+  tileLayer?: 'osm' | 'satellite';
 }
 
 export interface LeafletMapHandle {
@@ -63,6 +65,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   enableFullscreen = true,
   zoomToFit = false,
   zoomToSelected = false,
+  tileLayer = 'osm',
 }, ref: React.Ref<LeafletMapHandle>) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -166,13 +169,26 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
       },
     });
 
-    // Add OpenStreetMap tile layer
-    const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    // Add tile layer based on prop
+    let tileLayerUrl: string;
+    let attribution: string;
+    
+    if (tileLayer === 'satellite') {
+      // Esri World Imagery (satellite)
+      tileLayerUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      attribution = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+    } else {
+      // OpenStreetMap (default)
+      tileLayerUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+    }
+    
+    const tileLayerInstance = L.tileLayer(tileLayerUrl, {
+      attribution,
       maxZoom: 19,
     }).addTo(map);
     
-    baseTileLayerRef.current = tileLayer;
+    baseTileLayerRef.current = tileLayerInstance;
 
     // Create layer groups
     polygonLayerRef.current = L.geoJSON(undefined, {
@@ -210,7 +226,34 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
       map.remove();
       mapRef.current = null;
     };
-  }, [enableFullscreen]);
+  }, [enableFullscreen, tileLayer]);
+
+  // Update tile layer when tileLayer prop changes
+  useEffect(() => {
+    if (!mapRef.current || !baseTileLayerRef.current) return;
+
+    let tileLayerUrl: string;
+    let attribution: string;
+    
+    if (tileLayer === 'satellite') {
+      tileLayerUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      attribution = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
+    } else {
+      tileLayerUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+    }
+
+    // Remove old tile layer
+    baseTileLayerRef.current.remove();
+    
+    // Add new tile layer
+    const newTileLayer = L.tileLayer(tileLayerUrl, {
+      attribution,
+      maxZoom: 19,
+    }).addTo(mapRef.current);
+    
+    baseTileLayerRef.current = newTileLayer;
+  }, [tileLayer]);
 
   // Update parcelles on map
   useEffect(() => {

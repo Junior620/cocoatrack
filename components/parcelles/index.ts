@@ -43,3 +43,9 @@ export type { AssignParcellesModalProps, AssignResult } from './AssignParcellesM
 
 export { ConformityInfoBubble } from './ConformityInfoBubble';
 export type { default as ConformityInfoBubbleProps } from './ConformityInfoBubble';
+
+export { LeafletMap } from './LeafletMap';
+
+export { GoogleMapView } from './GoogleMapView';
+
+export { MapViewSwitcher } from './MapViewSwitcher';

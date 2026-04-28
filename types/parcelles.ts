@@ -297,6 +297,19 @@ export interface Parcelle {
   updated_at: string;
   
   // ==========================================================================
+  // Elevation Data (Google Elevation API)
+  // ==========================================================================
+  
+  /** Average elevation in meters above sea level */
+  elevation_meters?: number | null;
+  
+  /** Average slope percentage */
+  slope_percent?: number | null;
+  
+  /** Timestamp when elevation was last calculated */
+  elevation_calculated_at?: string | null;
+  
+  // ==========================================================================
   // Relations (optional, populated when fetching with relations)
   // ==========================================================================
   
