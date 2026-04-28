@@ -14,6 +14,7 @@ import type { ExtendedUserRole } from '@/lib/auth';
 import { parcellesApi } from '@/lib/api/parcelles';
 import { ParcelleMap } from '@/components/parcelles/ParcelleMap';
 import { ConformityInfoBubble } from '@/components/parcelles/ConformityInfoBubble';
+import StaticImageButton from '@/components/parcelles/StaticImageButton';
 import type { Parcelle, ParcelleWithPlanteur, ConformityStatus, Certification, UpdateParcelleInput } from '@/types/parcelles';
 import {
   CONFORMITY_STATUS_LABELS,
@@ -472,6 +473,13 @@ function ParcelleDetailContent() {
               )}
             </button>
           )}
+          {/* Static Image Button */}
+          {parcelle.is_active && (
+            <StaticImageButton 
+              parcelleId={parcelle.id} 
+              parcelleCode={parcelle.code} 
+            />
+          )}
         </div>
       </div>
 
@@ -562,6 +570,35 @@ function ParcelleDetailContent() {
               label="Centroïde" 
               value={`${formatCoordinate(parcelle.centroid.lat)}, ${formatCoordinate(parcelle.centroid.lng)}`} 
             />
+            
+            {/* GPS Coordinates with Copy Button */}
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+              <dt className="text-sm text-gray-500">Coordonnées GPS</dt>
+              <dd className="flex items-center gap-2">
+                <div className="text-right">
+                  <div className="text-sm font-medium text-gray-900 font-mono">
+                    {formatCoordinate(parcelle.centroid.lat)}°N
+                  </div>
+                  <div className="text-sm font-medium text-gray-900 font-mono">
+                    {formatCoordinate(parcelle.centroid.lng)}°E
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const coords = `${formatCoordinate(parcelle.centroid.lat)}, ${formatCoordinate(parcelle.centroid.lng)}`;
+                    navigator.clipboard.writeText(coords);
+                    alert('Coordonnées copiées !');
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded transition-colors"
+                  title="Copier les coordonnées GPS"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </dd>
+            </div>
+            
             {/* Editable Label Field */}
             {canEdit && parcelle.is_active ? (
               <div className="flex justify-between border-b border-gray-100 pb-2">

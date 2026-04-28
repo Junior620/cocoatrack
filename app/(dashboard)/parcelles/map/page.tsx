@@ -648,6 +648,27 @@ function ParcellesMapContent() {
                     {CONFORMITY_STATUS_LABELS[selectedParcelle.conformity_status]}
                   </span>
                 </div>
+                {/* GPS Coordinates */}
+                <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 font-mono">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>{selectedParcelle.centroid.lat.toFixed(6)}°N, {selectedParcelle.centroid.lng.toFixed(6)}°E</span>
+                  <button
+                    onClick={() => {
+                      const coords = `${selectedParcelle.centroid.lat.toFixed(6)}, ${selectedParcelle.centroid.lng.toFixed(6)}`;
+                      navigator.clipboard.writeText(coords);
+                      alert('Coordonnées GPS copiées !');
+                    }}
+                    className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded transition-colors"
+                    title="Copier les coordonnées GPS"
+                  >
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
                 {selectedParcelle.certifications.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {selectedParcelle.certifications.map((cert) => (
