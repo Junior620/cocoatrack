@@ -49,6 +49,7 @@ interface MapViewSwitcherProps {
   zoom?: number;
   height?: string;
   defaultProvider?: 'leaflet' | 'google';
+  zoomToSelected?: boolean;
 }
 
 export function MapViewSwitcher({
@@ -60,6 +61,7 @@ export function MapViewSwitcher({
   zoom = 12,
   height = '600px',
   defaultProvider = 'leaflet',
+  zoomToSelected = false,
 }: MapViewSwitcherProps) {
   const [mapProvider, setMapProvider] = useState<'leaflet' | 'google'>(defaultProvider);
   const [leafletLayer, setLeafletLayer] = useState<'osm' | 'satellite'>('osm');
@@ -67,7 +69,7 @@ export function MapViewSwitcher({
   return (
     <div className="relative w-full" style={{ height }}>
       {/* Map Provider Switcher */}
-      <div className="absolute top-4 right-4 z-[1001] flex gap-2 bg-white rounded-lg shadow-lg p-1">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1001] flex gap-2 bg-white rounded-lg shadow-lg p-1">
         <button
           onClick={() => {
             setMapProvider('leaflet');
@@ -127,6 +129,7 @@ export function MapViewSwitcher({
             onSelect={onSelect as any}
             onBboxChange={onBboxChange}
             zoomToFit={true}
+            zoomToSelected={zoomToSelected}
             tileLayer={leafletLayer}
           />
         ) : (

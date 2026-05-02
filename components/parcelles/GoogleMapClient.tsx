@@ -192,7 +192,7 @@ export function GoogleMapClient({
       onLoad={onLoad}
       onUnmount={onUnmount}
       options={{
-        mapTypeId: 'satellite',
+        mapTypeId: 'hybrid',
         disableDefaultUI: false,
         zoomControl: true,
         mapTypeControl: true,

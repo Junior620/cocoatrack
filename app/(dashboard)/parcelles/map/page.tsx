@@ -609,6 +609,7 @@ function ParcellesMapContent() {
           onBboxChange={handleBboxChange}
           height="100%"
           defaultProvider="leaflet"
+          zoomToSelected={true}
         />
 
         {/* Bbox Loading Indicator */}

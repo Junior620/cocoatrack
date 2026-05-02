@@ -75,9 +75,6 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   const labelsLayerRef = useRef<L.TileLayer | null>(null);
   const [mapStyle, setMapStyle] = useState<'streets' | 'satellite' | 'hybrid'>('streets');
   const [showLabels, setShowLabels] = useState(true);
-  // Track whether the last zoom-to-selected was user-initiated (from list click)
-  // vs a map interaction, to avoid re-locking the view on dezoom
-  const userSelectedRef = useRef(false);
   const prevSelectedIdRef = useRef<string | undefined>(undefined);
   // Track if the initial fit-to-bounds has already been done
   const hasInitialFitRef = useRef(false);
@@ -190,6 +187,20 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     
     baseTileLayerRef.current = tileLayerInstance;
 
+    // Add labels overlay for satellite view
+    if (tileLayer === 'satellite') {
+      const labelsLayer = L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+        {
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          maxZoom: 19,
+          pane: 'shadowPane',
+        }
+      ).addTo(map);
+      
+      labelsLayerRef.current = labelsLayer;
+    }
+
     // Create layer groups
     polygonLayerRef.current = L.geoJSON(undefined, {
       style: () => ({
@@ -246,6 +257,12 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     // Remove old tile layer
     baseTileLayerRef.current.remove();
     
+    // Remove old labels layer if it exists
+    if (labelsLayerRef.current) {
+      labelsLayerRef.current.remove();
+      labelsLayerRef.current = null;
+    }
+    
     // Add new tile layer
     const newTileLayer = L.tileLayer(tileLayerUrl, {
       attribution,
@@ -253,6 +270,20 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     }).addTo(mapRef.current);
     
     baseTileLayerRef.current = newTileLayer;
+
+    // Add labels overlay for satellite view
+    if (tileLayer === 'satellite') {
+      const labelsLayer = L.tileLayer(
+        'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png',
+        {
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          maxZoom: 19,
+          pane: 'shadowPane',
+        }
+      ).addTo(mapRef.current);
+      
+      labelsLayerRef.current = labelsLayer;
+    }
   }, [tileLayer]);
 
   // Update parcelles on map
@@ -320,9 +351,6 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
               popup.setLatLng(e.latlng);
               layer.openPopup();
             }
-            
-            // Mark as user-initiated selection so zoomToSelected fires
-            userSelectedRef.current = true;
 
             // Notify parent to highlight in list
             if (onSelect) {
@@ -405,13 +433,8 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     if (!mapRef.current || !selectedId || !zoomToSelected) return;
 
     // Only fly to the parcelle if the selection actually changed
-    // AND it was triggered by the user (not by a map zoom/pan side effect)
     if (selectedId === prevSelectedIdRef.current) return;
     prevSelectedIdRef.current = selectedId;
-
-    // Only animate if the user explicitly clicked a parcelle or list item
-    if (!userSelectedRef.current) return;
-    userSelectedRef.current = false;
 
     const selectedParcelle = parcelles.find((p) => p.id === selectedId);
     if (!selectedParcelle?.geometry) return;
