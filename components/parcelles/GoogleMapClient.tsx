@@ -96,6 +96,7 @@ export function GoogleMapClient({
       const geometry = parcelle.geometry;
       
       if (!geometry || !geometry.coordinates || !Array.isArray(geometry.coordinates)) {
+        console.warn('Invalid geometry for parcelle:', parcelle.code);
         return [];
       }
       
@@ -103,30 +104,31 @@ export function GoogleMapClient({
       // geometry.coordinates is [polygons[rings]]
       const polygons = geometry.coordinates;
       
-      const result = polygons.flatMap((polygon: any) => {
-        if (!Array.isArray(polygon)) return [];
+      console.log('Converting parcelle:', parcelle.code, 'polygons count:', polygons.length);
+      
+      const result = polygons.flatMap((polygon: any, polyIndex: number) => {
+        if (!Array.isArray(polygon)) {
+          console.warn('Invalid polygon at index', polyIndex);
+          return [];
+        }
         
-        return polygon.map((ring: any) => {
-          if (!Array.isArray(ring)) return [];
+        return polygon.map((ring: any, ringIndex: number) => {
+          if (!Array.isArray(ring)) {
+            console.warn('Invalid ring at polygon', polyIndex, 'ring', ringIndex);
+            return [];
+          }
+          
+          // Check if ring is empty
+          if (ring.length === 0) {
+            console.warn('Empty ring at polygon', polyIndex, 'ring', ringIndex);
+            return [];
+          }
           
           const firstElement = ring[0];
           
-          if (typeof firstElement === 'number') {
-            // Flat array: [lng, lat, lng, lat, ...]
-            const coords = [];
-            for (let i = 0; i < ring.length; i += 2) {
-              if (i + 1 < ring.length) {
-                const lng = Number(ring[i]);
-                const lat = Number(ring[i + 1]);
-                if (isFinite(lng) && isFinite(lat)) {
-                  coords.push({ lat, lng });
-                }
-              }
-            }
-            return coords;
-          } else if (Array.isArray(firstElement)) {
-            // Array of pairs: [[lng, lat], [lng, lat], ...]
-            return ring
+          // Array of pairs: [[lng, lat], [lng, lat], ...]
+          if (Array.isArray(firstElement) && firstElement.length >= 2) {
+            const coords = ring
               .map((coord: any) => {
                 if (Array.isArray(coord) && coord.length >= 2) {
                   const [lng, lat] = coord;
@@ -139,11 +141,19 @@ export function GoogleMapClient({
                 return null;
               })
               .filter((c: any): c is { lat: number; lng: number } => c !== null);
+            console.log('Array of pairs converted:', coords.length, 'points for ring', ringIndex);
+            return coords;
           }
           
+          console.warn('Unknown coordinate format at polygon', polyIndex, 'ring', ringIndex, 'first element:', firstElement);
           return [];
         }).filter((ring: any) => ring.length > 0);
       }).filter((polygon: any) => polygon.length > 0);
+      
+      console.log('Final result for', parcelle.code, ':', result.length, 'paths');
+      if (result.length > 0 && result[0].length > 0) {
+        console.log('First path sample:', result[0].slice(0, 3));
+      }
       
       return result;
     } catch (error) {
