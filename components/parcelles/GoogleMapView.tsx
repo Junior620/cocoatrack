@@ -12,6 +12,10 @@ interface GoogleMapViewProps {
   onParcelleClick?: (parcelle: ParcelleWithPlanteur) => void;
   center?: { lat: number; lng: number };
   zoom?: number;
+  /** Enable satellite imagery overlay */
+  enableSatelliteOverlay?: boolean;
+  /** Initial satellite overlay opacity (0-1) */
+  satelliteOverlayOpacity?: number;
 }
 
 const defaultCenter = {
@@ -25,6 +29,8 @@ export function GoogleMapView({
   onParcelleClick,
   center,
   zoom = 12,
+  enableSatelliteOverlay = false,
+  satelliteOverlayOpacity = 0.7,
 }: GoogleMapViewProps) {
   const [isClient, setIsClient] = useState(false);
 
@@ -53,6 +59,8 @@ export function GoogleMapView({
       onParcelleClick={onParcelleClick}
       center={center}
       zoom={zoom}
+      enableSatelliteOverlay={enableSatelliteOverlay}
+      satelliteOverlayOpacity={satelliteOverlayOpacity}
     />
   );
 }

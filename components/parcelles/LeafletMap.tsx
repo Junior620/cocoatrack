@@ -2,6 +2,7 @@
 
 // CocoaTrack V2 - LeafletMap Component (Internal)
 // Actual Leaflet implementation - dynamically imported to avoid SSR issues
+// Updated: Added error message UI for satellite imagery
 
 import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import L from 'leaflet';
@@ -46,6 +47,10 @@ interface LeafletMapProps {
   zoomToSelected?: boolean;
   /** Tile layer to use: 'osm' for OpenStreetMap, 'satellite' for Esri World Imagery */
   tileLayer?: 'osm' | 'satellite';
+  /** Enable satellite imagery overlay */
+  enableSatelliteOverlay?: boolean;
+  /** Initial satellite overlay opacity (0-1) */
+  satelliteOverlayOpacity?: number;
 }
 
 export interface LeafletMapHandle {
@@ -66,6 +71,8 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   zoomToFit = false,
   zoomToSelected = false,
   tileLayer = 'osm',
+  enableSatelliteOverlay = false,
+  satelliteOverlayOpacity = 0.7,
 }, ref: React.Ref<LeafletMapHandle>) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -73,8 +80,17 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   const centroidLayerRef = useRef<L.LayerGroup | null>(null);
   const baseTileLayerRef = useRef<L.TileLayer | null>(null);
   const labelsLayerRef = useRef<L.TileLayer | null>(null);
+  const satelliteTileLayerRef = useRef<L.TileLayer | null>(null);
   const [mapStyle, setMapStyle] = useState<'streets' | 'satellite' | 'hybrid'>('streets');
   const [showLabels, setShowLabels] = useState(true);
+  const [showSatelliteOverlay, setShowSatelliteOverlay] = useState(enableSatelliteOverlay);
+  const [satelliteOpacity, setSatelliteOpacity] = useState(satelliteOverlayOpacity);
+  const [satelliteTileUrl, setSatelliteTileUrl] = useState<string | null>(null);
+  const [imageryError, setImageryError] = useState<string | null>(null);
+  const [isLoadingImagery, setIsLoadingImagery] = useState(false);
+  const [showPeriodSelector, setShowPeriodSelector] = useState(false);
+  const [selectedPeriodDays, setSelectedPeriodDays] = useState(120);
+  const [customDays, setCustomDays] = useState('');
   const prevSelectedIdRef = useRef<string | undefined>(undefined);
   // Track if the initial fit-to-bounds has already been done
   const hasInitialFitRef = useRef(false);
@@ -551,6 +567,126 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     }
   }, [mapStyle, showLabels]);
 
+  // Toggle satellite overlay visibility
+  const toggleSatelliteOverlay = useCallback(() => {
+    if (!showSatelliteOverlay) {
+      // Show period selector when enabling overlay
+      setShowPeriodSelector(true);
+    } else {
+      // Disable overlay
+      setShowSatelliteOverlay(false);
+      setShowPeriodSelector(false);
+    }
+  }, [showSatelliteOverlay]);
+
+  // Load imagery with selected period
+  const loadImageryWithPeriod = useCallback((days: number) => {
+    setSelectedPeriodDays(days);
+    setShowSatelliteOverlay(true);
+    setShowPeriodSelector(false);
+    setCustomDays(''); // Reset custom input
+  }, []);
+
+  // Load imagery with custom period
+  const loadImageryWithCustomPeriod = useCallback(() => {
+    const days = parseInt(customDays, 10);
+    if (isNaN(days) || days < 1 || days > 5475) {
+      setImageryError('Veuillez entrer un nombre entre 1 et 5475 jours');
+      return;
+    }
+    loadImageryWithPeriod(days);
+  }, [customDays, loadImageryWithPeriod]);
+
+  // Handle satellite overlay opacity change
+  const handleSatelliteOpacityChange = useCallback((newOpacity: number) => {
+    setSatelliteOpacity(newOpacity);
+    if (satelliteTileLayerRef.current) {
+      satelliteTileLayerRef.current.setOpacity(newOpacity);
+    }
+  }, []);
+
+  // Update satellite tile layer when tile URL or visibility changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Remove existing satellite overlay if it exists
+    if (satelliteTileLayerRef.current) {
+      mapRef.current.removeLayer(satelliteTileLayerRef.current);
+      satelliteTileLayerRef.current = null;
+    }
+
+    // Add satellite overlay if enabled and tile URL is available
+    if (showSatelliteOverlay && satelliteTileUrl) {
+      const satelliteLayer = L.tileLayer(satelliteTileUrl, {
+        opacity: satelliteOpacity,
+        maxZoom: 19,
+        attribution: '&copy; Sentinel-2 via Google Earth Engine',
+      }).addTo(mapRef.current);
+
+      satelliteTileLayerRef.current = satelliteLayer;
+    }
+  }, [showSatelliteOverlay, satelliteTileUrl, satelliteOpacity]);
+
+  // Fetch satellite imagery when overlay is enabled and parcelle is selected
+  useEffect(() => {
+    if (!showSatelliteOverlay || !selectedId) {
+      setSatelliteTileUrl(null);
+      setImageryError(null);
+      return;
+    }
+
+    const fetchSatelliteImagery = async () => {
+      setIsLoadingImagery(true);
+      setImageryError(null);
+      
+      try {
+        const params = new URLSearchParams({
+          parcelleId: selectedId,
+          cloudCoverThreshold: '20',
+          daysOffset: selectedPeriodDays.toString(),
+        });
+
+        const response = await fetch(`/api/satellite/imagery?${params.toString()}`);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown', message: response.statusText }));
+          console.error('Failed to fetch satellite imagery:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData,
+            parcelleId: selectedId,
+          });
+          
+          // Set user-friendly error message
+          if (response.status === 404 || errorData.code === 'IMAGERY_UNAVAILABLE') {
+            setImageryError('Imagerie satellite non disponible pour cette parcelle');
+          } else if (response.status === 401 || response.status === 403) {
+            setImageryError('Erreur d\'authentification avec Google Earth Engine');
+          } else {
+            setImageryError('Erreur lors du chargement de l\'imagerie satellite');
+          }
+          setIsLoadingImagery(false);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.imagery?.tileUrl) {
+          setSatelliteTileUrl(data.imagery.tileUrl);
+          setImageryError(null);
+        } else {
+          setImageryError('Aucune imagerie disponible');
+        }
+      } catch (error) {
+        console.error('Error fetching satellite imagery:', error);
+        setImageryError('Erreur de connexion au serveur');
+      } finally {
+        setIsLoadingImagery(false);
+      }
+    };
+
+    fetchSatelliteImagery();
+  }, [showSatelliteOverlay, selectedId, selectedPeriodDays]);
+
   return (
     <div className="relative h-full w-full">
       <div ref={mapContainerRef} className="h-full w-full" />
@@ -648,6 +784,194 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
             </svg>
             Labels
           </button>
+        )}
+
+        {/* Satellite Overlay Toggle */}
+        {selectedId && (
+          <>
+            <button
+              onClick={toggleSatelliteOverlay}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-lg transition-colors ${
+                showSatelliteOverlay
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+              title={
+                showSatelliteOverlay
+                  ? 'Masquer imagerie satellite'
+                  : 'Afficher imagerie satellite'
+              }
+              disabled={isLoadingImagery}
+            >
+              {isLoadingImagery ? (
+                <>
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Chargement...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
+                    />
+                  </svg>
+                  Imagerie
+                </>
+              )}
+            </button>
+
+            {/* Period Selector Panel */}
+            {showPeriodSelector && (
+              <div className="rounded-lg bg-white p-3 shadow-lg">
+                <p className="mb-2 text-xs font-semibold text-gray-700">
+                  Période historique
+                </p>
+                <div className="space-y-2">
+                  {[
+                    { days: 30, label: '30 jours' },
+                    { days: 60, label: '60 jours' },
+                    { days: 90, label: '90 jours' },
+                    { days: 120, label: '120 jours' },
+                    { days: 180, label: '6 mois' },
+                    { days: 365, label: '1 an' },
+                  ].map(({ days, label }) => (
+                    <button
+                      key={days}
+                      onClick={() => loadImageryWithPeriod(days)}
+                      className="w-full rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-green-100 hover:text-green-700"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  
+                  {/* Custom period input */}
+                  <div className="border-t border-gray-200 pt-2">
+                    <p className="mb-1.5 text-xs font-medium text-gray-600">
+                      Période personnalisée
+                    </p>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        min="1"
+                        max="5475"
+                        value={customDays}
+                        onChange={(e) => setCustomDays(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            loadImageryWithCustomPeriod();
+                          }
+                        }}
+                        placeholder="Jours"
+                        className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+                      />
+                      <button
+                        onClick={loadImageryWithCustomPeriod}
+                        disabled={!customDays}
+                        className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      >
+                        OK
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[10px] text-gray-500">
+                      Entre 1 et 5475 jours (15 ans)
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowPeriodSelector(false)}
+                    className="w-full rounded bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-300"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Satellite Opacity Control (visible when overlay is active) */}
+        {showSatelliteOverlay && satelliteTileUrl && (
+          <div className="rounded-lg bg-white p-3 shadow-lg">
+            <div className="mb-2 flex items-center justify-between">
+              <label
+                htmlFor="satellite-opacity-slider"
+                className="text-xs font-medium text-gray-700"
+              >
+                Opacité
+              </label>
+              <span className="text-xs text-gray-600">
+                {Math.round(satelliteOpacity * 100)}%
+              </span>
+            </div>
+            <input
+              id="satellite-opacity-slider"
+              type="range"
+              min="0"
+              max="100"
+              value={satelliteOpacity * 100}
+              onChange={(e) =>
+                handleSatelliteOpacityChange(parseFloat(e.target.value) / 100)
+              }
+              className="h-2 w-32 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-green-600"
+              style={{
+                background: `linear-gradient(to right, #16a34a 0%, #16a34a ${
+                  satelliteOpacity * 100
+                }%, #e5e7eb ${satelliteOpacity * 100}%, #e5e7eb 100%)`,
+              }}
+            />
+          </div>
+        )}
+
+        {/* Error Message (visible when there's an error) */}
+        {showSatelliteOverlay && imageryError && (
+          <div className="rounded-lg bg-red-50 p-3 shadow-lg">
+            <div className="flex items-start gap-2">
+              <svg
+                className="h-5 w-5 flex-shrink-0 text-red-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-red-800">
+                  {imageryError}
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
