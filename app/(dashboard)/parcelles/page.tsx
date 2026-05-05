@@ -13,8 +13,8 @@ import { ProtectedRoute } from '@/components/auth';
 import { useAuth, hasPermission } from '@/lib/auth';
 import { parcellesApi, getParcelleKPIs, getDistinctVillages, getImportFileOptions, type ParcelleKPIStats, type ImportFileOption } from '@/lib/api/parcelles';
 import { parcellesGroupedApi, type ParcellesByPlanteurResponse } from '@/lib/api/parcelles-grouped';
-import type { ParcelleWithPlanteur, ParcelleFilters, ConformityStatus, Certification, ParcelleSource, ParcelleStats } from '@/types/parcelles';
-import { CONFORMITY_STATUS_VALUES, CONFORMITY_STATUS_LABELS, CERTIFICATIONS_WHITELIST, CERTIFICATION_LABELS, PARCELLE_SOURCE_VALUES, PARCELLE_SOURCE_LABELS } from '@/types/parcelles';
+import type { ParcelleWithPlanteur, ParcelleFilters, ConformityStatus, Certification, ParcelleSource, ParcelleStats, HealthStatus } from '@/types/parcelles';
+import { CONFORMITY_STATUS_VALUES, CONFORMITY_STATUS_LABELS, CERTIFICATIONS_WHITELIST, CERTIFICATION_LABELS, PARCELLE_SOURCE_VALUES, PARCELLE_SOURCE_LABELS, HEALTH_STATUS_VALUES, HEALTH_STATUS_LABELS } from '@/types/parcelles';
 import type { PaginatedResult } from '@/types';
 import { PageTransition, AnimatedSection } from '@/components/dashboard';
 import { ParcelleKPIs } from '@/components/parcelles/ParcelleKPIs';
@@ -22,6 +22,8 @@ import { ParcelleTable, type SortConfig } from '@/components/parcelles/ParcelleT
 import { ParcellesByPlanteur } from '@/components/parcelles/ParcellesByPlanteur';
 import { ParcelleStatsCards } from '@/components/parcelles/ParcelleStatsCards';
 import { AssignParcellesModal, type AssignResult } from '@/components/parcelles/AssignParcellesModal';
+import { useBatchNDVICalculation } from '@/hooks/satellite/useBatchNDVICalculation';
+import { Activity, CheckCircle, XCircle } from 'lucide-react';
 
 // View mode type
 type ViewMode = 'list' | 'by-planteur';
@@ -46,6 +48,9 @@ function ParcellesContent() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   
+  // Key to force re-render of ParcelleTable after batch calculation
+  const [tableKey, setTableKey] = useState(0);
+  
   // View mode state (list or by-planteur)
   const [viewMode, setViewMode] = useState<ViewMode>(
     (searchParams.get('view') as ViewMode) || 'list'
@@ -58,6 +63,9 @@ function ParcellesContent() {
   // Assignment modal state
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [parcellesToAssign, setParcellesToAssign] = useState<ParcelleWithPlanteur[]>([]);
+  
+  // Batch NDVI calculation
+  const { calculating, progress, processed, total, result, calculate, reset } = useBatchNDVICalculation();
   
   // Filter options state
   const [villages, setVillages] = useState<string[]>([]);
@@ -74,6 +82,7 @@ function ParcellesContent() {
     village: searchParams.get('village') || undefined,
     source: (searchParams.get('source') as ParcelleSource) || undefined,
     import_file_id: searchParams.get('import_file_id') || undefined,
+    health_status: (searchParams.get('health_status') as HealthStatus) || undefined,
     is_active: searchParams.get('is_active') === 'false' ? false : true,
   };
 
@@ -102,7 +111,7 @@ function ParcellesContent() {
     } finally {
       setLoading(false);
     }
-  }, [filters.page, filters.pageSize, filters.search, filters.conformity_status, filters.certification, filters.village, filters.source, filters.import_file_id, filters.is_active, sortConfig.column, sortConfig.direction]);
+  }, [filters.page, filters.pageSize, filters.search, filters.conformity_status, filters.certification, filters.village, filters.source, filters.import_file_id, filters.health_status, filters.is_active, sortConfig.column, sortConfig.direction]);
 
   // Fetch KPIs
   const fetchKPIs = useCallback(async () => {
@@ -248,6 +257,27 @@ function ParcellesContent() {
       setExporting(false);
     }
   };
+
+  // Handle batch NDVI calculation
+  const handleBatchCalculate = async () => {
+    if (!data?.data || data.data.length === 0) {
+      setError('Aucune parcelle à traiter');
+      return;
+    }
+
+    const parcelleIds = data.data.map(p => p.id);
+    await calculate(parcelleIds, false);
+  };
+
+  // Auto-refresh after successful batch calculation
+  useEffect(() => {
+    if (result && result.successful > 0 && !calculating) {
+      // Force refresh of the page to reload health status
+      fetchParcelles();
+      // Force re-render of ParcelleTable to refresh health status
+      setTableKey(prev => prev + 1);
+    }
+  }, [result, calculating, fetchParcelles]);
 
   return (
     <PageTransition className="space-y-6">
@@ -399,6 +429,23 @@ function ParcellesContent() {
               ))}
             </select>
 
+            {/* Health Status Filter */}
+            <select
+              value={filters.health_status || ''}
+              onChange={(e) => updateFilters({ 
+                health_status: e.target.value as HealthStatus || undefined,
+                page: 1 
+              })}
+              className="rounded-lg border border-gray-200 py-2.5 pl-3 pr-8 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="">Tous les statuts de santé</option>
+              {HEALTH_STATUS_VALUES.map((status) => (
+                <option key={status} value={status}>
+                  {HEALTH_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </select>
+
             {/* Import File Filter */}
             {importFiles.length > 0 && (
               <select
@@ -437,6 +484,102 @@ function ParcellesContent() {
                 <FileSpreadsheet className="mr-1.5 h-4 w-4" />
                 Excel
               </button>
+              
+              {/* Batch NDVI Calculation Button */}
+              <button
+                onClick={handleBatchCalculate}
+                disabled={calculating || loading || !data?.data || data.data.length === 0}
+                className="inline-flex items-center rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Calculer la santé pour toutes les parcelles affichées"
+              >
+                <Activity className="mr-1.5 h-4 w-4" />
+                {calculating ? 'Calcul en cours...' : 'Calculer la santé'}
+              </button>
+            </div>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {/* Batch Calculation Progress */}
+      {calculating && (
+        <AnimatedSection animation="fadeUp" delay={0.1}>
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-primary-600 animate-pulse" />
+                <span className="text-sm font-medium text-gray-900">
+                  Calcul NDVI en cours...
+                </span>
+              </div>
+              <span className="text-sm text-gray-600">
+                {processed} / {total} parcelles
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="bg-primary-600 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              {progress}% complété
+            </p>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {/* Batch Calculation Result */}
+      {result && !calculating && (
+        <AnimatedSection animation="fadeUp" delay={0.1}>
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm font-medium text-gray-900">
+                    Calcul terminé
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Total:</span>
+                    <span className="ml-2 font-medium text-gray-900">{result.totalRequested}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Réussis:</span>
+                    <span className="ml-2 font-medium text-green-600">{result.successful}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Échecs:</span>
+                    <span className="ml-2 font-medium text-red-600">{result.failed}</span>
+                  </div>
+                </div>
+                {result.failed > 0 && (
+                  <details className="mt-3">
+                    <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                      Voir les erreurs ({result.failed})
+                    </summary>
+                    <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                      {result.results
+                        .filter(r => !r.success)
+                        .map(r => (
+                          <div key={r.parcelleId} className="text-xs text-red-600 flex items-start gap-2">
+                            <XCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                            <span className="flex-1">
+                              {r.parcelleId}: {r.error}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+              <button
+                onClick={reset}
+                className="text-sm text-gray-500 hover:text-gray-700"
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </AnimatedSection>
@@ -453,6 +596,7 @@ function ParcellesContent() {
       <AnimatedSection animation="fadeUp" delay={0.3}>
         {viewMode === 'list' ? (
           <ParcelleTable
+            key={tableKey}
             parcelles={data?.data || []}
             loading={loading}
             sortConfig={sortConfig}

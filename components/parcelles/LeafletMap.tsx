@@ -51,6 +51,10 @@ interface LeafletMapProps {
   enableSatelliteOverlay?: boolean;
   /** Initial satellite overlay opacity (0-1) */
   satelliteOverlayOpacity?: number;
+  /** Enable NDVI layer overlay */
+  enableNDVILayer?: boolean;
+  /** Initial NDVI layer opacity (0-1) */
+  ndviLayerOpacity?: number;
 }
 
 export interface LeafletMapHandle {
@@ -73,6 +77,8 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   tileLayer = 'osm',
   enableSatelliteOverlay = false,
   satelliteOverlayOpacity = 0.7,
+  enableNDVILayer = false,
+  ndviLayerOpacity = 0.7,
 }, ref: React.Ref<LeafletMapHandle>) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -81,6 +87,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   const baseTileLayerRef = useRef<L.TileLayer | null>(null);
   const labelsLayerRef = useRef<L.TileLayer | null>(null);
   const satelliteTileLayerRef = useRef<L.TileLayer | null>(null);
+  const ndviTileLayerRef = useRef<L.ImageOverlay | null>(null);
   const [mapStyle, setMapStyle] = useState<'streets' | 'satellite' | 'hybrid'>('streets');
   const [showLabels, setShowLabels] = useState(true);
   const [showSatelliteOverlay, setShowSatelliteOverlay] = useState(enableSatelliteOverlay);
@@ -91,6 +98,11 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   const [showPeriodSelector, setShowPeriodSelector] = useState(false);
   const [selectedPeriodDays, setSelectedPeriodDays] = useState(120);
   const [customDays, setCustomDays] = useState('');
+  const [showNDVILayer, setShowNDVILayer] = useState(enableNDVILayer);
+  const [ndviOpacity, setNdviOpacity] = useState(ndviLayerOpacity);
+  const [ndviRasterUrl, setNdviRasterUrl] = useState<string | null>(null);
+  const [ndviError, setNdviError] = useState<string | null>(null);
+  const [isLoadingNDVI, setIsLoadingNDVI] = useState(false);
   const prevSelectedIdRef = useRef<string | undefined>(undefined);
   // Track if the initial fit-to-bounds has already been done
   const hasInitialFitRef = useRef(false);
@@ -137,11 +149,49 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     return CONFORMITY_COLORS[status] || CONFORMITY_COLORS.informations_manquantes;
   }, []);
 
-  // Format popup content
-  const formatPopupContent = useCallback((parcelle: Parcelle): string => {
+  // Format popup content with health status
+  const formatPopupContent = useCallback(async (parcelle: Parcelle): Promise<string> => {
     const certifications = parcelle.certifications?.length 
       ? parcelle.certifications.join(', ') 
       : 'Aucune';
+    
+    // Fetch health status data
+    let healthStatusHTML = '';
+    try {
+      const response = await fetch(`/api/satellite/health-status/${parcelle.id}`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          const { healthStatus, meanNDVI } = result.data;
+          
+          // Map health status to colors (matching HealthStatusBadge)
+          const healthColors: Record<string, { bg: string; text: string; label: string }> = {
+            excellent: { bg: '#2d5016', text: '#ffffff', label: 'Excellent' },
+            good: { bg: '#6FAF3D', text: '#ffffff', label: 'Bon' },
+            fair: { bg: '#fbbf24', text: '#111827', label: 'Moyen' },
+            poor: { bg: '#E68A1F', text: '#ffffff', label: 'Faible' },
+            critical: { bg: '#ef4444', text: '#ffffff', label: 'Critique' },
+          };
+          
+          const statusInfo = healthColors[healthStatus] || healthColors.fair;
+          
+          healthStatusHTML = `
+            <p>
+              <span class="text-gray-500">Santé:</span> 
+              <span class="inline-flex items-center justify-center rounded-full font-medium px-3 py-1 text-sm" 
+                    style="background-color: ${statusInfo.bg}; color: ${statusInfo.text}">
+                ${statusInfo.label}
+              </span>
+            </p>
+            <p><span class="text-gray-500">NDVI:</span> ${meanNDVI?.toFixed(3) || 'N/A'}</p>
+          `;
+        }
+      }
+    } catch (error) {
+      // Silently fail - health status is optional
+      console.error('Failed to fetch health status for popup:', error);
+    }
     
     return `
       <div class="parcelle-popup">
@@ -151,6 +201,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           <p><span class="text-gray-500">Surface:</span> ${parcelle.surface_hectares?.toFixed(2) || '?'} ha</p>
           <p><span class="text-gray-500">Village:</span> ${parcelle.village || 'Non renseigné'}</p>
           <p><span class="text-gray-500">Certifications:</span> ${certifications}</p>
+          ${healthStatusHTML}
           <p>
             <span class="text-gray-500">Statut:</span> 
             <span class="inline-block px-2 py-0.5 rounded text-xs font-medium" 
@@ -340,11 +391,23 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         onEachFeature: (feature, layer) => {
           const parcelle = feature.properties as Parcelle;
           
-          // Add popup
-          layer.bindPopup(formatPopupContent(parcelle), {
+          // Add popup with loading state
+          const popup = L.popup({
             maxWidth: 300,
             className: 'parcelle-popup-container',
           });
+          
+          // Set initial loading content
+          popup.setContent(`
+            <div class="parcelle-popup">
+              <h3 class="font-semibold text-gray-900 mb-1">${parcelle.planteur?.name || 'Planteur inconnu'}</h3>
+              <div class="text-sm space-y-1">
+                <p class="text-gray-500">Chargement des données...</p>
+              </div>
+            </div>
+          `);
+          
+          layer.bindPopup(popup);
 
           // Handle click - show popup AND highlight in list
           // We track mousedown position to distinguish a real click from a zoom gesture
@@ -352,7 +415,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           layer.on('mousedown', (e) => {
             mouseDownPos = mapRef.current?.latLngToContainerPoint(e.latlng) ?? null;
           });
-          layer.on('click', (e) => {
+          layer.on('click', async (e) => {
             // If the mouse moved more than 5px between mousedown and click,
             // it was likely a drag/zoom gesture — ignore it
             if (mouseDownPos && mapRef.current) {
@@ -366,6 +429,10 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
             if (popup) {
               popup.setLatLng(e.latlng);
               layer.openPopup();
+              
+              // Load full content asynchronously
+              const content = await formatPopupContent(parcelle);
+              popup.setContent(content);
             }
 
             // Notify parent to highlight in list
@@ -579,6 +646,11 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     }
   }, [showSatelliteOverlay]);
 
+  // Toggle NDVI layer visibility
+  const toggleNDVILayer = useCallback(() => {
+    setShowNDVILayer((prev) => !prev);
+  }, []);
+
   // Load imagery with selected period
   const loadImageryWithPeriod = useCallback((days: number) => {
     setSelectedPeriodDays(days);
@@ -605,6 +677,14 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     }
   }, []);
 
+  // Handle NDVI layer opacity change
+  const handleNDVIOpacityChange = useCallback((newOpacity: number) => {
+    setNdviOpacity(newOpacity);
+    if (ndviTileLayerRef.current) {
+      ndviTileLayerRef.current.setOpacity(newOpacity);
+    }
+  }, []);
+
   // Update satellite tile layer when tile URL or visibility changes
   useEffect(() => {
     if (!mapRef.current) return;
@@ -626,6 +706,39 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
       satelliteTileLayerRef.current = satelliteLayer;
     }
   }, [showSatelliteOverlay, satelliteTileUrl, satelliteOpacity]);
+
+  // Update NDVI layer when raster URL or visibility changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Remove existing NDVI overlay if it exists
+    if (ndviTileLayerRef.current) {
+      mapRef.current.removeLayer(ndviTileLayerRef.current);
+      ndviTileLayerRef.current = null;
+    }
+
+    // Add NDVI overlay if enabled and raster URL is available
+    if (showNDVILayer && ndviRasterUrl && selectedId) {
+      // Get the selected parcelle to determine bounds
+      const selectedParcelle = parcelles.find((p) => p.id === selectedId);
+      if (selectedParcelle?.geometry) {
+        // Create a temporary GeoJSON layer to get bounds
+        const tempLayer = L.geoJSON(selectedParcelle.geometry as GeoJSON.Geometry);
+        const bounds = tempLayer.getBounds();
+
+        if (bounds.isValid()) {
+          // Create image overlay with parcelle bounds
+          const ndviLayer = L.imageOverlay(ndviRasterUrl, bounds, {
+            opacity: ndviOpacity,
+            interactive: false,
+            attribution: '&copy; NDVI Analysis',
+          }).addTo(mapRef.current);
+
+          ndviTileLayerRef.current = ndviLayer;
+        }
+      }
+    }
+  }, [showNDVILayer, ndviRasterUrl, ndviOpacity, selectedId, parcelles]);
 
   // Fetch satellite imagery when overlay is enabled and parcelle is selected
   useEffect(() => {
@@ -686,6 +799,71 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
 
     fetchSatelliteImagery();
   }, [showSatelliteOverlay, selectedId, selectedPeriodDays]);
+
+  // Fetch NDVI data when NDVI layer is enabled and parcelle is selected
+  useEffect(() => {
+    if (!showNDVILayer || !selectedId) {
+      setNdviRasterUrl(null);
+      setNdviError(null);
+      return;
+    }
+
+    const fetchNDVI = async () => {
+      setIsLoadingNDVI(true);
+      setNdviError(null);
+      
+      try {
+        const response = await fetch('/api/satellite/ndvi', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            parcelleId: selectedId,
+            forceRecalculate: false,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown', message: response.statusText }));
+          console.error('Failed to fetch NDVI:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData,
+            parcelleId: selectedId,
+          });
+          
+          // Set user-friendly error message
+          if (response.status === 404 || errorData.code === 'IMAGERY_UNAVAILABLE') {
+            setNdviError('Données NDVI non disponibles pour cette parcelle');
+          } else if (response.status === 401 || response.status === 403) {
+            setNdviError('Erreur d\'authentification');
+          } else {
+            setNdviError('Erreur lors du calcul du NDVI');
+          }
+          setIsLoadingNDVI(false);
+          return;
+        }
+
+        const data = await response.json();
+        if (data.data?.ndvi?.ndviRasterUrl) {
+          setNdviRasterUrl(data.data.ndvi.ndviRasterUrl);
+          setNdviError(null);
+        } else {
+          // NDVI calculated but no raster URL available
+          // This is expected as per the current implementation
+          setNdviError('Visualisation NDVI non disponible (raster non généré)');
+        }
+      } catch (error) {
+        console.error('Error fetching NDVI:', error);
+        setNdviError('Erreur de connexion au serveur');
+      } finally {
+        setIsLoadingNDVI(false);
+      }
+    };
+
+    fetchNDVI();
+  }, [showNDVILayer, selectedId]);
 
   return (
     <div className="relative h-full w-full">
@@ -846,6 +1024,64 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
               )}
             </button>
 
+            {/* NDVI Layer Toggle */}
+            <button
+              onClick={toggleNDVILayer}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-lg transition-colors ${
+                showNDVILayer
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+              title={
+                showNDVILayer
+                  ? 'Masquer couche NDVI'
+                  : 'Afficher couche NDVI'
+              }
+              disabled={isLoadingNDVI}
+            >
+              {isLoadingNDVI ? (
+                <>
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Chargement...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                    />
+                  </svg>
+                  NDVI
+                </>
+              )}
+            </button>
+
             {/* Period Selector Panel */}
             {showPeriodSelector && (
               <div className="rounded-lg bg-white p-3 shadow-lg">
@@ -948,6 +1184,39 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           </div>
         )}
 
+        {/* NDVI Opacity Control (visible when NDVI layer is active) */}
+        {showNDVILayer && ndviRasterUrl && (
+          <div className="rounded-lg bg-white p-3 shadow-lg">
+            <div className="mb-2 flex items-center justify-between">
+              <label
+                htmlFor="ndvi-opacity-slider"
+                className="text-xs font-medium text-gray-700"
+              >
+                Opacité NDVI
+              </label>
+              <span className="text-xs text-gray-600">
+                {Math.round(ndviOpacity * 100)}%
+              </span>
+            </div>
+            <input
+              id="ndvi-opacity-slider"
+              type="range"
+              min="0"
+              max="100"
+              value={ndviOpacity * 100}
+              onChange={(e) =>
+                handleNDVIOpacityChange(parseFloat(e.target.value) / 100)
+              }
+              className="h-2 w-32 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-emerald-600"
+              style={{
+                background: `linear-gradient(to right, #059669 0%, #059669 ${
+                  ndviOpacity * 100
+                }%, #e5e7eb ${ndviOpacity * 100}%, #e5e7eb 100%)`,
+              }}
+            />
+          </div>
+        )}
+
         {/* Error Message (visible when there's an error) */}
         {showSatelliteOverlay && imageryError && (
           <div className="rounded-lg bg-red-50 p-3 shadow-lg">
@@ -968,6 +1237,32 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
               <div className="flex-1">
                 <p className="text-xs font-medium text-red-800">
                   {imageryError}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NDVI Error Message (visible when there's an NDVI error) */}
+        {showNDVILayer && ndviError && (
+          <div className="rounded-lg bg-orange-50 p-3 shadow-lg">
+            <div className="flex items-start gap-2">
+              <svg
+                className="h-5 w-5 flex-shrink-0 text-orange-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-orange-800">
+                  {ndviError}
                 </p>
               </div>
             </div>

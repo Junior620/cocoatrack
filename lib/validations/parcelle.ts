@@ -495,6 +495,8 @@ export const parcelleFiltersSchema = z.object({
   
   is_active: z.boolean().optional().default(true),
   
+  health_status: z.enum(['excellent', 'good', 'fair', 'poor', 'critical']).optional(),
+  
   page: z
     .number()
     .int('Page must be an integer')

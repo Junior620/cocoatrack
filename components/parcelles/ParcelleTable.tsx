@@ -3,6 +3,7 @@
 // CocoaTrack V2 - Parcelle Table Component
 // Displays parcelles in a sortable, paginated table with status badges and certification tags
 
+import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronUp, ChevronDown, Search, MapPin, FileUp } from 'lucide-react';
@@ -13,6 +14,8 @@ import {
   CONFORMITY_STATUS_COLORS,
 } from '@/types/parcelles';
 import { ConformityInfoBubble } from './ConformityInfoBubble';
+import HealthStatusBadge from '@/components/satellite/HealthStatusBadge';
+import { useParcelleHealthStatus } from '@/hooks/satellite/useParcelleHealthStatus';
 
 // =============================================================================
 // Types
@@ -36,7 +39,8 @@ export type SortableColumn =
   | 'planteur' 
   | 'village' 
   | 'surface_hectares' 
-  | 'conformity_status';
+  | 'conformity_status'
+  | 'health_status';
 
 /**
  * Props for the ParcelleTable component
@@ -192,6 +196,45 @@ export function ParcelleTable({
 }: ParcelleTableProps) {
   const router = useRouter();
   
+  // Fetch health status data for all visible parcelles
+  const parcelleIds = parcelles.map((p) => p.id);
+  const { healthStatusMap, loading: healthStatusLoading } = useParcelleHealthStatus({
+    parcelleIds,
+    autoFetch: true,
+  });
+  
+  /**
+   * Sort parcelles by health status (client-side)
+   * Health status order: excellent > good > fair > poor > critical > null
+   */
+  const sortedParcelles = React.useMemo(() => {
+    if (sortConfig?.column !== 'health_status') {
+      return parcelles;
+    }
+    
+    const healthStatusOrder: Record<string, number> = {
+      excellent: 5,
+      good: 4,
+      fair: 3,
+      poor: 2,
+      critical: 1,
+    };
+    
+    return [...parcelles].sort((a, b) => {
+      const aStatus = healthStatusMap[a.id]?.healthStatus;
+      const bStatus = healthStatusMap[b.id]?.healthStatus;
+      
+      const aValue = aStatus ? healthStatusOrder[aStatus] : 0;
+      const bValue = bStatus ? healthStatusOrder[bStatus] : 0;
+      
+      if (sortConfig.direction === 'asc') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
+  }, [parcelles, sortConfig, healthStatusMap]);
+  
   /**
    * Handle row click - navigate to parcelle detail
    */
@@ -224,6 +267,7 @@ export function ParcelleTable({
                 <th className="px-4 py-3 text-left"><div className="h-4 w-28 bg-gray-200 rounded animate-pulse" /></th>
                 <th className="px-4 py-3 text-left"><div className="h-4 w-20 bg-gray-200 rounded animate-pulse" /></th>
                 <th className="px-4 py-3 text-left"><div className="h-4 w-20 bg-gray-200 rounded animate-pulse" /></th>
+                <th className="px-4 py-3 text-left"><div className="h-4 w-20 bg-gray-200 rounded animate-pulse" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
@@ -234,6 +278,7 @@ export function ParcelleTable({
                   <td className="px-4 py-3"><div className="h-4 w-20 bg-gray-100 rounded animate-pulse" /></td>
                   <td className="px-4 py-3"><div className="h-4 w-16 bg-gray-100 rounded animate-pulse" /></td>
                   <td className="px-4 py-3"><div className="h-4 w-24 bg-gray-100 rounded animate-pulse" /></td>
+                  <td className="px-4 py-3"><div className="h-4 w-20 bg-gray-100 rounded animate-pulse" /></td>
                   <td className="px-4 py-3"><div className="h-4 w-20 bg-gray-100 rounded animate-pulse" /></td>
                   <td className="px-4 py-3"><div className="h-4 w-20 bg-gray-100 rounded animate-pulse" /></td>
                 </tr>
@@ -282,6 +327,12 @@ export function ParcelleTable({
                   Certificats
                 </th>
                 <SortableHeader
+                  column="health_status"
+                  label="Santé"
+                  currentSort={sortConfig}
+                  onSort={onSortChange}
+                />
+                <SortableHeader
                   column="conformity_status"
                   label="Statut"
                   currentSort={sortConfig}
@@ -295,7 +346,7 @@ export function ParcelleTable({
             <tbody className="divide-y divide-gray-100 bg-white">
               {parcelles.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center">
                       <div className="p-3 bg-gray-100 rounded-full mb-3">
                         <Search className="h-6 w-6 text-gray-400" />
@@ -308,7 +359,7 @@ export function ParcelleTable({
                   </td>
                 </tr>
               ) : (
-                parcelles.map((parcelle) => (
+                sortedParcelles.map((parcelle) => (
                   <tr
                     key={parcelle.id}
                     onClick={() => handleRowClick(parcelle)}
@@ -359,6 +410,24 @@ export function ParcelleTable({
                           <span className="text-sm text-gray-400">-</span>
                         )}
                       </div>
+                    </td>
+                    
+                    {/* Santé (Health Status) */}
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {healthStatusMap[parcelle.id] ? (
+                        healthStatusMap[parcelle.id].healthStatus ? (
+                          <HealthStatusBadge
+                            status={healthStatusMap[parcelle.id].healthStatus!}
+                            showTrend={!!healthStatusMap[parcelle.id].trend}
+                            trend={healthStatusMap[parcelle.id].trend || undefined}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-xs text-gray-400">Pas de données</span>
+                        )
+                      ) : (
+                        <div className="h-6 w-16 bg-gray-100 rounded animate-pulse" />
+                      )}
                     </td>
                     
                     {/* Statut */}

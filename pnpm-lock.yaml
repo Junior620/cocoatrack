@@ -45,8 +45,8 @@ importers:
         specifier: ^1.0.13
         version: 1.0.13
       canvas:
-        specifier: ^3.2.2
-        version: 3.2.2
+        specifier: ^3.2.3
+        version: 3.2.3
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -59,6 +59,9 @@ importers:
       idb:
         specifier: ^8.0.3
         version: 8.0.3
+      ioredis:
+        specifier: ^5.10.1
+        version: 5.10.1
       jspdf:
         specifier: ^3.0.4
         version: 3.0.4
@@ -109,7 +112,7 @@ importers:
         version: 7.1.9(mapbox-gl@3.17.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       recharts:
         specifier: ^3.6.0
-        version: 3.6.0(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react-is@16.13.1)(react@19.2.3)(redux@5.0.1)
+        version: 3.6.0(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react-is@17.0.2)(react@19.2.3)(redux@5.0.1)
       shpjs:
         specifier: ^6.2.0
         version: 6.2.0
@@ -182,7 +185,7 @@ importers:
         version: 5.1.2(vite@5.4.21(@types/node@22.19.3)(lightningcss@1.30.2)(terser@5.44.1))
       '@vitest/coverage-v8':
         specifier: 2.1.9
-        version: 2.1.9(vitest@2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.2))(lightningcss@1.30.2)(terser@5.44.1))
+        version: 2.1.9(vitest@2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.3))(lightningcss@1.30.2)(terser@5.44.1))
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.23(postcss@8.5.6)
@@ -206,7 +209,7 @@ importers:
         version: 4.5.3
       jsdom:
         specifier: ^29.1.1
-        version: 29.1.1(canvas@3.2.2)
+        version: 29.1.1(canvas@3.2.3)
       pg:
         specifier: ^8.16.3
         version: 8.16.3
@@ -226,11 +229,11 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.7.2
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
         specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.2))(lightningcss@1.30.2)(terser@5.44.1)
+        version: 2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.3))(lightningcss@1.30.2)(terser@5.44.1)
       workbox-cacheable-response:
         specifier: ^7.4.0
         version: 7.4.0
@@ -1654,6 +1657,9 @@ packages:
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [win32]
+
+  '@ioredis/commands@1.5.1':
+    resolution: {integrity: sha512-JH8ZL/ywcJyR9MmJ5BNqZllXNZQqQbnVZOqpPQqE1vHiFgAw4NHbvE0FOduNU8IX9babitBT46571OnPTT0Zcw==}
 
   '@isaacs/balanced-match@4.0.1':
     resolution: {integrity: sha512-yzMTt9lEb8Gv7zRioUilSglI0c0smZ9k5D65677DLWLtWJaXIS3CqcGyUFByYKlnUj6TkjLVs54fBl6+TiGQDQ==}
@@ -3736,8 +3742,8 @@ packages:
   caniuse-lite@1.0.30001762:
     resolution: {integrity: sha512-PxZwGNvH7Ak8WX5iXzoK1KPZttBXNPuaOvI2ZYU7NrlM+d9Ov+TUvlLOBNGzVXAntMSMMlJPd+jY6ovrVjSmUw==}
 
-  canvas@3.2.2:
-    resolution: {integrity: sha512-duEt4h1HHu9sJZyVKfLRXR6tsKPY7cEELzxSRJkwddOXYvQT3P/+es98SV384JA0zMOZ5s+9gatnGfM6sL4Drg==}
+  canvas@3.2.3:
+    resolution: {integrity: sha512-PzE5nJZPz72YUAfo8oTp0u3fqqY7IzlTubneAihqDYAUcBk7ryeCmBbdJBEdaH0bptSOe2VT2Zwcb3UaFyaSWw==}
     engines: {node: ^18.12.0 || >= 20.9.0}
 
   canvg@3.0.11:
@@ -3789,6 +3795,10 @@ packages:
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
+
+  cluster-key-slot@1.1.2:
+    resolution: {integrity: sha512-RMr0FhtfXemyinomL4hrWcYJxmX6deFdCxpJzhDttxgO1+bcCnkk+9drydLVDmAMG7NE6aN/fl4F7ucU/90gAA==}
+    engines: {node: '>=0.10.0'}
 
   codepage@1.15.0:
     resolution: {integrity: sha512-3g6NUTPd/YtuuGrhMnOMRjFc+LJw/bnMp3+0r/Wcz3IXUuCosKRJvMphm5+Q+bvTVGcJJuRvVLuYba+WojaFaA==}
@@ -3999,6 +4009,10 @@ packages:
   del@4.1.1:
     resolution: {integrity: sha512-QwGuEUouP2kVwQenAsOof5Fv8K9t3D8Ca8NxcXKrIpEHjTXK5J2nXLdP+ALI1cgv8wj7KuwBhTwBkOZSJKM5XQ==}
     engines: {node: '>=6'}
+
+  denque@2.1.0:
+    resolution: {integrity: sha512-HVQE3AAb/pxF8fQAoiqpvg9i3evqug3hoiwakOyZAwJm+6vZehbkYXZ0l4JxS+I3QxM97v5aaRNhj8v5oBhekw==}
+    engines: {node: '>=0.10'}
 
   dequal@2.0.3:
     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
@@ -4694,6 +4708,10 @@ packages:
   iobuffer@5.4.0:
     resolution: {integrity: sha512-DRebOWuqDvxunfkNJAlc3IzWIPD5xVxwUNbHr7xKB8E6aLJxIPfNX3CoMJghcFjpv6RWQsrcJbghtEwSPoJqMA==}
 
+  ioredis@5.10.1:
+    resolution: {integrity: sha512-HuEDBTI70aYdx1v6U97SbNx9F1+svQKBDo30o0b9fw055LMepzpOOd0Ccg9Q6tbqmBSJaMuY0fB7yw9/vjBYCA==}
+    engines: {node: '>=12.22.0'}
+
   is-array-buffer@3.0.5:
     resolution: {integrity: sha512-DDfANUiiG2wC1qawP66qlTugJeL5HyzMpfr8lLK+jMQirGzNod0B12cFB/9q838Ru27sBwfw78/rdoU7RERz6A==}
     engines: {node: '>= 0.4'}
@@ -5125,6 +5143,12 @@ packages:
 
   lodash.debounce@4.0.8:
     resolution: {integrity: sha512-FT1yDzDYEoYWhnSGnpE/4Kj1fLZkDFyqRb7fNt6FdYOSxlUWAtp42Eh6Wb0rGIv/m9Bgo7x4GhQbm5Ys4SG5ow==}
+
+  lodash.defaults@4.2.0:
+    resolution: {integrity: sha512-qjxPLHd3r5DnsdGacqOMU6pb/avJzdh9tFX2ymgoZE27BmjXrNy/y4LoaiTeAb+O3gL8AfpJGtqfX/ae2leYYQ==}
+
+  lodash.isarguments@3.1.0:
+    resolution: {integrity: sha512-chi4NHZlZqZD18a0imDHnZPrDeBbTtVN7GXMwuGdRH9qotxAjYs3aVLKc7zNOG9eddR5Ksd8rvFEBc9SsggPpg==}
 
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
@@ -5872,6 +5896,14 @@ packages:
     resolution: {integrity: sha512-6tDA8g98We0zd0GvVeMT9arEOnTw9qM03L9cJXaCjrip1OO764RDBLBfrB4cwzNGDj5OA5ioymC9GkizgWJDUg==}
     engines: {node: '>=8'}
 
+  redis-errors@1.2.0:
+    resolution: {integrity: sha512-1qny3OExCf0UvUV/5wpYKf2YwPcOqXzkwKKSmKHiE6ZMQs5heeE/c8eXK+PNllPvmjgAbfnsbpkGZWy8cBpn9w==}
+    engines: {node: '>=4'}
+
+  redis-parser@3.0.0:
+    resolution: {integrity: sha512-DJnGAeenTdpMEH6uAJRK/uiyEIH9WVsUmoLwzudwGJUwZPp80PDBWPHXSAGNPwNvIXAbe7MSUB1zQFugFml66A==}
+    engines: {node: '>=4'}
+
   redux-thunk@3.1.0:
     resolution: {integrity: sha512-NW2r5T6ksUKXCabzhL9z+h206HQw/NJkcLm1GPImRQ8IzfXwRGqjVhKJGauHirT0DAuyy6hjdnMZaRoAcy0Klw==}
     peerDependencies:
@@ -6171,6 +6203,9 @@ packages:
   stacktrace-parser@0.1.11:
     resolution: {integrity: sha512-WjlahMgHmCJpqzU8bIBy4qtsZdU9lRlcZE3Lvyej6t4tuOuv1vk57OW3MBrj6hXBFx/nNoC9MPMTcr5YA7NQbg==}
     engines: {node: '>=6'}
+
+  standard-as-callback@2.1.0:
+    resolution: {integrity: sha512-qoRRSyROncaz1z0mvYqIE4lCd9p2R90i6GxW3uZv5ucSu8tU7B5HXUP1gG8pVZsYNVaXjk8ClXHPttLyxAL48A==}
 
   std-env@3.10.0:
     resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
@@ -8475,6 +8510,8 @@ snapshots:
 
   '@img/sharp-win32-x64@0.34.5':
     optional: true
+
+  '@ioredis/commands@1.5.1': {}
 
   '@isaacs/balanced-match@4.0.1': {}
 
@@ -11114,7 +11151,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/coverage-v8@2.1.9(vitest@2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.2))(lightningcss@1.30.2)(terser@5.44.1))':
+  '@vitest/coverage-v8@2.1.9(vitest@2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.3))(lightningcss@1.30.2)(terser@5.44.1))':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@bcoe/v8-coverage': 0.2.3
@@ -11128,7 +11165,7 @@ snapshots:
       std-env: 3.10.0
       test-exclude: 7.0.2
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.2))(lightningcss@1.30.2)(terser@5.44.1)
+      vitest: 2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.3))(lightningcss@1.30.2)(terser@5.44.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -11576,7 +11613,7 @@ snapshots:
 
   caniuse-lite@1.0.30001762: {}
 
-  canvas@3.2.2:
+  canvas@3.2.3:
     dependencies:
       node-addon-api: 7.1.1
       prebuild-install: 7.1.3
@@ -11641,6 +11678,8 @@ snapshots:
   client-only@0.0.1: {}
 
   clsx@2.1.1: {}
+
+  cluster-key-slot@1.1.2: {}
 
   codepage@1.15.0: {}
 
@@ -11828,6 +11867,8 @@ snapshots:
       p-map: 2.1.0
       pify: 4.0.1
       rimraf: 2.7.1
+
+  denque@2.1.0: {}
 
   dequal@2.0.3: {}
 
@@ -12740,6 +12781,20 @@ snapshots:
 
   iobuffer@5.4.0: {}
 
+  ioredis@5.10.1:
+    dependencies:
+      '@ioredis/commands': 1.5.1
+      cluster-key-slot: 1.1.2
+      debug: 4.4.3
+      denque: 2.1.0
+      lodash.defaults: 4.2.0
+      lodash.isarguments: 3.1.0
+      redis-errors: 1.2.0
+      redis-parser: 3.0.0
+      standard-as-callback: 2.1.0
+    transitivePeerDependencies:
+      - supports-color
+
   is-array-buffer@3.0.5:
     dependencies:
       call-bind: 1.0.8
@@ -12969,7 +13024,7 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
-  jsdom@29.1.1(canvas@3.2.2):
+  jsdom@29.1.1(canvas@3.2.3):
     dependencies:
       '@asamuzakjp/css-color': 5.1.11
       '@asamuzakjp/dom-selector': 7.1.1
@@ -12993,7 +13048,7 @@ snapshots:
       whatwg-url: 16.0.1
       xml-name-validator: 5.0.0
     optionalDependencies:
-      canvas: 3.2.2
+      canvas: 3.2.3
     transitivePeerDependencies:
       - '@noble/hashes'
 
@@ -13173,6 +13228,10 @@ snapshots:
       p-locate: 5.0.0
 
   lodash.debounce@4.0.8: {}
+
+  lodash.defaults@4.2.0: {}
+
+  lodash.isarguments@3.1.0: {}
 
   lodash.merge@4.6.2: {}
 
@@ -13839,7 +13898,7 @@ snapshots:
     dependencies:
       picomatch: 2.3.1
 
-  recharts@3.6.0(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react-is@16.13.1)(react@19.2.3)(redux@5.0.1):
+  recharts@3.6.0(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react-is@17.0.2)(react@19.2.3)(redux@5.0.1):
     dependencies:
       '@reduxjs/toolkit': 2.11.2(react-redux@9.2.0(@types/react@19.2.7)(react@19.2.3)(redux@5.0.1))(react@19.2.3)
       clsx: 2.1.1
@@ -13849,7 +13908,7 @@ snapshots:
       immer: 10.2.0
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
-      react-is: 16.13.1
+      react-is: 17.0.2
       react-redux: 9.2.0(@types/react@19.2.7)(react@19.2.3)(redux@5.0.1)
       reselect: 5.1.1
       tiny-invariant: 1.3.3
@@ -13863,6 +13922,12 @@ snapshots:
     dependencies:
       indent-string: 4.0.0
       strip-indent: 3.0.0
+
+  redis-errors@1.2.0: {}
+
+  redis-parser@3.0.0:
+    dependencies:
+      redis-errors: 1.2.0
 
   redux-thunk@3.1.0(redux@5.0.1):
     dependencies:
@@ -14239,6 +14304,8 @@ snapshots:
   stacktrace-parser@0.1.11:
     dependencies:
       type-fest: 0.7.1
+
+  standard-as-callback@2.1.0: {}
 
   std-env@3.10.0: {}
 
@@ -14757,7 +14824,7 @@ snapshots:
       lightningcss: 1.30.2
       terser: 5.44.1
 
-  vitest@2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.2))(lightningcss@1.30.2)(terser@5.44.1):
+  vitest@2.1.9(@types/node@22.19.3)(jsdom@29.1.1(canvas@3.2.3))(lightningcss@1.30.2)(terser@5.44.1):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@22.19.3)(lightningcss@1.30.2)(terser@5.44.1))
@@ -14781,7 +14848,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.19.3
-      jsdom: 29.1.1(canvas@3.2.2)
+      jsdom: 29.1.1(canvas@3.2.3)
     transitivePeerDependencies:
       - less
       - lightningcss

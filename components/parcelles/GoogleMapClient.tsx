@@ -6,7 +6,7 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { GoogleMap, Polygon, useJsApiLoader } from '@react-google-maps/api';
 import type { ParcelleWithPlanteur } from '@/types/parcelles';
-import type { ImageryData } from '@/lib/satellite/types';
+import type { ImageryData, NDVIResult } from '@/lib/satellite/types';
 
 // CocoaTrack conformity colors
 const CONFORMITY_COLORS: Record<string, string> = {
@@ -26,6 +26,10 @@ interface GoogleMapClientProps {
   enableSatelliteOverlay?: boolean;
   /** Initial satellite overlay opacity (0-1) */
   satelliteOverlayOpacity?: number;
+  /** Enable NDVI layer overlay */
+  enableNDVILayer?: boolean;
+  /** Initial NDVI layer opacity (0-1) */
+  ndviLayerOpacity?: number;
 }
 
 const mapContainerStyle = {
@@ -46,6 +50,8 @@ export function GoogleMapClient({
   zoom = 12,
   enableSatelliteOverlay = false,
   satelliteOverlayOpacity = 0.7,
+  enableNDVILayer = false,
+  ndviLayerOpacity = 0.7,
 }: GoogleMapClientProps) {
   const [map, setMap] = useState<any>(null);
   const [hasZoomedToFit, setHasZoomedToFit] = useState(false);
@@ -55,6 +61,14 @@ export function GoogleMapClient({
   const [satelliteLoading, setSatelliteLoading] = useState(false);
   const [satelliteError, setSatelliteError] = useState<string | null>(null);
   const imageMapTypeRef = useRef<google.maps.ImageMapType | null>(null);
+  
+  // NDVI layer state
+  const [showNDVILayer, setShowNDVILayer] = useState(enableNDVILayer);
+  const [ndviOpacity, setNdviOpacity] = useState(ndviLayerOpacity);
+  const [ndviRasterUrl, setNdviRasterUrl] = useState<string | null>(null);
+  const [ndviLoading, setNdviLoading] = useState(false);
+  const [ndviError, setNdviError] = useState<string | null>(null);
+  const groundOverlayRef = useRef<google.maps.GroundOverlay | null>(null);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
@@ -151,6 +165,59 @@ export function GoogleMapClient({
     fetchSatelliteImagery();
   }, [showSatelliteOverlay, selectedParcelleId, map]);
 
+  // Fetch NDVI data when NDVI layer is enabled and parcelle is selected
+  useEffect(() => {
+    if (!showNDVILayer || !selectedParcelleId || !map) {
+      setNdviRasterUrl(null);
+      setNdviError(null);
+      return;
+    }
+
+    const fetchNDVI = async () => {
+      setNdviLoading(true);
+      setNdviError(null);
+
+      try {
+        const body = {
+          parcelleId: selectedParcelleId,
+          forceRecalculate: false,
+        };
+
+        const response = await fetch('/api/satellite/ndvi', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error || `Failed to fetch NDVI: ${response.statusText}`
+          );
+        }
+
+        const data = await response.json();
+        const ndviResult = data.data?.ndvi || data.ndvi;
+
+        if (ndviResult && ndviResult.ndviRasterUrl) {
+          setNdviRasterUrl(ndviResult.ndviRasterUrl);
+        } else {
+          throw new Error('NDVI raster URL not available');
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        setNdviError(errorMessage);
+        console.error('Error fetching NDVI:', error);
+      } finally {
+        setNdviLoading(false);
+      }
+    };
+
+    fetchNDVI();
+  }, [showNDVILayer, selectedParcelleId, map]);
+
   // Update satellite overlay on map when imagery or opacity changes
   useEffect(() => {
     if (!map || typeof window === 'undefined' || !(window as any).google) return;
@@ -194,6 +261,68 @@ export function GoogleMapClient({
     }
   }, [map, showSatelliteOverlay, satelliteImagery, satelliteOpacity, satelliteError, selectedParcelleId, parcelles]);
 
+  // Update NDVI overlay on map when NDVI data or opacity changes
+  useEffect(() => {
+    if (!map || typeof window === 'undefined' || !(window as any).google) return;
+
+    const google = (window as any).google;
+
+    // Remove existing NDVI overlay if it exists
+    if (groundOverlayRef.current) {
+      groundOverlayRef.current.setMap(null);
+      groundOverlayRef.current = null;
+    }
+
+    // Add NDVI overlay if enabled and raster URL is available
+    if (showNDVILayer && ndviRasterUrl && !ndviError && selectedParcelleId) {
+      const selectedParcelle = parcelles.find(p => p.id === selectedParcelleId);
+      if (!selectedParcelle || !selectedParcelle.geometry) return;
+
+      // Calculate bounds from parcelle geometry
+      const geometry = selectedParcelle.geometry;
+      if (geometry.type === 'MultiPolygon' && geometry.coordinates.length > 0) {
+        // Get all coordinates from all polygons
+        const allCoords: number[][] = [];
+        geometry.coordinates.forEach((polygon: any) => {
+          polygon.forEach((ring: any) => {
+            ring.forEach((coord: any) => {
+              allCoords.push(coord);
+            });
+          });
+        });
+
+        if (allCoords.length > 0) {
+          // Calculate bounds
+          const lngs = allCoords.map(c => c[0]);
+          const lats = allCoords.map(c => c[1]);
+          const minLng = Math.min(...lngs);
+          const maxLng = Math.max(...lngs);
+          const minLat = Math.min(...lats);
+          const maxLat = Math.max(...lats);
+
+          // Create LatLngBounds for the ground overlay
+          const bounds = new google.maps.LatLngBounds(
+            new google.maps.LatLng(minLat, minLng),
+            new google.maps.LatLng(maxLat, maxLng)
+          );
+
+          // Create GroundOverlay with NDVI raster
+          const groundOverlay = new google.maps.GroundOverlay(
+            ndviRasterUrl,
+            bounds,
+            {
+              opacity: ndviOpacity,
+              clickable: false,
+            }
+          );
+
+          groundOverlay.setMap(map);
+          groundOverlayRef.current = groundOverlay;
+        }
+      }
+    }
+  }, [map, showNDVILayer, ndviRasterUrl, ndviOpacity, ndviError, selectedParcelleId, parcelles]);
+
   // Toggle satellite overlay visibility
   const toggleSatelliteOverlay = useCallback(() => {
     setShowSatelliteOverlay((prev) => !prev);
@@ -205,10 +334,28 @@ export function GoogleMapClient({
     setSatelliteOpacity(newOpacity);
   }, []);
 
+  // Toggle NDVI layer visibility
+  const toggleNDVILayer = useCallback(() => {
+    setShowNDVILayer((prev) => !prev);
+  }, []);
+
+  // Handle NDVI layer opacity change
+  const handleNdviOpacityChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const newOpacity = parseFloat(event.target.value) / 100;
+    setNdviOpacity(newOpacity);
+  }, []);
+
   // Retry fetching satellite imagery
   const retrySatelliteImagery = useCallback(() => {
     if (selectedParcelleId) {
       setShowSatelliteOverlay(true);
+    }
+  }, [selectedParcelleId]);
+
+  // Retry fetching NDVI data
+  const retryNDVI = useCallback(() => {
+    if (selectedParcelleId) {
+      setShowNDVILayer(true);
     }
   }, [selectedParcelleId]);
 
@@ -372,34 +519,66 @@ export function GoogleMapClient({
 
       {/* Satellite Overlay Toggle Button */}
       {selectedParcelleId && (
-        <button
-          onClick={toggleSatelliteOverlay}
-          className={`absolute right-4 top-4 z-[1000] flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-lg transition-colors ${
-            showSatelliteOverlay
-              ? 'bg-green-600 text-white hover:bg-green-700'
-              : 'bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-          title={
-            showSatelliteOverlay
-              ? 'Masquer imagerie satellite'
-              : 'Afficher imagerie satellite'
-          }
-        >
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div className="absolute right-4 top-4 z-[1000] flex gap-2">
+          <button
+            onClick={toggleSatelliteOverlay}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-lg transition-colors ${
+              showSatelliteOverlay
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+            title={
+              showSatelliteOverlay
+                ? 'Masquer imagerie satellite'
+                : 'Afficher imagerie satellite'
+            }
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>{showSatelliteOverlay ? 'Satellite' : 'Satellite'}</span>
-        </button>
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>{showSatelliteOverlay ? 'Satellite' : 'Satellite'}</span>
+          </button>
+
+          {/* NDVI Layer Toggle Button */}
+          <button
+            onClick={toggleNDVILayer}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-lg transition-colors ${
+              showNDVILayer
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+            title={
+              showNDVILayer
+                ? 'Masquer couche NDVI'
+                : 'Afficher couche NDVI'
+            }
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+            <span>{showNDVILayer ? 'NDVI' : 'NDVI'}</span>
+          </button>
+        </div>
       )}
 
       {/* Satellite Loading State */}
@@ -514,6 +693,116 @@ export function GoogleMapClient({
               </span>
               <span>•</span>
               <span>{satelliteImagery.resolutionMeters}m</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NDVI Loading State */}
+      {ndviLoading && showNDVILayer && (
+        <div className="absolute bottom-20 left-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-emerald-600" />
+            <p className="text-sm text-gray-700">
+              Chargement de la couche NDVI...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* NDVI Error State */}
+      {ndviError && showNDVILayer && !ndviLoading && (
+        <div className="absolute bottom-20 left-4 z-[1000] max-w-sm rounded-lg bg-white p-4 shadow-lg">
+          <div className="mb-3 flex items-start gap-2">
+            <svg
+              className="h-5 w-5 flex-shrink-0 text-red-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-gray-900">
+                Erreur de chargement NDVI
+              </h4>
+              <p className="mt-1 text-xs text-gray-600">{ndviError}</p>
+            </div>
+          </div>
+          <button
+            onClick={retryNDVI}
+            className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+          >
+            Réessayer
+          </button>
+        </div>
+      )}
+
+      {/* NDVI Opacity Control */}
+      {ndviRasterUrl && showNDVILayer && !ndviLoading && !ndviError && (
+        <div className="absolute bottom-20 left-4 z-[1000] rounded-lg bg-white p-4 shadow-lg">
+          <div className="mb-3">
+            <h4 className="text-xs font-semibold text-gray-700">
+              Couche NDVI
+            </h4>
+            <p className="mt-1 text-xs text-gray-500">
+              Indice de végétation normalisé
+            </p>
+          </div>
+
+          {/* Opacity Slider */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="ndvi-opacity-slider"
+                className="text-xs font-medium text-gray-700"
+              >
+                Opacité
+              </label>
+              <span className="text-xs text-gray-600">
+                {Math.round(ndviOpacity * 100)}%
+              </span>
+            </div>
+            <input
+              id="ndvi-opacity-slider"
+              type="range"
+              min="0"
+              max="100"
+              value={ndviOpacity * 100}
+              onChange={handleNdviOpacityChange}
+              className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-gray-200 accent-emerald-600"
+              style={{
+                background: `linear-gradient(to right, #059669 0%, #059669 ${
+                  ndviOpacity * 100
+                }%, #e5e7eb ${ndviOpacity * 100}%, #e5e7eb 100%)`,
+              }}
+            />
+          </div>
+
+          {/* NDVI Info */}
+          <div className="mt-3 border-t border-gray-200 pt-3">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <span>
+                Mesure la santé de la végétation
+              </span>
             </div>
           </div>
         </div>

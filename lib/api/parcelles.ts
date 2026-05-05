@@ -189,6 +189,7 @@ export const parcellesApi = {
       simplify,
       sortBy,
       sortOrder,
+      health_status,
     } = validatedFilters;
 
     // Determine if geometry should be simplified based on zoom/bbox
@@ -228,6 +229,9 @@ export const parcellesApi = {
     }
     if (search) {
       rpcParams.p_search = search;
+    }
+    if (health_status) {
+      rpcParams.p_health_status = health_status;
     }
     
     // Add bbox parameters if provided

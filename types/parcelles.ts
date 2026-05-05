@@ -149,6 +149,58 @@ export const CERTIFICATION_LABELS: Record<Certification, string> = {
 };
 
 /**
+ * Health status values for parcelles (from NDVI analysis)
+ * 
+ * CENTRALIZED ENUM - Used in:
+ * - Database CHECK constraint (health_status IN (...))
+ * - Satellite imagery NDVI analysis
+ * - UI components (health status badges, filters)
+ * 
+ * @see ndvi_results table in database
+ */
+export const HEALTH_STATUS_VALUES = [
+  'excellent',
+  'good',
+  'fair',
+  'poor',
+  'critical',
+] as const;
+
+/**
+ * Health status for parcelles based on NDVI values
+ * - excellent: NDVI 0.7-1.0 (very healthy vegetation)
+ * - good: NDVI 0.6-0.7 (healthy vegetation)
+ * - fair: NDVI 0.5-0.6 (moderate vegetation)
+ * - poor: NDVI 0.3-0.5 (stressed vegetation)
+ * - critical: NDVI 0.0-0.3 (very poor vegetation)
+ */
+export type HealthStatus = (typeof HEALTH_STATUS_VALUES)[number];
+
+/**
+ * Human-readable labels for health status (for UI display)
+ */
+export const HEALTH_STATUS_LABELS: Record<HealthStatus, string> = {
+  excellent: 'Excellent',
+  good: 'Bon',
+  fair: 'Moyen',
+  poor: 'Faible',
+  critical: 'Critique',
+};
+
+/**
+ * Colors for health status (for UI badges/indicators)
+ * Based on NDVI color gradient from design document
+ */
+export const HEALTH_STATUS_COLORS: Record<HealthStatus, string> = {
+  excellent: '#2d5016',  // Dark green
+  good: '#6FAF3D',       // Green
+  fair: '#fbbf24',       // Yellow
+  poor: '#E68A1F',       // Orange
+  critical: '#ef4444',   // Red
+};
+
+
+/**
  * Helper to generate SQL array literal from CERTIFICATIONS_WHITELIST
  * Useful for documentation and testing consistency
  * 
@@ -516,6 +568,9 @@ export interface ParcelleFilters {
   
   /** Filter by active status (default: true = only active parcelles) */
   is_active?: boolean;
+  
+  /** Filter by vegetation health status from NDVI analysis */
+  health_status?: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
   
   /** Page number for pagination (1-indexed) */
   page?: number;

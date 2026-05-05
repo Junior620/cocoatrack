@@ -212,7 +212,7 @@ export interface NDVITrend {
  */
 export interface TemporalAnalysisSummary {
   timeline: TemporalDataPoint[];
-  trend: NDVITrend;
+  trend: NDVITrend | null; // null when insufficient data points for trend calculation
   significantChanges: number;
   averageNDVI: number;
   averageCloudCover: number;

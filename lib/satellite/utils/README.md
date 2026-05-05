@@ -1,271 +1,205 @@
 # Satellite Utility Functions
 
-This directory contains utility functions for the satellite imagery analysis feature.
+This directory contains utility functions for satellite imagery analysis in CocoaTrack.
 
-## GEE Authentication (`gee-auth.ts`)
+## NDVI Color Mapping (`ndvi-colors.ts`)
 
-Google Earth Engine authentication helper that implements OAuth2 JWT flow for service account authentication.
+The NDVI color mapping utility provides functions to convert NDVI (Normalized Difference Vegetation Index) values to colors for visualization.
 
 ### Features
 
-- **Service Account Authentication**: Authenticate using GEE service account credentials
-- **Token Caching**: Automatic in-memory caching of access tokens
-- **Token Refresh**: Automatic token refresh when expired
-- **Error Handling**: Comprehensive error handling with descriptive messages
-- **Multiple Credential Sources**: Support for environment variables or JSON key file
+- **Color-blind friendly palette**: Designed to be accessible for users with color vision deficiencies
+- **Smooth interpolation**: Linear interpolation between color stops for smooth gradients
+- **Multiple output formats**: RGB, RGBA, hex, and CSS strings
+- **Edge case handling**: Gracefully handles NaN, Infinity, and out-of-range values
+- **Legend support**: Functions to generate color stops and gradients for UI legends
 
-### Setup
+### Color Scale
 
-#### 1. Create Google Earth Engine Service Account
+The NDVI color scale maps vegetation health to colors:
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Earth Engine API: https://console.cloud.google.com/apis/library/earthengine.googleapis.com
-4. Create a service account with Earth Engine permissions
-5. Download the JSON key file
-6. Register for Earth Engine access: https://earthengine.google.com/signup
+| NDVI Range | Color | Health Status | RGB Value |
+|------------|-------|---------------|-----------|
+| < 0.0 | Brown | Water/Bare Soil | `rgb(165, 42, 42)` |
+| 0.0 - 0.2 | Brown | Very Poor | `rgb(165, 42, 42)` |
+| 0.2 - 0.4 | Orange | Poor | `rgb(230, 97, 0)` |
+| 0.4 - 0.6 | Yellow | Moderate | `rgb(255, 193, 7)` |
+| 0.6 - 0.8 | Light Green | Good | `rgb(146, 208, 80)` |
+| 0.8 - 1.0 | Green | Very Good | `rgb(56, 168, 0)` |
+| 1.0 | Dark Green | Excellent | `rgb(34, 139, 34)` |
 
-#### 2. Configure Environment Variables
+### Usage Examples
 
-Add the following to your `.env.local` file:
-
-```bash
-# Google Cloud Project ID
-GOOGLE_EARTH_ENGINE_PROJECT_ID=your-gcp-project-id
-
-# Service Account Email
-GOOGLE_EARTH_ENGINE_SERVICE_ACCOUNT=your-service-account@your-project.iam.gserviceaccount.com
-
-# Service Account Private Key (from JSON key file)
-GOOGLE_EARTH_ENGINE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour-Private-Key-Here\n-----END PRIVATE KEY-----\n"
-```
-
-**Alternative**: Use JSON key file path:
-
-```bash
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/your-service-account-key.json
-```
-
-### Usage
-
-#### Basic Authentication
+#### Basic Color Conversion
 
 ```typescript
-import { authenticate, getAccessToken } from '@/lib/satellite/utils/gee-auth';
+import { ndviToRGB, ndviToColorString } from '@/lib/satellite/utils/ndvi-colors';
 
-// Get authentication token
-const token = await authenticate();
-console.log('Access token:', token.accessToken);
-console.log('Expires at:', token.expiresAt);
+// Get RGB color object
+const rgb = ndviToRGB(0.75);
+// { r: 101, g: 188, b: 40 }
 
-// Or get just the access token string
-const accessToken = await getAccessToken();
+// Get hex color string
+const hex = ndviToColorString(0.75, 'hex');
+// "#65bc28"
+
+// Get RGB string for CSS
+const rgbString = ndviToColorString(0.75, 'rgb');
+// "rgb(101, 188, 40)"
+
+// Get RGBA with transparency
+const rgba = ndviToColorString(0.75, 'rgba', 0.7);
+// "rgba(101, 188, 40, 0.7)"
 ```
 
-#### Using in API Requests
+#### Creating a Legend
 
 ```typescript
-import { getAccessToken } from '@/lib/satellite/utils/gee-auth';
+import { getColorStops, rgbToHex } from '@/lib/satellite/utils/ndvi-colors';
 
-// Make authenticated request to Google Earth Engine
-const accessToken = await getAccessToken();
-
-const response = await fetch('https://earthengine.googleapis.com/v1/projects/PROJECT_ID/...', {
-  headers: {
-    'Authorization': `Bearer ${accessToken}`,
-    'Content-Type': 'application/json',
-  },
-});
-```
-
-#### Token Refresh
-
-```typescript
-import { refreshToken, hasValidToken } from '@/lib/satellite/utils/gee-auth';
-
-// Check if we have a valid cached token
-if (!hasValidToken()) {
-  // Force refresh if needed
-  await refreshToken();
+function NDVILegend() {
+  const stops = getColorStops();
+  
+  return (
+    <div className="space-y-2">
+      {stops.map(stop => (
+        <div key={stop.threshold} className="flex items-center gap-2">
+          <div 
+            style={{ backgroundColor: rgbToHex(stop.color) }}
+            className="w-6 h-6 rounded"
+          />
+          <span>{stop.label} (NDVI: {stop.threshold.toFixed(1)})</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 ```
 
-#### Cache Management
+#### Creating a Gradient Background
 
 ```typescript
-import { clearTokenCache } from '@/lib/satellite/utils/gee-auth';
+import { getNDVIGradient } from '@/lib/satellite/utils/ndvi-colors';
 
-// Clear cached token (forces re-authentication on next request)
-clearTokenCache();
+function NDVISlider() {
+  const gradient = getNDVIGradient('to right');
+  
+  return (
+    <div 
+      style={{ background: gradient }}
+      className="h-4 rounded-full"
+    />
+  );
+}
+```
+
+#### Map Overlay Visualization
+
+```typescript
+import { ndviToRGBA } from '@/lib/satellite/utils/ndvi-colors';
+
+function renderNDVIOverlay(ndviData: number[][], canvas: HTMLCanvasElement) {
+  const ctx = canvas.getContext('2d');
+  
+  ndviData.forEach((row, y) => {
+    row.forEach((ndvi, x) => {
+      const color = ndviToRGBA(ndvi, 0.7);
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`;
+      ctx.fillRect(x, y, 1, 1);
+    });
+  });
+}
 ```
 
 ### API Reference
 
-#### `authenticate(): Promise<AuthToken>`
+#### `ndviToRGB(ndvi: number): RGBColor`
 
-Authenticate with Google Earth Engine using service account credentials. Returns a cached token if available and valid, otherwise performs OAuth2 JWT flow.
+Converts an NDVI value to an RGB color object.
 
-**Returns**: `Promise<AuthToken>` - Authentication token with expiration
+- **Parameters**: `ndvi` - NDVI value in range [-1, 1]
+- **Returns**: RGB color object with r, g, b values in range [0, 255]
+- **Edge cases**: Clamps values outside [-1, 1], treats NaN as -1
 
-**Throws**: `AuthenticationError` - If authentication fails
+#### `ndviToRGBA(ndvi: number, alpha?: number): RGBAColor`
 
-#### `refreshToken(): Promise<AuthToken>`
+Converts an NDVI value to an RGBA color object with opacity.
 
-Force a new token to be generated, even if cached token is still valid.
+- **Parameters**: 
+  - `ndvi` - NDVI value in range [-1, 1]
+  - `alpha` - Opacity in range [0, 1], defaults to 1.0
+- **Returns**: RGBA color object with r, g, b, a values
 
-**Returns**: `Promise<AuthToken>` - New authentication token
+#### `ndviToColorString(ndvi: number, format?: 'rgb' | 'rgba' | 'hex', alpha?: number): string`
 
-**Throws**: `AuthenticationError` - If token refresh fails
+Converts an NDVI value to a CSS color string.
 
-#### `getAuthToken(): Promise<AuthToken>`
+- **Parameters**:
+  - `ndvi` - NDVI value in range [-1, 1]
+  - `format` - Output format, defaults to 'hex'
+  - `alpha` - Opacity for rgba format, defaults to 1.0
+- **Returns**: CSS color string
 
-Get the current authentication token (from cache or by authenticating).
+#### `rgbToString(color: RGBColor): string`
 
-**Returns**: `Promise<AuthToken>` - Current authentication token
+Converts an RGB color object to a CSS rgb() string.
 
-**Throws**: `AuthenticationError` - If authentication fails
+#### `rgbaToString(color: RGBAColor): string`
 
-#### `getAccessToken(): Promise<string>`
+Converts an RGBA color object to a CSS rgba() string.
 
-Get the access token string for use in API requests.
+#### `rgbToHex(color: RGBColor): string`
 
-**Returns**: `Promise<string>` - Access token string
+Converts an RGB color object to a hexadecimal color string.
 
-**Throws**: `AuthenticationError` - If authentication fails
+#### `getColorStops(): ReadonlyArray<{ threshold: number; color: RGBColor; label: string }>`
 
-#### `clearTokenCache(): void`
+Returns the NDVI color stops for creating legends.
 
-Clear the cached authentication token. Forces re-authentication on next request.
+- **Returns**: Array of color stops with thresholds, colors, and labels
 
-#### `hasValidToken(): boolean`
+#### `getNDVIGradient(direction?: string): string`
 
-Check if we have a valid cached token.
+Generates a CSS linear-gradient string for the NDVI color scale.
 
-**Returns**: `boolean` - True if a valid token is cached
+- **Parameters**: `direction` - CSS gradient direction, defaults to 'to right'
+- **Returns**: CSS linear-gradient string
 
-#### `getAuthConfig(): GEEAuthConfig`
+### Color-Blind Accessibility
 
-Get authentication configuration from environment variables.
+The color palette has been designed to be distinguishable for users with common color vision deficiencies:
 
-**Returns**: `GEEAuthConfig` - Authentication configuration
+- **Deuteranopia** (red-green color blindness): Colors maintain sufficient contrast
+- **Protanopia** (red-green color blindness): Colors remain distinguishable
+- **Tritanopia** (blue-yellow color blindness): Colors are clearly differentiated
 
-**Throws**: `AuthenticationError` - If required environment variables are missing
-
-#### `createJWT(config: GEEAuthConfig): Promise<string>`
-
-Create a signed JWT for service account authentication.
-
-**Parameters**:
-- `config: GEEAuthConfig` - Authentication configuration
-
-**Returns**: `Promise<string>` - Signed JWT
-
-**Throws**: `AuthenticationError` - If JWT creation fails
-
-### Types
-
-```typescript
-interface GEEAuthConfig {
-  projectId: string;
-  serviceAccount: string;
-  privateKey: string;
-}
-
-interface AuthToken {
-  accessToken: string;
-  expiresAt: Date;
-  tokenType: string;
-}
-```
-
-### Error Handling
-
-All authentication functions throw `AuthenticationError` on failure:
-
-```typescript
-import { authenticate } from '@/lib/satellite/utils/gee-auth';
-import { AuthenticationError } from '@/lib/satellite/types';
-
-try {
-  const token = await authenticate();
-  // Use token...
-} catch (error) {
-  if (error instanceof AuthenticationError) {
-    console.error('Authentication failed:', error.message);
-    console.error('Error code:', error.code);
-    console.error('Status code:', error.statusCode);
-  }
-}
-```
-
-### Token Caching
-
-Tokens are cached in memory with automatic expiration handling:
-
-- Tokens are cached for their full lifetime (typically 1 hour)
-- Automatic refresh 5 minutes before expiration
-- Cache is cleared on authentication failure
-- Cache is shared across all requests in the same process
-
-**Note**: In production with multiple server instances, consider using Redis or another distributed cache for token sharing.
-
-### Security Considerations
-
-1. **Never expose credentials to client**: All authentication must happen server-side
-2. **Use environment variables**: Never commit credentials to version control
-3. **Rotate keys regularly**: Follow Google Cloud security best practices
-4. **Monitor API usage**: Track authentication failures and unusual patterns
-5. **Use secrets manager in production**: Consider using Google Secret Manager or similar
+The palette uses a combination of hue, saturation, and brightness changes to ensure accessibility.
 
 ### Testing
 
-Unit tests focus on configuration and error handling:
+Comprehensive unit tests are available in `tests/satellite/utils/ndvi-colors.test.ts`:
 
 ```bash
-npm test -- tests/satellite/utils/gee-auth.test.ts
+npm test -- tests/satellite/utils/ndvi-colors.test.ts
 ```
 
-Integration tests with real credentials:
+Tests cover:
+- Color mapping accuracy for all NDVI ranges
+- Interpolation between color stops
+- Edge case handling (NaN, Infinity, out-of-range values)
+- Format conversion (RGB, RGBA, hex, CSS strings)
+- Color-blind friendliness verification
 
-```bash
-# Set up valid credentials first
-npm test -- tests/satellite/integration/gee-auth.integration.test.ts
-```
+### Performance Considerations
 
-### Troubleshooting
+- Color calculations use simple arithmetic operations (O(1) complexity)
+- No external dependencies
+- Suitable for real-time rendering of large datasets
+- Color stops are pre-defined constants (no runtime computation)
 
-#### "Missing required Google Earth Engine credentials"
+### Related Files
 
-- Ensure all three environment variables are set: `GOOGLE_EARTH_ENGINE_PROJECT_ID`, `GOOGLE_EARTH_ENGINE_SERVICE_ACCOUNT`, `GOOGLE_EARTH_ENGINE_PRIVATE_KEY`
-- Check that `.env.local` is loaded correctly
-
-#### "Failed to create JWT: error:1E08010C:DECODER routines::unsupported"
-
-- Private key format is invalid
-- Ensure private key includes BEGIN/END markers
-- Check for proper newline escaping (`\n` in environment variables)
-
-#### "Token exchange failed with status 401"
-
-- Service account email is incorrect
-- Private key doesn't match service account
-- Service account doesn't have Earth Engine permissions
-
-#### "Token exchange failed with status 403"
-
-- Service account doesn't have Earth Engine API access
-- Project doesn't have Earth Engine API enabled
-- Need to register for Earth Engine access
-
-### Rate Limiting
-
-Google Earth Engine free tier limits:
-- 250,000 requests per day
-- Token caching helps minimize authentication requests
-- Monitor usage in admin dashboard
-
-### References
-
-- [Google Earth Engine Documentation](https://developers.google.com/earth-engine)
-- [Google Cloud Service Accounts](https://cloud.google.com/iam/docs/service-accounts)
-- [OAuth 2.0 JWT Flow](https://developers.google.com/identity/protocols/oauth2/service-account)
+- Implementation: `lib/satellite/utils/ndvi-colors.ts`
+- Tests: `tests/satellite/utils/ndvi-colors.test.ts`
+- Examples: `lib/satellite/utils/ndvi-colors.example.ts`
+- Design specification: `.kiro/specs/satellite-imagery-analysis/design.md`

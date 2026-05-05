@@ -6,15 +6,20 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mountain as MountainIcon } from 'lucide-react';
+import { Mountain as MountainIcon, RefreshCw } from 'lucide-react';
 
 import { ProtectedRoute } from '@/components/auth';
 import { useAuth, hasPermission } from '@/lib/auth';
 import type { ExtendedUserRole } from '@/lib/auth';
 import { parcellesApi } from '@/lib/api/parcelles';
 import { ParcelleMap } from '@/components/parcelles/ParcelleMap';
+import { ParcelleMapWithNDVI } from '@/components/parcelles/ParcelleMapWithNDVI';
 import { ConformityInfoBubble } from '@/components/parcelles/ConformityInfoBubble';
 import StaticImageButton from '@/components/parcelles/StaticImageButton';
+import HealthStatusBadge from '@/components/satellite/HealthStatusBadge';
+import type { HealthStatus, TrendDirection } from '@/components/satellite/HealthStatusBadge';
+import { TemporalSlider } from '@/components/satellite/TemporalSlider';
+import { TemporalDataChart } from '@/components/satellite/TemporalDataChart';
 import type { Parcelle, ParcelleWithPlanteur, ConformityStatus, Certification, UpdateParcelleInput } from '@/types/parcelles';
 import {
   CONFORMITY_STATUS_LABELS,
@@ -55,6 +60,24 @@ function ParcelleDetailContent() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [calculatingElevation, setCalculatingElevation] = useState(false);
 
+  // Health status state
+  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
+  const [meanNDVI, setMeanNDVI] = useState<number | null>(null);
+  const [lastCalculationDate, setLastCalculationDate] = useState<Date | null>(null);
+  const [trend, setTrend] = useState<TrendDirection | null>(null);
+  const [recommendation, setRecommendation] = useState<string | null>(null);
+  const [loadingHealthStatus, setLoadingHealthStatus] = useState(false);
+  const [healthStatusError, setHealthStatusError] = useState<string | null>(null);
+  const [recalculatingNDVI, setRecalculatingNDVI] = useState(false);
+  const [ndviRasterUrl, setNdviRasterUrl] = useState<string | null>(null);
+  const [ndviRasterBounds, setNdviRasterBounds] = useState<[number, number, number, number] | null>(null);
+  const [showNDVIOverlay, setShowNDVIOverlay] = useState(true);
+
+  // Temporal slider state
+  const [showTemporalSlider, setShowTemporalSlider] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isLoadingTemporalData, setIsLoadingTemporalData] = useState(false);
+
   const canEdit = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:update');
   const canArchive = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:delete');
 
@@ -90,6 +113,55 @@ function ParcelleDetailContent() {
   useEffect(() => {
     fetchParcelle();
   }, [fetchParcelle]);
+
+  // Fetch health status data
+  const fetchHealthStatus = useCallback(async () => {
+    if (!parcelleId) return;
+
+    setLoadingHealthStatus(true);
+    setHealthStatusError(null);
+
+    try {
+      const response = await fetch(`/api/satellite/health-status/${parcelleId}`);
+
+      if (response.status === 404) {
+        // No NDVI data available yet
+        setHealthStatus(null);
+        setMeanNDVI(null);
+        setLastCalculationDate(null);
+        setTrend(null);
+        setRecommendation(null);
+        setNdviRasterUrl(null);
+        setNdviRasterBounds(null);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch health status');
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setHealthStatus(result.data.healthStatus);
+        setMeanNDVI(result.data.meanNDVI);
+        setLastCalculationDate(new Date(result.data.lastCalculationDate));
+        setTrend(result.data.trend?.direction || null);
+        setRecommendation(result.data.recommendation);
+        setNdviRasterUrl(result.data.ndviRasterUrl || null);
+        setNdviRasterBounds(result.data.ndviRasterBounds || null);
+      }
+    } catch (err) {
+      console.error('Error fetching health status:', err);
+      setHealthStatusError(err instanceof Error ? err.message : 'Failed to load health status');
+    } finally {
+      setLoadingHealthStatus(false);
+    }
+  }, [parcelleId]);
+
+  useEffect(() => {
+    fetchHealthStatus();
+  }, [fetchHealthStatus]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -220,6 +292,95 @@ function ParcelleDetailContent() {
       setCalculatingElevation(false);
     }
   };
+
+  // Handle recalculate NDVI
+  const handleRecalculateNDVI = async () => {
+    if (!parcelle) return;
+
+    setRecalculatingNDVI(true);
+    setHealthStatusError(null);
+
+    try {
+      const response = await fetch('/api/satellite/ndvi', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          parcelleId: parcelle.id,
+          forceRecalculate: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to calculate NDVI');
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Update health status with new data
+        setHealthStatus(result.data.ndvi.healthStatus);
+        setMeanNDVI(result.data.ndvi.meanNDVI);
+        setLastCalculationDate(new Date(result.data.ndvi.calculationDate));
+        setRecommendation(result.data.recommendation);
+        
+        // Refresh trend data
+        await fetchHealthStatus();
+      }
+    } catch (err) {
+      console.error('Error recalculating NDVI:', err);
+      setHealthStatusError(err instanceof Error ? err.message : 'Failed to recalculate NDVI');
+    } finally {
+      setRecalculatingNDVI(false);
+    }
+  };
+
+  // Handle temporal date change from slider
+  const handleTemporalDateChange = useCallback(async (date: Date) => {
+    if (!parcelle) return;
+
+    setSelectedDate(date);
+    setIsLoadingTemporalData(true);
+    setHealthStatusError(null);
+
+    try {
+      // Fetch NDVI data for the selected date
+      const response = await fetch('/api/satellite/ndvi', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          parcelleId: parcelle.id,
+          date: date.toISOString().split('T')[0],
+          forceRecalculate: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch NDVI for selected date');
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        // Update map layers with data from selected date
+        setHealthStatus(result.data.ndvi.healthStatus);
+        setMeanNDVI(result.data.ndvi.meanNDVI);
+        setLastCalculationDate(new Date(result.data.ndvi.calculationDate));
+        setNdviRasterUrl(result.data.ndvi.ndviRasterUrl || null);
+        setNdviRasterBounds(result.data.ndvi.ndviRasterBounds || null);
+      }
+    } catch (err) {
+      console.error('Error fetching temporal NDVI data:', err);
+      setHealthStatusError(err instanceof Error ? err.message : 'Failed to load temporal data');
+    } finally {
+      setIsLoadingTemporalData(false);
+    }
+  }, [parcelle]);
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -487,15 +648,39 @@ function ParcelleDetailContent() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Map Section - Single parcelle with zoom-to-fit */}
         <div className="rounded-lg bg-white p-6 shadow">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">Localisation</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Localisation</h2>
+            {/* Temporal Analysis Toggle */}
+            {parcelle.is_active && (
+              <button
+                onClick={() => setShowTemporalSlider(!showTemporalSlider)}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                title={showTemporalSlider ? 'Masquer l\'analyse temporelle' : 'Afficher l\'analyse temporelle'}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {showTemporalSlider ? 'Masquer Temporel' : 'Analyse Temporelle'}
+              </button>
+            )}
+          </div>
+          
+          {/* Loading indicator during temporal data fetch */}
+          {isLoadingTemporalData && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white bg-opacity-75 rounded-lg">
+              <div className="flex flex-col items-center gap-2">
+                <LoadingSpinner className="h-8 w-8 text-primary-600" />
+                <span className="text-sm text-gray-600">Chargement des données...</span>
+              </div>
+            </div>
+          )}
+          
           {parcelle.geometry ? (
-            <ParcelleMap
-              parcelles={[parcelle as Parcelle]}
-              selectedId={parcelle.id}
+            <ParcelleMapWithNDVI
+              parcelle={parcelle as Parcelle}
+              ndviRasterUrl={ndviRasterUrl}
+              ndviRasterBounds={ndviRasterBounds}
               height="320px"
-              zoomToFit={true}
-              showCentroids={true}
-              enableFullscreen={true}
               className="rounded-lg overflow-hidden"
             />
           ) : (
@@ -507,6 +692,22 @@ function ParcelleDetailContent() {
                   Centroïde: {formatCoordinate(parcelle.centroid.lat)}, {formatCoordinate(parcelle.centroid.lng)}
                 </p>
               </div>
+            </div>
+          )}
+          
+          {/* Temporal Slider */}
+          {showTemporalSlider && parcelle.is_active && (
+            <div className="mt-4">
+              <TemporalSlider
+                parcelleId={parcelle.id}
+                startDate={new Date(new Date().setMonth(new Date().getMonth() - 12))} // Last 12 months
+                endDate={new Date()}
+                interval="monthly"
+                onDateChange={handleTemporalDateChange}
+                highlightChanges={true}
+                animationSpeed={1000}
+                className="shadow-sm"
+              />
             </div>
           )}
         </div>
@@ -636,6 +837,128 @@ function ParcelleDetailContent() {
           </dl>
         </div>
       </div>
+
+      {/* Health Status Section */}
+      <div className="rounded-lg bg-white p-6 shadow">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">État de Santé de la Végétation</h2>
+          {canEdit && parcelle.is_active && (
+            <button
+              onClick={handleRecalculateNDVI}
+              disabled={recalculatingNDVI}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              title="Recalculer l'indice NDVI"
+            >
+              <RefreshCw className={`h-4 w-4 ${recalculatingNDVI ? 'animate-spin' : ''}`} />
+              {recalculatingNDVI ? 'Calcul en cours...' : 'Recalculer NDVI'}
+            </button>
+          )}
+        </div>
+
+        {loadingHealthStatus ? (
+          <div className="flex items-center justify-center py-8">
+            <LoadingSpinner className="h-8 w-8 text-primary-600" />
+            <span className="ml-3 text-sm text-gray-500">Chargement de l'état de santé...</span>
+          </div>
+        ) : healthStatusError ? (
+          <div className="rounded-md bg-red-50 p-4">
+            <p className="text-sm text-red-700">{healthStatusError}</p>
+          </div>
+        ) : healthStatus && meanNDVI !== null ? (
+          <div className="space-y-4">
+            {/* Health Status Badge */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">Statut:</span>
+              <HealthStatusBadge 
+                status={healthStatus} 
+                showTrend={!!trend}
+                trend={trend || undefined}
+                size="lg"
+              />
+            </div>
+
+            {/* NDVI Value */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">Indice NDVI:</span>
+              <span className="text-lg font-semibold text-gray-900">
+                {meanNDVI.toFixed(3)}
+              </span>
+              <span className="text-xs text-gray-400">(échelle: -1 à +1)</span>
+            </div>
+
+            {/* Last Calculation Date */}
+            {lastCalculationDate && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500">Dernière analyse:</span>
+                <span className="text-sm text-gray-900">
+                  {lastCalculationDate.toLocaleDateString('fr-FR', {
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
+
+            {/* Recommendation */}
+            {recommendation && (
+              <div className="mt-4 rounded-md bg-blue-50 border border-blue-200 p-4">
+                <div className="flex items-start gap-2">
+                  <svg 
+                    className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                    />
+                  </svg>
+                  <div>
+                    <h3 className="text-sm font-medium text-blue-900">Recommandation</h3>
+                    <p className="mt-1 text-sm text-blue-700">{recommendation}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <svg 
+              className="mx-auto h-12 w-12 text-gray-400" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" 
+              />
+            </svg>
+            <p className="mt-2 text-sm text-gray-500">
+              Aucune donnée NDVI disponible pour cette parcelle
+            </p>
+            {canEdit && parcelle.is_active && (
+              <button
+                onClick={handleRecalculateNDVI}
+                disabled={recalculatingNDVI}
+                className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={`h-4 w-4 ${recalculatingNDVI ? 'animate-spin' : ''}`} />
+                {recalculatingNDVI ? 'Calcul en cours...' : 'Calculer NDVI'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Temporal Analysis Section - Task 3.4.2 */}
+      {parcelle.is_active && <TemporalAnalysisSection parcelleId={parcelle.id} />}
 
       {/* Certifications & Status */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -843,6 +1166,295 @@ function ParcelleDetailContent() {
           Voir toutes les parcelles
         </Link>
       </div>
+    </div>
+  );
+}
+
+// Temporal Analysis Section Component - Task 3.4.2
+function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [startDate, setStartDate] = useState<Date>(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 12);
+    return date;
+  });
+  const [endDate, setEndDate] = useState<Date>(new Date());
+  const [customDateRange, setCustomDateRange] = useState(false);
+
+  // Fetch temporal data
+  const fetchTemporalData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({
+        parcelleId,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        interval: 'monthly',
+      });
+
+      const response = await fetch(`/api/satellite/temporal?${params}`);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch temporal data');
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data?.summary?.timeline) {
+        // Convert date strings back to Date objects
+        const timelineData = result.data.summary.timeline.map((point: any) => ({
+          ...point,
+          date: new Date(point.date),
+        }));
+        setTimeline(timelineData);
+        
+        // Set selected date to the most recent data point
+        if (timelineData.length > 0) {
+          setSelectedDate(timelineData[timelineData.length - 1].date);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching temporal data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load temporal data');
+    } finally {
+      setLoading(false);
+    }
+  }, [parcelleId, startDate, endDate]);
+
+  useEffect(() => {
+    fetchTemporalData();
+  }, [fetchTemporalData]);
+
+  // Handle date range change
+  const handleDateRangeChange = (newStartDate: Date, newEndDate: Date) => {
+    setStartDate(newStartDate);
+    setEndDate(newEndDate);
+  };
+
+  // Handle date selection from chart
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+  };
+
+  return (
+    <div className="rounded-lg bg-white p-6 shadow">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Analyse Temporelle</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Évolution de l'indice NDVI sur les 12 derniers mois
+          </p>
+        </div>
+        <button
+          onClick={() => setCustomDateRange(!customDateRange)}
+          className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          {customDateRange ? 'Masquer Sélecteur' : 'Période Personnalisée'}
+        </button>
+      </div>
+
+      {/* Custom Date Range Selector */}
+      {customDateRange && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date de début
+              </label>
+              <input
+                type="date"
+                value={startDate.toISOString().split('T')[0]}
+                onChange={(e) => {
+                  const newDate = new Date(e.target.value);
+                  if (!isNaN(newDate.getTime())) {
+                    setStartDate(newDate);
+                  }
+                }}
+                max={endDate.toISOString().split('T')[0]}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Date de fin
+              </label>
+              <input
+                type="date"
+                value={endDate.toISOString().split('T')[0]}
+                onChange={(e) => {
+                  const newDate = new Date(e.target.value);
+                  if (!isNaN(newDate.getTime())) {
+                    setEndDate(newDate);
+                  }
+                }}
+                min={startDate.toISOString().split('T')[0]}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={fetchTemporalData}
+                disabled={loading}
+                className="w-full rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+              >
+                {loading ? 'Chargement...' : 'Appliquer'}
+              </button>
+            </div>
+          </div>
+          
+          {/* Quick date range buttons */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                const now = new Date();
+                handleDateRangeChange(
+                  new Date(now.setMonth(now.getMonth() - 3)),
+                  new Date()
+                );
+              }}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              3 mois
+            </button>
+            <button
+              onClick={() => {
+                const now = new Date();
+                handleDateRangeChange(
+                  new Date(now.setMonth(now.getMonth() - 6)),
+                  new Date()
+                );
+              }}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              6 mois
+            </button>
+            <button
+              onClick={() => {
+                const now = new Date();
+                handleDateRangeChange(
+                  new Date(now.setMonth(now.getMonth() - 12)),
+                  new Date()
+                );
+              }}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              12 mois
+            </button>
+            <button
+              onClick={() => {
+                const now = new Date();
+                handleDateRangeChange(
+                  new Date(now.setMonth(now.getMonth() - 24)),
+                  new Date()
+                );
+              }}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              24 mois
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <LoadingSpinner className="h-8 w-8 text-primary-600" />
+          <span className="ml-3 text-sm text-gray-500">
+            Chargement des données temporelles...
+          </span>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className="rounded-md bg-red-50 border border-red-200 p-4">
+          <div className="flex items-start gap-2">
+            <svg
+              className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div>
+              <h3 className="text-sm font-medium text-red-900">
+                Erreur de chargement
+              </h3>
+              <p className="mt-1 text-sm text-red-700">{error}</p>
+              <button
+                onClick={fetchTemporalData}
+                className="mt-2 text-sm font-medium text-red-600 hover:text-red-700 underline"
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Temporal Chart */}
+      {!loading && !error && timeline.length > 0 && (
+        <TemporalDataChart
+          timeline={timeline}
+          selectedDate={selectedDate}
+          parcelleId={parcelleId}
+          startDate={startDate}
+          endDate={endDate}
+          onDateSelect={handleDateSelect}
+          showChangeMarkers={true}
+          loading={false}
+          error={null}
+        />
+      )}
+
+      {/* Empty State */}
+      {!loading && !error && timeline.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <svg
+            className="h-12 w-12 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1}
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            />
+          </svg>
+          <p className="mt-2 text-sm font-medium text-gray-900">
+            Aucune donnée temporelle disponible
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            Les données NDVI historiques ne sont pas encore disponibles pour cette parcelle.
+          </p>
+          <button
+            onClick={fetchTemporalData}
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Actualiser
+          </button>
+        </div>
+      )}
     </div>
   );
 }
