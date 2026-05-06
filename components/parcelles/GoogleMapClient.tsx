@@ -30,6 +30,8 @@ interface GoogleMapClientProps {
   enableNDVILayer?: boolean;
   /** Initial NDVI layer opacity (0-1) */
   ndviLayerOpacity?: number;
+  /** Enable deforestation alert indicators */
+  showDeforestationAlerts?: boolean;
 }
 
 const mapContainerStyle = {
@@ -52,6 +54,7 @@ export function GoogleMapClient({
   satelliteOverlayOpacity = 0.7,
   enableNDVILayer = false,
   ndviLayerOpacity = 0.7,
+  showDeforestationAlerts = true,
 }: GoogleMapClientProps) {
   const [map, setMap] = useState<any>(null);
   const [hasZoomedToFit, setHasZoomedToFit] = useState(false);
@@ -69,6 +72,10 @@ export function GoogleMapClient({
   const [ndviLoading, setNdviLoading] = useState(false);
   const [ndviError, setNdviError] = useState<string | null>(null);
   const groundOverlayRef = useRef<google.maps.GroundOverlay | null>(null);
+  
+  // Deforestation alerts state
+  const [deforestationAlerts, setDeforestationAlerts] = useState<Record<string, number>>({});
+  const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
@@ -217,6 +224,61 @@ export function GoogleMapClient({
 
     fetchNDVI();
   }, [showNDVILayer, selectedParcelleId, map]);
+
+  // Fetch deforestation alerts for visible parcelles
+  useEffect(() => {
+    if (!showDeforestationAlerts || parcelles.length === 0) {
+      setDeforestationAlerts({});
+      return;
+    }
+
+    const fetchDeforestationAlerts = async () => {
+      setIsLoadingAlerts(true);
+      
+      try {
+        // Fetch alerts for all visible parcelles
+        const alertPromises = parcelles.map(async (parcelle) => {
+          try {
+            const response = await fetch(
+              `/api/satellite/deforestation?parcelleId=${parcelle.id}&status=pending`
+            );
+            
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data) {
+                return {
+                  parcelleId: parcelle.id,
+                  count: result.data.summary?.pendingAlerts || 0,
+                };
+              }
+            }
+            return { parcelleId: parcelle.id, count: 0 };
+          } catch (error) {
+            console.error(`Failed to fetch alerts for parcelle ${parcelle.id}:`, error);
+            return { parcelleId: parcelle.id, count: 0 };
+          }
+        });
+
+        const results = await Promise.all(alertPromises);
+        
+        // Build alert count map
+        const alertMap: Record<string, number> = {};
+        results.forEach(({ parcelleId, count }) => {
+          if (count > 0) {
+            alertMap[parcelleId] = count;
+          }
+        });
+        
+        setDeforestationAlerts(alertMap);
+      } catch (error) {
+        console.error('Error fetching deforestation alerts:', error);
+      } finally {
+        setIsLoadingAlerts(false);
+      }
+    };
+
+    fetchDeforestationAlerts();
+  }, [parcelles, showDeforestationAlerts]);
 
   // Update satellite overlay on map when imagery or opacity changes
   useEffect(() => {
@@ -482,6 +544,7 @@ export function GoogleMapClient({
       >
         {parcelles.map((parcelle) => {
           const isSelected = parcelle.id === selectedParcelleId;
+          const hasAlerts = deforestationAlerts[parcelle.id] > 0;
           const paths = convertCoordinates(parcelle);
 
           if (paths.length === 0) {
@@ -491,6 +554,7 @@ export function GoogleMapClient({
           // Get color based on conformity status
           const baseColor = CONFORMITY_COLORS[parcelle.conformity_status] || CONFORMITY_COLORS.informations_manquantes;
           const selectedColor = '#3B82F6'; // Blue for selected
+          const alertColor = '#dc2626'; // Red for alerts
 
           return paths.map((path, index) => {
             if (!Array.isArray(path) || path.length === 0) {
@@ -504,11 +568,11 @@ export function GoogleMapClient({
                 options={{
                   fillColor: isSelected ? selectedColor : baseColor,
                   fillOpacity: isSelected ? 0.5 : 0.35,
-                  strokeColor: isSelected ? '#1D4ED8' : baseColor,
-                  strokeWeight: isSelected ? 3 : 2,
+                  strokeColor: hasAlerts ? alertColor : (isSelected ? '#1D4ED8' : baseColor),
+                  strokeWeight: hasAlerts ? 4 : (isSelected ? 3 : 2),
                   strokeOpacity: 1,
                   clickable: true,
-                  zIndex: isSelected ? 100 : 1,
+                  zIndex: hasAlerts ? 200 : (isSelected ? 100 : 1),
                 }}
                 onClick={() => onParcelleClick?.(parcelle)}
               />

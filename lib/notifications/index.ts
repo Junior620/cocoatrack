@@ -48,3 +48,13 @@ export {
   type DeliveryNotificationData,
   type SyncNotificationData,
 } from './notification-types';
+
+export {
+  NotificationService,
+  type SatelliteNotificationType,
+  type NotificationChannel,
+  type NotificationPriority,
+  type DeforestationNotificationData,
+  type HealthStatusChangeData,
+  type RateLimitNotificationData,
+} from './notification.service';

@@ -55,5 +55,14 @@
       "destination": "/api/:path*"
     }
   ],
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/cron/send-notification-digests",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/deforestation-detection",
+      "schedule": "0 2 * * 0"
+    }
+  ]
 }

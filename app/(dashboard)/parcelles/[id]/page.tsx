@@ -20,6 +20,8 @@ import HealthStatusBadge from '@/components/satellite/HealthStatusBadge';
 import type { HealthStatus, TrendDirection } from '@/components/satellite/HealthStatusBadge';
 import { TemporalSlider } from '@/components/satellite/TemporalSlider';
 import { TemporalDataChart } from '@/components/satellite/TemporalDataChart';
+import DeforestationAlert from '@/components/satellite/DeforestationAlert';
+import type { DeforestationEvent } from '@/lib/satellite/types';
 import type { Parcelle, ParcelleWithPlanteur, ConformityStatus, Certification, UpdateParcelleInput } from '@/types/parcelles';
 import {
   CONFORMITY_STATUS_LABELS,
@@ -77,6 +79,12 @@ function ParcelleDetailContent() {
   const [showTemporalSlider, setShowTemporalSlider] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isLoadingTemporalData, setIsLoadingTemporalData] = useState(false);
+
+  // Deforestation alerts state
+  const [deforestationAlerts, setDeforestationAlerts] = useState<DeforestationEvent[]>([]);
+  const [loadingAlerts, setLoadingAlerts] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
 
   const canEdit = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:update');
   const canArchive = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:delete');
@@ -162,6 +170,41 @@ function ParcelleDetailContent() {
   useEffect(() => {
     fetchHealthStatus();
   }, [fetchHealthStatus]);
+
+  // Fetch deforestation alerts
+  const fetchDeforestationAlerts = useCallback(async () => {
+    if (!parcelleId) return;
+
+    setLoadingAlerts(true);
+    setAlertsError(null);
+
+    try {
+      const response = await fetch(`/api/satellite/deforestation?parcelleId=${parcelleId}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch deforestation alerts');
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data?.alerts) {
+        // Sort alerts by detection date (most recent first)
+        const sortedAlerts = result.data.alerts.sort((a: DeforestationEvent, b: DeforestationEvent) => {
+          return new Date(b.detectionDate).getTime() - new Date(a.detectionDate).getTime();
+        });
+        setDeforestationAlerts(sortedAlerts);
+      }
+    } catch (err) {
+      console.error('Error fetching deforestation alerts:', err);
+      setAlertsError(err instanceof Error ? err.message : 'Failed to load alerts');
+    } finally {
+      setLoadingAlerts(false);
+    }
+  }, [parcelleId]);
+
+  useEffect(() => {
+    fetchDeforestationAlerts();
+  }, [fetchDeforestationAlerts]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -381,6 +424,60 @@ function ParcelleDetailContent() {
       setIsLoadingTemporalData(false);
     }
   }, [parcelle]);
+
+  // Handle acknowledge deforestation alert
+  const handleAcknowledgeAlert = async (alertId: string, notes: string) => {
+    try {
+      const response = await fetch(`/api/satellite/deforestation/${alertId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'acknowledge',
+          notes,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to acknowledge alert');
+      }
+
+      // Refresh alerts
+      await fetchDeforestationAlerts();
+    } catch (err) {
+      console.error('Error acknowledging alert:', err);
+      alert('Erreur lors de la reconnaissance de l\'alerte');
+    }
+  };
+
+  // Handle dispute deforestation alert
+  const handleDisputeAlert = async (alertId: string, reason: string) => {
+    try {
+      const response = await fetch(`/api/satellite/deforestation/${alertId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'dispute',
+          reason,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to dispute alert');
+      }
+
+      // Refresh alerts
+      await fetchDeforestationAlerts();
+    } catch (err) {
+      console.error('Error disputing alert:', err);
+      alert('Erreur lors de la contestation de l\'alerte');
+    }
+  };
 
   // Format date
   const formatDate = (dateString: string) => {
@@ -959,6 +1056,113 @@ function ParcelleDetailContent() {
 
       {/* Temporal Analysis Section - Task 3.4.2 */}
       {parcelle.is_active && <TemporalAnalysisSection parcelleId={parcelle.id} />}
+
+      {/* Deforestation Alerts Section - Task 4.3.3 */}
+      {parcelle.is_active && (
+        <div className="rounded-lg bg-white p-6 shadow">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-semibold text-gray-900">Alertes de Déforestation</h2>
+              {/* Alert Count Badge */}
+              {deforestationAlerts.length > 0 && (
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  deforestationAlerts.some(alert => alert.status === 'pending')
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {deforestationAlerts.length} {deforestationAlerts.length === 1 ? 'alerte' : 'alertes'}
+                </span>
+              )}
+            </div>
+            {deforestationAlerts.length > 1 && !showAllAlerts && (
+              <button
+                onClick={() => setShowAllAlerts(true)}
+                className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
+              >
+                Voir toutes les alertes →
+              </button>
+            )}
+            {showAllAlerts && deforestationAlerts.length > 1 && (
+              <button
+                onClick={() => setShowAllAlerts(false)}
+                className="text-sm font-medium text-gray-600 hover:text-gray-700 transition-colors"
+              >
+                Masquer
+              </button>
+            )}
+          </div>
+
+          {loadingAlerts ? (
+            <div className="flex items-center justify-center py-8">
+              <LoadingSpinner className="h-8 w-8 text-primary-600" />
+              <span className="ml-3 text-sm text-gray-500">Chargement des alertes...</span>
+            </div>
+          ) : alertsError ? (
+            <div className="rounded-md bg-red-50 p-4">
+              <p className="text-sm text-red-700">{alertsError}</p>
+            </div>
+          ) : deforestationAlerts.length > 0 ? (
+            <div className="space-y-4">
+              {/* Show most recent alert prominently */}
+              {!showAllAlerts && deforestationAlerts.length > 0 && (
+                <DeforestationAlert
+                  alert={deforestationAlerts[0]}
+                  onAcknowledge={canEdit ? handleAcknowledgeAlert : undefined}
+                  onDispute={canEdit ? handleDisputeAlert : undefined}
+                />
+              )}
+
+              {/* Show all alerts when expanded */}
+              {showAllAlerts && deforestationAlerts.map((alert) => (
+                <DeforestationAlert
+                  key={alert.id}
+                  alert={alert}
+                  onAcknowledge={canEdit ? handleAcknowledgeAlert : undefined}
+                  onDispute={canEdit ? handleDisputeAlert : undefined}
+                />
+              ))}
+
+              {/* Summary for multiple alerts */}
+              {deforestationAlerts.length > 1 && !showAllAlerts && (
+                <div className="mt-3 rounded-md bg-gray-50 border border-gray-200 p-3">
+                  <p className="text-sm text-gray-700">
+                    <strong>{deforestationAlerts.length - 1}</strong> autre{deforestationAlerts.length - 1 > 1 ? 's' : ''} alerte{deforestationAlerts.length - 1 > 1 ? 's' : ''} disponible{deforestationAlerts.length - 1 > 1 ? 's' : ''}.
+                    {' '}
+                    <button
+                      onClick={() => setShowAllAlerts(true)}
+                      className="font-medium text-primary-600 hover:text-primary-700 underline"
+                    >
+                      Voir toutes les alertes
+                    </button>
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <svg 
+                className="mx-auto h-12 w-12 text-green-400" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
+                />
+              </svg>
+              <p className="mt-2 text-sm font-medium text-gray-900">
+                Aucune alerte de déforestation
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Cette parcelle ne présente aucun signe de déforestation détecté.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Certifications & Status */}
       <div className="grid gap-6 lg:grid-cols-2">

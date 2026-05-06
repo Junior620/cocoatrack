@@ -55,6 +55,8 @@ interface LeafletMapProps {
   enableNDVILayer?: boolean;
   /** Initial NDVI layer opacity (0-1) */
   ndviLayerOpacity?: number;
+  /** Enable deforestation alert indicators */
+  showDeforestationAlerts?: boolean;
 }
 
 export interface LeafletMapHandle {
@@ -79,6 +81,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   satelliteOverlayOpacity = 0.7,
   enableNDVILayer = false,
   ndviLayerOpacity = 0.7,
+  showDeforestationAlerts = true,
 }, ref: React.Ref<LeafletMapHandle>) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -103,6 +106,8 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   const [ndviRasterUrl, setNdviRasterUrl] = useState<string | null>(null);
   const [ndviError, setNdviError] = useState<string | null>(null);
   const [isLoadingNDVI, setIsLoadingNDVI] = useState(false);
+  const [deforestationAlerts, setDeforestationAlerts] = useState<Record<string, number>>({});
+  const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
   const prevSelectedIdRef = useRef<string | undefined>(undefined);
   // Track if the initial fit-to-bounds has already been done
   const hasInitialFitRef = useRef(false);
@@ -193,6 +198,21 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
       console.error('Failed to fetch health status for popup:', error);
     }
     
+    // Add deforestation alert count if available
+    let alertHTML = '';
+    const alertCount = deforestationAlerts[parcelle.id];
+    if (alertCount && alertCount > 0) {
+      alertHTML = `
+        <p>
+          <span class="text-gray-500">Alertes déforestation:</span> 
+          <span class="inline-flex items-center justify-center rounded-full font-semibold px-2 py-0.5 text-xs" 
+                style="background-color: #fee2e2; color: #991b1b">
+            ${alertCount} alerte${alertCount > 1 ? 's' : ''}
+          </span>
+        </p>
+      `;
+    }
+    
     return `
       <div class="parcelle-popup">
         <h3 class="font-semibold text-gray-900 mb-1">${parcelle.planteur?.name || 'Planteur inconnu'}</h3>
@@ -202,6 +222,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           <p><span class="text-gray-500">Village:</span> ${parcelle.village || 'Non renseigné'}</p>
           <p><span class="text-gray-500">Certifications:</span> ${certifications}</p>
           ${healthStatusHTML}
+          ${alertHTML}
           <p>
             <span class="text-gray-500">Statut:</span> 
             <span class="inline-block px-2 py-0.5 rounded text-xs font-medium" 
@@ -212,7 +233,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         </div>
       </div>
     `;
-  }, [getPolygonColor]);
+  }, [getPolygonColor, deforestationAlerts]);
 
   // Initialize map
   useEffect(() => {
@@ -353,6 +374,61 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     }
   }, [tileLayer]);
 
+  // Fetch deforestation alerts for visible parcelles
+  useEffect(() => {
+    if (!showDeforestationAlerts || parcelles.length === 0) {
+      setDeforestationAlerts({});
+      return;
+    }
+
+    const fetchDeforestationAlerts = async () => {
+      setIsLoadingAlerts(true);
+      
+      try {
+        // Fetch alerts for all visible parcelles
+        const alertPromises = parcelles.map(async (parcelle) => {
+          try {
+            const response = await fetch(
+              `/api/satellite/deforestation?parcelleId=${parcelle.id}&status=pending`
+            );
+            
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data) {
+                return {
+                  parcelleId: parcelle.id,
+                  count: result.data.summary?.pendingAlerts || 0,
+                };
+              }
+            }
+            return { parcelleId: parcelle.id, count: 0 };
+          } catch (error) {
+            console.error(`Failed to fetch alerts for parcelle ${parcelle.id}:`, error);
+            return { parcelleId: parcelle.id, count: 0 };
+          }
+        });
+
+        const results = await Promise.all(alertPromises);
+        
+        // Build alert count map
+        const alertMap: Record<string, number> = {};
+        results.forEach(({ parcelleId, count }) => {
+          if (count > 0) {
+            alertMap[parcelleId] = count;
+          }
+        });
+        
+        setDeforestationAlerts(alertMap);
+      } catch (error) {
+        console.error('Error fetching deforestation alerts:', error);
+      } finally {
+        setIsLoadingAlerts(false);
+      }
+    };
+
+    fetchDeforestationAlerts();
+  }, [parcelles, showDeforestationAlerts]);
+
   // Update parcelles on map
   useEffect(() => {
     if (!mapRef.current || !polygonLayerRef.current) return;
@@ -380,12 +456,15 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         style: (feature) => {
           const status = feature?.properties?.conformity_status || 'informations_manquantes';
           const isSelected = feature?.properties?.id === selectedId;
+          const hasAlerts = feature?.properties?.id && deforestationAlerts[feature.properties.id] > 0;
+          
           return {
             fillColor: getPolygonColor(status),
             fillOpacity: isSelected ? 0.6 : 0.4,
-            color: isSelected ? '#1f2937' : getPolygonColor(status),
-            weight: isSelected ? 3 : 2,
+            color: hasAlerts ? '#dc2626' : (isSelected ? '#1f2937' : getPolygonColor(status)),
+            weight: hasAlerts ? 4 : (isSelected ? 3 : 2),
             opacity: 1,
+            dashArray: hasAlerts ? '10, 5' : undefined,
           };
         },
         onEachFeature: (feature, layer) => {
@@ -443,17 +522,19 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
 
           // Hover effects
           layer.on('mouseover', () => {
+            const hasAlerts = parcelle.id && deforestationAlerts[parcelle.id] > 0;
             (layer as L.Path).setStyle({
               fillOpacity: 0.7,
-              weight: 3,
+              weight: hasAlerts ? 4 : 3,
             });
           });
 
           layer.on('mouseout', () => {
             const isSelected = parcelle.id === selectedId;
+            const hasAlerts = parcelle.id && deforestationAlerts[parcelle.id] > 0;
             (layer as L.Path).setStyle({
               fillOpacity: isSelected ? 0.6 : 0.4,
-              weight: isSelected ? 3 : 2,
+              weight: hasAlerts ? 4 : (isSelected ? 3 : 2),
             });
           });
         },
@@ -495,7 +576,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         }
       }
     }
-  }, [parcelles, selectedId, showCentroids, zoomToFit, onSelect, getPolygonColor, formatPopupContent]);
+  }, [parcelles, selectedId, showCentroids, zoomToFit, onSelect, getPolygonColor, formatPopupContent, deforestationAlerts]);
 
   // Handle initial bbox
   useEffect(() => {
@@ -1278,6 +1359,21 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           <LegendItem color={CONFORMITY_COLORS.en_cours} label="En cours" />
           <LegendItem color={CONFORMITY_COLORS.non_conforme} label="Non conforme" />
           <LegendItem color={CONFORMITY_COLORS.informations_manquantes} label="Info. manquantes" />
+          {showDeforestationAlerts && (
+            <div className="pt-1 mt-1 border-t border-gray-200">
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-3 w-3 rounded border-2"
+                  style={{ 
+                    borderColor: '#dc2626',
+                    borderStyle: 'dashed',
+                    backgroundColor: 'transparent'
+                  }}
+                />
+                <span className="text-xs text-gray-600">Alerte déforestation</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

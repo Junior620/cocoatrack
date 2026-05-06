@@ -3,6 +3,7 @@
 
 import { Metadata } from 'next';
 import { NotificationList, NotificationPreferences, PushNotificationSettings } from '@/components/notifications';
+import { SatelliteNotificationPreferences } from '@/components/satellite/SatelliteNotificationPreferences';
 
 export const metadata: Metadata = {
   title: 'Notifications | CocoaTrack',
@@ -24,6 +25,9 @@ export default function NotificationsPage() {
 
       {/* Notification Preferences */}
       <NotificationPreferences />
+
+      {/* Satellite Notification Preferences */}
+      <SatelliteNotificationPreferences />
 
       {/* Notification List */}
       <NotificationList />
