@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>CocoaTrack - Satellite Analysis Export</name>
+    <description>Parcelle data with NDVI analysis and deforestation detection</description>
+    <Style id="style_excellent">
+      <LineStyle>
+        <color>ff000000</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>b3165020</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Style id="style_good">
+      <LineStyle>
+        <color>ff000000</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>b33daf6f</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Style id="style_fair">
+      <LineStyle>
+        <color>ff000000</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>b324bffb</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Style id="style_poor">
+      <LineStyle>
+        <color>ff000000</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>b31f8ae6</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Style id="style_critical">
+      <LineStyle>
+        <color>ff000000</color>
+        <width>2</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>b34444ef</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Folder>
+      <name>P001 - Sample Parcelle - Temporal Analysis</name>
+      <description><![CDATA[Time-enabled visualization showing NDVI evolution from 1 janvier 2024 to 1 avril 2024]]></description>
+      <open>0</open>
+      <Placemark>
+        <name>P001 - Sample Parcelle - 1 janvier 2024</name>
+        <description><![CDATA[<div style="font-family: Arial, sans-serif; font-size: 12px;"><h3 style="margin: 0 0 10px 0; color: #2d5016;">Point 1 de 4</h3><p style="margin: 5px 0;"><strong>Date:</strong> 1 janvier 2024</p><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Analyse NDVI</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">NDVI:</td><td style="padding: 4px;">0.750</td></tr><tr><td style="padding: 4px; font-weight: bold;">État de Santé:</td><td style="padding: 4px;">Bon</td></tr><tr><td style="padding: 4px; font-weight: bold;">Couverture Nuageuse:</td><td style="padding: 4px;">12.0%</td></tr></table><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Informations de la Parcelle</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">Code:</td><td style="padding: 4px;">P001</td></tr><tr><td style="padding: 4px; font-weight: bold;">Surface:</td><td style="padding: 4px;">2.50 ha</td></tr><tr><td style="padding: 4px; font-weight: bold;">Village:</td><td style="padding: 4px;">Bafoussam</td></tr></table></div>]]></description>
+        <styleUrl>#style_good</styleUrl>
+        <TimeStamp>
+          <when>2024-01-01T00:00:00.000Z</when>
+        </TimeStamp>
+        <MultiGeometry>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>
+                10.4,5.5,0 10.41,5.5,0 10.41,5.51,0 10.4,5.51,0 10.4,5.5,0
+              </coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+        </MultiGeometry>
+      </Placemark>
+      <Placemark>
+        <name>P001 - Sample Parcelle - 1 février 2024</name>
+        <description><![CDATA[<div style="font-family: Arial, sans-serif; font-size: 12px;"><h3 style="margin: 0 0 10px 0; color: #2d5016;">Point 2 de 4</h3><p style="margin: 5px 0;"><strong>Date:</strong> 1 février 2024</p><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Analyse NDVI</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">NDVI:</td><td style="padding: 4px;">0.780</td></tr><tr><td style="padding: 4px; font-weight: bold;">État de Santé:</td><td style="padding: 4px;">Excellent</td></tr><tr><td style="padding: 4px; font-weight: bold;">Couverture Nuageuse:</td><td style="padding: 4px;">8.0%</td></tr></table><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Informations de la Parcelle</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">Code:</td><td style="padding: 4px;">P001</td></tr><tr><td style="padding: 4px; font-weight: bold;">Surface:</td><td style="padding: 4px;">2.50 ha</td></tr><tr><td style="padding: 4px; font-weight: bold;">Village:</td><td style="padding: 4px;">Bafoussam</td></tr></table></div>]]></description>
+        <styleUrl>#style_excellent</styleUrl>
+        <TimeStamp>
+          <when>2024-02-01T00:00:00.000Z</when>
+        </TimeStamp>
+        <MultiGeometry>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>
+                10.4,5.5,0 10.41,5.5,0 10.41,5.51,0 10.4,5.51,0 10.4,5.5,0
+              </coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+        </MultiGeometry>
+      </Placemark>
+      <Placemark>
+        <name>P001 - Sample Parcelle - 1 mars 2024</name>
+        <description><![CDATA[<div style="font-family: Arial, sans-serif; font-size: 12px;"><h3 style="margin: 0 0 10px 0; color: #2d5016;">Point 3 de 4</h3><p style="margin: 5px 0;"><strong>Date:</strong> 1 mars 2024</p><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Analyse NDVI</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">NDVI:</td><td style="padding: 4px;">0.550</td></tr><tr><td style="padding: 4px; font-weight: bold;">État de Santé:</td><td style="padding: 4px;">Moyen</td></tr><tr><td style="padding: 4px; font-weight: bold;">Couverture Nuageuse:</td><td style="padding: 4px;">25.0%</td></tr><tr><td colspan="2" style="padding: 4px; color: #E68A1F; font-weight: bold;">⚠ Changement significatif détecté</td></tr></table><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Informations de la Parcelle</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">Code:</td><td style="padding: 4px;">P001</td></tr><tr><td style="padding: 4px; font-weight: bold;">Surface:</td><td style="padding: 4px;">2.50 ha</td></tr><tr><td style="padding: 4px; font-weight: bold;">Village:</td><td style="padding: 4px;">Bafoussam</td></tr></table></div>]]></description>
+        <styleUrl>#style_fair</styleUrl>
+        <TimeStamp>
+          <when>2024-03-01T00:00:00.000Z</when>
+        </TimeStamp>
+        <MultiGeometry>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>
+                10.4,5.5,0 10.41,5.5,0 10.41,5.51,0 10.4,5.51,0 10.4,5.5,0
+              </coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+        </MultiGeometry>
+      </Placemark>
+      <Placemark>
+        <name>P001 - Sample Parcelle - 1 avril 2024</name>
+        <description><![CDATA[<div style="font-family: Arial, sans-serif; font-size: 12px;"><h3 style="margin: 0 0 10px 0; color: #2d5016;">Point 4 de 4</h3><p style="margin: 5px 0;"><strong>Date:</strong> 1 avril 2024</p><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Analyse NDVI</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">NDVI:</td><td style="padding: 4px;">0.650</td></tr><tr><td style="padding: 4px; font-weight: bold;">État de Santé:</td><td style="padding: 4px;">Bon</td></tr><tr><td style="padding: 4px; font-weight: bold;">Couverture Nuageuse:</td><td style="padding: 4px;">15.0%</td></tr></table><h4 style="margin: 10px 0 5px 0; color: #2d5016;">Informations de la Parcelle</h4><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 4px; font-weight: bold;">Code:</td><td style="padding: 4px;">P001</td></tr><tr><td style="padding: 4px; font-weight: bold;">Surface:</td><td style="padding: 4px;">2.50 ha</td></tr><tr><td style="padding: 4px; font-weight: bold;">Village:</td><td style="padding: 4px;">Bafoussam</td></tr></table></div>]]></description>
+        <styleUrl>#style_good</styleUrl>
+        <TimeStamp>
+          <when>2024-04-01T00:00:00.000Z</when>
+        </TimeStamp>
+        <MultiGeometry>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>
+                10.4,5.5,0 10.41,5.5,0 10.41,5.51,0 10.4,5.51,0 10.4,5.5,0
+              </coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+        </MultiGeometry>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>

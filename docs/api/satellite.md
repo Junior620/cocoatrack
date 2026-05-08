@@ -3749,14 +3749,1290 @@ For questions or issues with the Satellite Imagery API:
 
 ---
 
+## POST /api/satellite/export/kml
+
+Export parcelle data as KML files for Google Earth visualization with optional temporal analysis.
+
+### Authentication
+
+**Required**: Yes (Supabase JWT)
+
+Users can only export parcelles they have permission to view.
+
+### Request
+
+**Body Parameters**:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `parcelleIds` | UUID[] | Yes | - | Array of parcelle identifiers to export |
+| `includeTemporal` | Boolean | No | false | Include time-enabled temporal data |
+| `includeNDVI` | Boolean | No | true | Include NDVI analysis data |
+| `includeDeforestation` | Boolean | No | false | Include deforestation alerts |
+| `startDate` | ISO 8601 | No | - | Start date for temporal data (required if includeTemporal=true) |
+| `endDate` | ISO 8601 | No | - | End date for temporal data (required if includeTemporal=true) |
+| `format` | String | No | "kml" | Export format: "kml" or "kmz" (compressed) |
+
+**Request Example**:
+
+```json
+{
+  "parcelleIds": [
+    "123e4567-e89b-12d3-a456-426614174000",
+    "456e7890-e89b-12d3-a456-426614174001"
+  ],
+  "includeTemporal": true,
+  "includeNDVI": true,
+  "includeDeforestation": false,
+  "startDate": "2024-01-01",
+  "endDate": "2024-04-01",
+  "format": "kml"
+}
+```
+
+### Response
+
+**Success Response** (200 OK):
+
+```json
+{
+  "fileUrl": "https://storage.supabase.co/kml-exports/export-123456.kml",
+  "filename": "cocoatrack-export-2024-05-07.kml",
+  "estimatedSize": 45678,
+  "parcelleCount": 2,
+  "expiresAt": "2024-05-14T10:00:00Z"
+}
+```
+
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fileUrl` | String | Signed URL to download the generated KML file |
+| `filename` | String | Generated filename for the KML export |
+| `estimatedSize` | Number | File size in bytes |
+| `parcelleCount` | Number | Number of parcelles included in export |
+| `expiresAt` | ISO 8601 | Expiration date for the download URL (7 days) |
+
+### Temporal KML Features
+
+When `includeTemporal` is set to `true`, the generated KML file includes:
+
+1. **TimeStamp Elements**: Each temporal data point is represented as a separate placemark with a `<TimeStamp>` element
+2. **ISO 8601 Timestamps**: All timestamps are formatted in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+3. **Historical NDVI Overlays**: Each placemark includes NDVI data and health status for that specific date
+4. **Folder Organization**: Temporal placemarks are grouped in folders for easy navigation
+5. **Color-Coded Health Status**: Parcelle polygons are colored based on health status at each time point
+6. **Significant Change Indicators**: Dates with NDVI change > 0.15 are marked with ⚠ symbol
+
+### Viewing Temporal KML in Google Earth
+
+1. Download the KML file from the provided URL
+2. Open in Google Earth Desktop or Google Earth Web
+3. Enable the time slider: View > Show Time Slider (Ctrl+Alt+T)
+4. Use the time slider to navigate through temporal data points
+5. Click on parcelles to view detailed NDVI information for each date
+
+### Error Responses
+
+**400 Bad Request** - Invalid request parameters:
+
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Invalid request parameters",
+  "details": {
+    "field": "startDate",
+    "message": "startDate is required when includeTemporal is true"
+  }
+}
+```
+
+**401 Unauthorized** - Authentication required:
+
+```json
+{
+  "error": "UNAUTHORIZED",
+  "message": "Authentication required"
+}
+```
+
+**403 Forbidden** - User doesn't have access to requested parcelles:
+
+```json
+{
+  "error": "FORBIDDEN",
+  "message": "Access denied to one or more parcelles",
+  "details": {
+    "deniedParcelles": ["456e7890-e89b-12d3-a456-426614174001"]
+  }
+}
+```
+
+**404 Not Found** - Parcelle not found:
+
+```json
+{
+  "error": "NOT_FOUND",
+  "message": "One or more parcelles not found",
+  "details": {
+    "missingParcelles": ["999e9999-e89b-12d3-a456-426614174999"]
+  }
+}
+```
+
+**422 Unprocessable Entity** - Insufficient temporal data:
+
+```json
+{
+  "error": "INSUFFICIENT_DATA",
+  "message": "Insufficient temporal data for requested date range",
+  "details": {
+    "parcelleId": "123e4567-e89b-12d3-a456-426614174000",
+    "availablePoints": 1,
+    "requiredPoints": 2
+  }
+}
+```
+
+**500 Internal Server Error** - Export generation failed:
+
+```json
+{
+  "error": "EXPORT_FAILED",
+  "message": "Failed to generate KML export",
+  "details": {
+    "reason": "Error processing temporal data"
+  }
+}
+```
+
+### Rate Limiting
+
+- **Limit**: 10 exports per hour per user
+- **Headers**: 
+  - `X-RateLimit-Limit`: Maximum requests per hour
+  - `X-RateLimit-Remaining`: Remaining requests in current window
+  - `X-RateLimit-Reset`: Unix timestamp when limit resets
+
+### Notes
+
+- KML files are stored in Supabase Storage with 7-day retention
+- Maximum 100 parcelles per export request
+- Temporal exports limited to 12 months of data
+- KMZ compression reduces file size by ~50% (recommended for large exports)
+- Files are automatically deleted after expiration date
+
+### Related Documentation
+
+- [Temporal KML Export Guide](../satellite/temporal-kml-export.md)
+- [KML Export Examples](../satellite/examples/README.md)
+- [NDVI Calculation](../satellite/ndvi-calculation.md)
+
+---
+
 ## Future Endpoints
 
 The following endpoints are planned for future releases:
 
-- `POST /api/satellite/export/kml` - Export parcelle data as KML files for Google Earth visualization
 - `GET /api/satellite/yield-prediction` - ML-based yield predictions using NDVI trends and historical data
 - `POST /api/satellite/certification-report` - Generate EUDR compliance reports with before/after imagery
 - `GET /api/satellite/batch/ndvi` - Batch NDVI calculation for multiple parcelles
 - `POST /api/satellite/batch/deforestation` - Batch deforestation detection for cooperative-wide monitoring
 
 ---
+
+
+---
+
+### GET /api/satellite/export/csv
+
+Export temporal NDVI data for a parcelle as a CSV file with comprehensive statistics.
+
+#### Authentication
+
+**Required**: Yes (Supabase JWT)
+
+Users can only export data for parcelles they have permission to view, enforced through Row Level Security (RLS) policies.
+
+#### Request
+
+**Query Parameters**:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `parcelleId` | UUID | Yes | - | Unique identifier of the parcelle |
+| `startDate` | ISO 8601 | No | - | Start date for temporal range (YYYY-MM-DD) |
+| `endDate` | ISO 8601 | No | - | End date for temporal range (YYYY-MM-DD) |
+
+**Query Parameter Details**:
+
+- **parcelleId**: Must be a valid UUID format. The user must have access to this parcelle.
+- **startDate**: If omitted, includes all NDVI results from the beginning. Format: `YYYY-MM-DD`
+- **endDate**: If omitted, includes all NDVI results up to the present. Format: `YYYY-MM-DD`
+
+#### Response
+
+**Success Response** (200 OK):
+
+Returns a CSV file with the following structure:
+
+```csv
+date,mean_ndvi,min_ndvi,max_ndvi,std_dev,health_status,change_from_previous
+2024-01-01,0.7543,0.6521,0.8567,0.0543,excellent,0.0000
+2024-02-01,0.7821,0.6789,0.8901,0.0498,excellent,0.0278
+2024-03-01,0.7234,0.6123,0.8456,0.0612,good,-0.0587
+```
+
+**Response Headers**:
+
+| Header | Value | Description |
+|--------|-------|-------------|
+| `Content-Type` | `text/csv; charset=utf-8` | CSV file format |
+| `Content-Disposition` | `attachment; filename="ndvi-temporal-{code}-{date}.csv"` | Triggers download with filename |
+| `Cache-Control` | `no-cache, no-store, must-revalidate` | Prevents caching |
+
+**CSV Columns**:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `date` | Date (YYYY-MM-DD) | Date of NDVI calculation |
+| `mean_ndvi` | Number (4 decimals) | Mean NDVI value for the parcelle (-1 to 1) |
+| `min_ndvi` | Number (4 decimals) | Minimum NDVI value within the parcelle |
+| `max_ndvi` | Number (4 decimals) | Maximum NDVI value within the parcelle |
+| `std_dev` | Number (4 decimals) | Standard deviation of NDVI values |
+| `health_status` | String | Health classification (excellent, good, fair, poor, critical) |
+| `change_from_previous` | Number (4 decimals) | Change in mean NDVI from previous measurement (0 for first entry) |
+
+**CSV Features**:
+
+- **Chronological Order**: Results are sorted by calculation date (oldest to newest)
+- **Change Calculation**: Each row includes the change from the previous measurement
+- **Precision**: All NDVI values formatted to 4 decimal places for consistency
+- **Standard Format**: Compatible with Excel, Google Sheets, and data analysis tools
+
+#### Error Responses
+
+**400 Bad Request** - Invalid request parameters:
+
+```json
+{
+  "error": "Missing required parameter: parcelleId"
+}
+```
+
+```json
+{
+  "error": "Invalid parcelleId format"
+}
+```
+
+```json
+{
+  "error": "Invalid startDate format"
+}
+```
+
+**401 Unauthorized** - Authentication required:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+**404 Not Found** - Parcelle not found or no data available:
+
+```json
+{
+  "error": "Parcelle not found or access denied"
+}
+```
+
+```json
+{
+  "error": "No NDVI data found for this parcelle in the specified date range"
+}
+```
+
+**500 Internal Server Error** - Server error:
+
+```json
+{
+  "error": "Internal server error"
+}
+```
+
+#### Example Requests
+
+**Export all NDVI data for a parcelle**:
+
+```bash
+curl -X GET "https://cocoatrack.com/api/satellite/export/csv?parcelleId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -o ndvi-export.csv
+```
+
+**Export NDVI data for a specific date range**:
+
+```bash
+curl -X GET "https://cocoatrack.com/api/satellite/export/csv?parcelleId=123e4567-e89b-12d3-a456-426614174000&startDate=2024-01-01&endDate=2024-03-31" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -o ndvi-q1-2024.csv
+```
+
+**JavaScript/TypeScript Example**:
+
+```typescript
+async function exportNDVIData(parcelleId: string, startDate?: string, endDate?: string) {
+  const params = new URLSearchParams({ parcelleId });
+  if (startDate) params.append('startDate', startDate);
+  if (endDate) params.append('endDate', endDate);
+
+  const response = await fetch(`/api/satellite/export/csv?${params}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error);
+  }
+
+  // Download the CSV file
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ndvi-export-${parcelleId}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+// Usage
+await exportNDVIData('123e4567-e89b-12d3-a456-426614174000', '2024-01-01', '2024-12-31');
+```
+
+#### Use Cases
+
+1. **Data Analysis**: Import CSV into Excel, R, Python, or other analysis tools for custom analysis
+2. **Reporting**: Generate charts and reports using temporal NDVI trends
+3. **Compliance**: Export historical data for certification audits and EUDR compliance
+4. **Backup**: Archive NDVI data for long-term record keeping
+5. **Integration**: Feed data into external systems or dashboards
+
+#### Performance Considerations
+
+- **Response Time**: Typically < 2 seconds for up to 100 data points
+- **File Size**: Approximately 100 bytes per row (1KB for 10 rows, 10KB for 100 rows)
+- **Rate Limiting**: Subject to standard API rate limits (100 requests/minute)
+- **Caching**: CSV generation is not cached; data is fetched fresh from database
+
+#### Notes
+
+- The first row always has `change_from_previous = 0.0000` since there's no previous measurement
+- Results are automatically sorted by calculation date regardless of database order
+- Date filtering is inclusive (includes both startDate and endDate)
+- Empty date ranges return a 404 error with descriptive message
+- The filename includes the parcelle code (if available) and current date for easy identification
+
+---
+
+### POST /api/satellite/export/csv
+
+Export temporal NDVI data for a parcelle as a CSV file with comprehensive statistics. This endpoint provides the same functionality as the GET endpoint but accepts parameters in the request body instead of query parameters.
+
+#### Authentication
+
+**Required**: Yes (Supabase JWT)
+
+Users can only export data for parcelles they have permission to view, enforced through Row Level Security (RLS) policies.
+
+#### Request
+
+**Request Body** (JSON):
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `parcelleId` | UUID | Yes | - | Unique identifier of the parcelle |
+| `startDate` | ISO 8601 | No | - | Start date for temporal range (YYYY-MM-DD) |
+| `endDate` | ISO 8601 | No | - | End date for temporal range (YYYY-MM-DD) |
+
+**Request Body Schema**:
+
+```json
+{
+  "parcelleId": "123e4567-e89b-12d3-a456-426614174000",
+  "startDate": "2024-01-01",
+  "endDate": "2024-12-31"
+}
+```
+
+**Field Details**:
+
+- **parcelleId**: Must be a valid UUID format. The user must have access to this parcelle.
+- **startDate**: Optional. If omitted, includes all NDVI results from the beginning. Format: `YYYY-MM-DD`
+- **endDate**: Optional. If omitted, includes all NDVI results up to the present. Format: `YYYY-MM-DD`
+
+#### Response
+
+**Success Response** (200 OK):
+
+Returns a CSV file with the same structure as the GET endpoint:
+
+```csv
+date,mean_ndvi,min_ndvi,max_ndvi,std_dev,health_status,change_from_previous
+2024-01-01,0.7543,0.6521,0.8567,0.0543,excellent,0.0000
+2024-02-01,0.7821,0.6789,0.8901,0.0498,excellent,0.0278
+2024-03-01,0.7234,0.6123,0.8456,0.0612,good,-0.0587
+```
+
+**Response Headers**:
+
+| Header | Value | Description |
+|--------|-------|-------------|
+| `Content-Type` | `text/csv; charset=utf-8` | CSV file format |
+| `Content-Disposition` | `attachment; filename="ndvi-temporal-{code}-{date}.csv"` | Triggers download with filename |
+| `Cache-Control` | `no-cache, no-store, must-revalidate` | Prevents caching |
+
+**CSV Columns**: Same as GET endpoint (see above)
+
+#### Error Responses
+
+**400 Bad Request** - Invalid request body:
+
+```json
+{
+  "error": "Invalid request body",
+  "details": [
+    {
+      "code": "invalid_type",
+      "expected": "string",
+      "received": "undefined",
+      "path": ["parcelleId"],
+      "message": "Required"
+    }
+  ]
+}
+```
+
+```json
+{
+  "error": "Invalid request body",
+  "details": [
+    {
+      "validation": "uuid",
+      "code": "invalid_string",
+      "message": "Invalid parcelleId format",
+      "path": ["parcelleId"]
+    }
+  ]
+}
+```
+
+```json
+{
+  "error": "Invalid startDate format"
+}
+```
+
+**401 Unauthorized** - Authentication required:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+**404 Not Found** - Parcelle not found or no data available:
+
+```json
+{
+  "error": "Parcelle not found or access denied"
+}
+```
+
+```json
+{
+  "error": "No NDVI data found for this parcelle in the specified date range"
+}
+```
+
+**500 Internal Server Error** - Server error:
+
+```json
+{
+  "error": "Internal server error"
+}
+```
+
+#### Example Requests
+
+**Export all NDVI data for a parcelle**:
+
+```bash
+curl -X POST "https://cocoatrack.com/api/satellite/export/csv" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{"parcelleId": "123e4567-e89b-12d3-a456-426614174000"}' \
+  -o ndvi-export.csv
+```
+
+**Export NDVI data for a specific date range**:
+
+```bash
+curl -X POST "https://cocoatrack.com/api/satellite/export/csv" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "parcelleId": "123e4567-e89b-12d3-a456-426614174000",
+    "startDate": "2024-01-01",
+    "endDate": "2024-03-31"
+  }' \
+  -o ndvi-q1-2024.csv
+```
+
+**JavaScript/TypeScript Example**:
+
+```typescript
+async function exportNDVIDataPost(parcelleId: string, startDate?: string, endDate?: string) {
+  const body: any = { parcelleId };
+  if (startDate) body.startDate = startDate;
+  if (endDate) body.endDate = endDate;
+
+  const response = await fetch('/api/satellite/export/csv', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error);
+  }
+
+  // Download the CSV file
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ndvi-export-${parcelleId}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+// Usage
+await exportNDVIDataPost('123e4567-e89b-12d3-a456-426614174000', '2024-01-01', '2024-12-31');
+```
+
+**React Hook Example**:
+
+```typescript
+import { useState } from 'react';
+
+function useCSVExport() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const exportCSV = async (parcelleId: string, startDate?: string, endDate?: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const body: any = { parcelleId };
+      if (startDate) body.startDate = startDate;
+      if (endDate) body.endDate = endDate;
+
+      const response = await fetch('/api/satellite/export/csv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ndvi-export-${parcelleId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { exportCSV, loading, error };
+}
+
+// Usage in component
+function ExportButton({ parcelleId }: { parcelleId: string }) {
+  const { exportCSV, loading, error } = useCSVExport();
+
+  return (
+    <div>
+      <button 
+        onClick={() => exportCSV(parcelleId)} 
+        disabled={loading}
+      >
+        {loading ? 'Exporting...' : 'Export CSV'}
+      </button>
+      {error && <p className="error">{error}</p>}
+    </div>
+  );
+}
+```
+
+#### Use Cases
+
+1. **Programmatic Export**: Easier to use in applications where building query strings is cumbersome
+2. **Complex Filters**: Better suited for requests with multiple optional parameters
+3. **Security**: Request body is not logged in server access logs (unlike query parameters)
+4. **Large Payloads**: Can handle larger parameter sets if needed in future extensions
+
+#### Comparison: GET vs POST
+
+| Aspect | GET | POST |
+|--------|-----|------|
+| **Parameters** | Query string | Request body (JSON) |
+| **Caching** | Can be cached by browsers | Not cached |
+| **Bookmarking** | Can be bookmarked | Cannot be bookmarked |
+| **URL Length** | Limited by URL length | No URL length limit |
+| **Security** | Parameters visible in logs | Body not logged |
+| **Use Case** | Direct browser downloads | Programmatic API calls |
+
+**Recommendation**: Use GET for simple browser-based downloads and POST for programmatic API integrations.
+
+#### Performance Considerations
+
+- **Response Time**: Identical to GET endpoint (typically < 2 seconds for up to 100 data points)
+- **File Size**: Same as GET endpoint (approximately 100 bytes per row)
+- **Rate Limiting**: Subject to standard API rate limits (100 requests/minute)
+- **Validation**: Request body is validated using Zod schema for type safety
+
+#### Notes
+
+- Both GET and POST endpoints share the same underlying logic and produce identical output
+- POST endpoint provides better validation error messages through Zod schema
+- The first row always has `change_from_previous = 0.0000` since there's no previous measurement
+- Results are automatically sorted by calculation date regardless of database order
+- Date filtering is inclusive (includes both startDate and endDate)
+- Empty date ranges return a 404 error with descriptive message
+- The filename includes the parcelle code (if available) and current date for easy identification
+
+
+
+---
+
+## POST /api/satellite/reports/certification
+
+Generate a certification report for a single parcelle with EUDR compliance analysis.
+
+### Authentication
+
+**Required**: Yes (Supabase JWT)
+
+Users can only generate reports for parcelles they have permission to view, enforced through Row Level Security (RLS) policies.
+
+### Request
+
+**Method**: `POST`
+
+**Content-Type**: `application/json`
+
+**Request Body**:
+
+```json
+{
+  "parcelleId": "123e4567-e89b-12d3-a456-426614174000",
+  "options": {
+    "includeBeforeAfter": true,
+    "includeNDVITrend": true,
+    "includeYieldPrediction": false,
+    "baselineDate": "2020-12-31T00:00:00Z",
+    "language": "fr"
+  }
+}
+```
+
+**Request Body Schema**:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `parcelleId` | UUID | Yes | - | Unique identifier of the parcelle |
+| `options` | Object | Yes | - | Report generation options |
+| `options.includeBeforeAfter` | Boolean | No | `true` | Include before/after imagery comparison |
+| `options.includeNDVITrend` | Boolean | No | `true` | Include NDVI trend analysis over time |
+| `options.includeYieldPrediction` | Boolean | No | `false` | Include yield prediction section |
+| `options.baselineDate` | ISO 8601 | Yes | - | EUDR baseline date (typically 2020-12-31) |
+| `options.language` | String | No | `"fr"` | Report language: `"fr"` (French) or `"en"` (English) |
+
+**Request Body Details**:
+
+- **parcelleId**: Must be a valid UUID format. The user must have access to this parcelle.
+- **baselineDate**: EUDR baseline date for deforestation comparison. Typically December 31, 2020.
+- **includeBeforeAfter**: When `true`, includes side-by-side comparison of baseline and current satellite imagery.
+- **includeNDVITrend**: When `true`, includes a chart showing NDVI evolution over the past 12 months.
+- **includeYieldPrediction**: When `true`, includes ML-based yield prediction if available.
+- **language**: Determines the language of all text in the report. Supports French (`"fr"`) and English (`"en"`).
+
+### Response
+
+**Success Response** (200 OK):
+
+```json
+{
+  "success": true,
+  "reportUrl": "https://storage.supabase.co/certification-reports/certification-report-123e4567-1714567890123.pdf",
+  "expiresAt": "2024-05-10T12:00:00Z",
+  "complianceStatus": "compliant",
+  "message": "Certification report generated successfully for parcelle P-001"
+}
+```
+
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | Boolean | Indicates successful report generation |
+| `reportUrl` | String | URL to download the generated PDF report from Supabase Storage |
+| `expiresAt` | ISO 8601 | Expiration date for the report URL (7 days from generation) |
+| `complianceStatus` | String | EUDR compliance status: `"compliant"`, `"non-compliant"`, or `"requires-review"` |
+| `message` | String | Human-readable success message with parcelle identifier |
+
+**Compliance Status Values**:
+
+- **compliant**: No deforestation events detected, parcelle meets EUDR requirements
+- **non-compliant**: Deforestation events detected and acknowledged/disputed
+- **requires-review**: Pending deforestation alerts that need investigation
+
+### Error Responses
+
+**400 Bad Request** - Invalid request parameters:
+
+```json
+{
+  "error": "Invalid request data",
+  "details": [
+    {
+      "code": "invalid_type",
+      "expected": "string",
+      "received": "undefined",
+      "path": ["parcelleId"],
+      "message": "Required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Authentication required:
+
+```json
+{
+  "error": "Unauthorized - Authentication required"
+}
+```
+
+**404 Not Found** - Parcelle not found:
+
+```json
+{
+  "error": "Parcelle not found"
+}
+```
+
+**500 Internal Server Error** - Report generation failed:
+
+```json
+{
+  "error": "Failed to generate certification report",
+  "message": "PDF generation failed: insufficient data"
+}
+```
+
+### Report Contents
+
+The generated PDF certification report includes the following sections:
+
+1. **Header**: Company branding, report title, and generation date
+2. **Parcelle Information**: Code, label, village, region, surface area, planteur name
+3. **Compliance Status**: Visual indicator (compliant/non-compliant/requires-review) with color coding
+4. **NDVI Trend** (optional): Line chart showing vegetation health evolution over 12 months
+5. **Deforestation Analysis**: List of detected deforestation events with details (date, area affected, NDVI change)
+6. **Before/After Imagery** (optional): Side-by-side comparison of baseline (Dec 2020) and current satellite imagery
+7. **Yield Prediction** (optional): ML-based yield forecast with confidence interval
+8. **Digital Signature**: Timestamp, generated by user, and system credentials
+
+### Audit Logging
+
+Every report generation is logged in the `satellite_audit_logs` table with the following information:
+
+- User ID who generated the report
+- Parcelle ID
+- Event type: `"report_generated"`
+- Event description with parcelle code
+- Event metadata including compliance status, options, and report URL
+- Timestamp
+
+### Rate Limiting
+
+- **Standard Rate Limit**: 100 requests per minute per user
+- **Report Generation Time**: Typically 5-10 seconds per report
+- **Concurrent Requests**: Maximum 5 concurrent report generations per user
+
+### Storage and Expiration
+
+- **Storage Location**: Supabase Storage bucket `certification-reports`
+- **File Naming**: `certification-report-{parcelleId}-{timestamp}.pdf`
+- **Expiration**: Report URLs expire after 7 days
+- **File Size**: Typically 500KB - 2MB depending on included sections
+- **Retention**: Files are automatically deleted after 1 year for compliance
+
+### Example Usage
+
+#### JavaScript/TypeScript
+
+```typescript
+async function generateCertificationReport(parcelleId: string) {
+  const response = await fetch('/api/satellite/reports/certification', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      parcelleId,
+      options: {
+        includeBeforeAfter: true,
+        includeNDVITrend: true,
+        includeYieldPrediction: false,
+        baselineDate: '2020-12-31T00:00:00Z',
+        language: 'fr',
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error);
+  }
+
+  const data = await response.json();
+  console.log('Report URL:', data.reportUrl);
+  console.log('Compliance Status:', data.complianceStatus);
+  console.log('Expires At:', data.expiresAt);
+  
+  return data;
+}
+
+// Usage
+const report = await generateCertificationReport('123e4567-e89b-12d3-a456-426614174000');
+```
+
+#### React Hook Example
+
+```typescript
+import { useState } from 'react';
+
+interface ReportOptions {
+  includeBeforeAfter?: boolean;
+  includeNDVITrend?: boolean;
+  includeYieldPrediction?: boolean;
+  baselineDate: string;
+  language?: 'fr' | 'en';
+}
+
+function useCertificationReport() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reportData, setReportData] = useState<any>(null);
+
+  const generateReport = async (parcelleId: string, options: ReportOptions) => {
+    setLoading(true);
+    setError(null);
+    setReportData(null);
+
+    try {
+      const response = await fetch('/api/satellite/reports/certification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          parcelleId,
+          options: {
+            includeBeforeAfter: options.includeBeforeAfter ?? true,
+            includeNDVITrend: options.includeNDVITrend ?? true,
+            includeYieldPrediction: options.includeYieldPrediction ?? false,
+            baselineDate: options.baselineDate,
+            language: options.language ?? 'fr',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error);
+      }
+
+      const data = await response.json();
+      setReportData(data);
+      return data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Report generation failed';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { generateReport, loading, error, reportData };
+}
+
+// Usage in component
+function CertificationReportButton({ parcelleId }: { parcelleId: string }) {
+  const { generateReport, loading, error, reportData } = useCertificationReport();
+
+  const handleGenerateReport = async () => {
+    try {
+      const data = await generateReport(parcelleId, {
+        baselineDate: '2020-12-31T00:00:00Z',
+        includeBeforeAfter: true,
+        includeNDVITrend: true,
+        includeYieldPrediction: false,
+        language: 'fr',
+      });
+
+      // Open report in new tab
+      window.open(data.reportUrl, '_blank');
+    } catch (err) {
+      console.error('Failed to generate report:', err);
+    }
+  };
+
+  return (
+    <div>
+      <button 
+        onClick={handleGenerateReport} 
+        disabled={loading}
+        className="btn btn-primary"
+      >
+        {loading ? 'Generating Report...' : 'Generate Certification Report'}
+      </button>
+      
+      {error && (
+        <div className="alert alert-error mt-2">
+          {error}
+        </div>
+      )}
+      
+      {reportData && (
+        <div className="alert alert-success mt-2">
+          <p>Report generated successfully!</p>
+          <p>Compliance Status: <strong>{reportData.complianceStatus}</strong></p>
+          <a 
+            href={reportData.reportUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="btn btn-sm btn-outline"
+          >
+            Download Report
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### cURL Example
+
+```bash
+curl -X POST https://your-domain.com/api/satellite/reports/certification \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{
+    "parcelleId": "123e4567-e89b-12d3-a456-426614174000",
+    "options": {
+      "includeBeforeAfter": true,
+      "includeNDVITrend": true,
+      "includeYieldPrediction": false,
+      "baselineDate": "2020-12-31T00:00:00Z",
+      "language": "fr"
+    }
+  }'
+```
+
+### Use Cases
+
+1. **EUDR Compliance Verification**: Generate official reports for EU customs demonstrating no deforestation after Dec 31, 2020
+2. **Certification Audits**: Provide auditors with comprehensive parcelle analysis including imagery and NDVI trends
+3. **Cooperative Reporting**: Batch generate reports for all parcelles in a cooperative for annual reviews
+4. **Planteur Communication**: Share simplified reports with farmers showing their parcelle health status
+5. **Due Diligence**: Document parcelle conditions for buyers and supply chain partners
+
+### Performance Considerations
+
+- **Generation Time**: 5-10 seconds for standard report, up to 30 seconds with all optional sections
+- **File Size**: 500KB - 2MB depending on imagery and chart inclusion
+- **Concurrent Limits**: Maximum 5 concurrent report generations per user to prevent resource exhaustion
+- **Caching**: Report data is fetched fresh on each generation (no caching) to ensure accuracy
+- **Background Processing**: For batch reports (multiple parcelles), use the `/api/satellite/reports/batch` endpoint instead
+
+### Best Practices
+
+1. **Baseline Date**: Always use December 31, 2020 as the baseline date for EUDR compliance
+2. **Language Selection**: Use French (`"fr"`) for local stakeholders, English (`"en"`) for international auditors
+3. **Optional Sections**: Only include yield prediction if historical data is available (otherwise it shows "low confidence")
+4. **Error Handling**: Always handle 404 errors gracefully (parcelle may not have satellite data yet)
+5. **URL Expiration**: Download and store reports within 7 days, or regenerate as needed
+6. **Batch Operations**: For generating reports for multiple parcelles, use the batch endpoint to avoid rate limits
+
+### Related Endpoints
+
+- **POST /api/satellite/reports/batch**: Generate reports for multiple parcelles and package as ZIP
+- **GET /api/satellite/deforestation**: Check deforestation status before generating report
+- **GET /api/satellite/health-status/:parcelleId**: Get current health status for quick compliance check
+- **POST /api/satellite/export/kml**: Export parcelle data as KML for Google Earth visualization
+
+### Notes
+
+- Reports are generated in PDF format using jsPDF library
+- All dates and times in the report are displayed in the selected language's locale
+- Compliance status is automatically determined based on deforestation events
+- Digital signature includes timestamp and user credentials for audit trail
+- Reports are stored in Supabase Storage with automatic cleanup after 1 year
+- The endpoint validates all input parameters using Zod schema for type safety
+
+
+---
+
+## POST /api/satellite/yield-prediction
+
+Generate yield prediction for a parcelle using NDVI data and historical yields.
+
+### Authentication
+
+**Required**: Yes (Supabase JWT)
+
+Users can only generate predictions for parcelles they have permission to access.
+
+### Request
+
+**Content-Type**: `application/json`
+
+**Request Body**:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `parcelleId` | UUID | Yes | - | Unique identifier of the parcelle |
+| `harvestSeason` | String | No | Next season | Target harvest season in format "YYYY-QX" (e.g., "2024-Q4") |
+| `historicalYield` | Number[] | No | [] | Array of past yields in kg/ha for improved accuracy |
+| `storePrediction` | Boolean | No | true | Whether to store the prediction in the database |
+
+**Request Body Details**:
+
+- **parcelleId**: Must be a valid UUID format. The parcelle must have valid geometry and surface area.
+- **harvestSeason**: Must follow format "YYYY-QX" where X is 1-4. Cocoa harvest seasons in Cameroon:
+  - Q2 (April-June): Mid-crop harvest
+  - Q4 (October-December): Main harvest
+- **historicalYield**: Array of past yield values in kg/ha. Improves prediction accuracy when provided. Values must be positive numbers.
+- **storePrediction**: When true, stores the prediction in the database for future reference and model training.
+
+### Response
+
+**Success Response** (200 OK):
+
+```json
+{
+  "success": true,
+  "data": {
+    "prediction": {
+      "id": "550e8400-e29b-41d4-a716-446655440004",
+      "parcelleId": "550e8400-e29b-41d4-a716-446655440002",
+      "predictionDate": "2024-05-08T10:30:00.000Z",
+      "harvestSeason": "2024-Q4",
+      "predictedYieldKgPerHa": 520.5,
+      "confidenceLevel": "high",
+      "confidenceIntervalLower": 468.45,
+      "confidenceIntervalUpper": 572.55,
+      "modelVersion": "v1.0.0-simple-regression",
+      "inputFeatures": {
+        "meanNDVI": 0.75,
+        "ndviTrend": 0.02,
+        "historicalYield": [450, 480, 520],
+        "surfaceHectares": 5.2
+      },
+      "actualYieldKgPerHa": null,
+      "createdAt": "2024-05-08T10:30:00.000Z"
+    },
+    "stored": true
+  }
+}
+```
+
+**Response Fields**:
+
+- **prediction**: Complete yield prediction object
+  - **id**: Unique identifier for this prediction
+  - **parcelleId**: ID of the parcelle
+  - **predictionDate**: When the prediction was generated
+  - **harvestSeason**: Target harvest season
+  - **predictedYieldKgPerHa**: Predicted yield in kilograms per hectare
+  - **confidenceLevel**: Confidence level of the prediction
+    - `high`: ≥6 NDVI data points AND historical yield data (±10% interval)
+    - `medium`: ≥3 NDVI data points OR historical yield data (±20% interval)
+    - `low`: <3 NDVI data points AND no historical yield data (±30% interval)
+  - **confidenceIntervalLower**: Lower bound of confidence interval (kg/ha)
+  - **confidenceIntervalUpper**: Upper bound of confidence interval (kg/ha)
+  - **modelVersion**: Version of the prediction model used
+  - **inputFeatures**: Features used for prediction
+    - **meanNDVI**: Current mean NDVI value for the parcelle
+    - **ndviTrend**: NDVI change rate over past 3 months (NDVI units per month)
+    - **historicalYield**: Historical yield data provided (if any)
+    - **surfaceHectares**: Parcelle surface area
+  - **actualYieldKgPerHa**: Actual yield after harvest (null until recorded)
+  - **createdAt**: Timestamp when prediction was created
+- **stored**: Whether the prediction was stored in the database
+
+**Error Responses**:
+
+**400 Bad Request** - Invalid request parameters:
+
+```json
+{
+  "success": false,
+  "error": "Invalid request: Invalid parcelle ID format",
+  "code": "VALIDATION_ERROR"
+}
+```
+
+**401 Unauthorized** - Authentication required:
+
+```json
+{
+  "success": false,
+  "error": "Authentication required",
+  "code": "UNAUTHORIZED"
+}
+```
+
+**403 Forbidden** - User does not have access to the parcelle:
+
+```json
+{
+  "success": false,
+  "error": "Parcelle not in your cooperative",
+  "code": "FORBIDDEN"
+}
+```
+
+**404 Not Found** - Parcelle not found or missing required data:
+
+```json
+{
+  "success": false,
+  "error": "Parcelle has no valid surface area",
+  "code": "PARCELLE_DATA_NOT_FOUND"
+}
+```
+
+**422 Unprocessable Entity** - Insufficient NDVI data:
+
+```json
+{
+  "success": false,
+  "error": "Insufficient data for analysis",
+  "code": "INSUFFICIENT_DATA"
+}
+```
+
+**500 Internal Server Error** - Prediction generation failed:
+
+```json
+{
+  "success": false,
+  "error": "Failed to generate yield prediction",
+  "code": "PREDICTION_ERROR"
+}
+```
+
+### Example Requests
+
+**Basic prediction request**:
+
+```bash
+curl -X POST https://your-domain.com/api/satellite/yield-prediction \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "parcelleId": "550e8400-e29b-41d4-a716-446655440002"
+  }'
+```
+
+**Prediction with historical data**:
+
+```bash
+curl -X POST https://your-domain.com/api/satellite/yield-prediction \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "parcelleId": "550e8400-e29b-41d4-a716-446655440002",
+    "harvestSeason": "2024-Q4",
+    "historicalYield": [450, 480, 520],
+    "storePrediction": true
+  }'
+```
+
+**Prediction without storing**:
+
+```bash
+curl -X POST https://your-domain.com/api/satellite/yield-prediction \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "parcelleId": "550e8400-e29b-41d4-a716-446655440002",
+    "harvestSeason": "2025-Q2",
+    "storePrediction": false
+  }'
+```
+
+### Notes
+
+- The prediction model uses a simple regression approach based on NDVI values and trends
+- Historical yield data significantly improves prediction accuracy
+- Predictions are automatically stored in the database by default for model training
+- The confidence interval width depends on the confidence level:
+  - High confidence: ±10% of predicted yield
+  - Medium confidence: ±20% of predicted yield
+  - Low confidence: ±30% of predicted yield
+- Cocoa yields in Cameroon typically range from 400-600 kg/ha, with optimal conditions reaching up to 2000 kg/ha
+- The model requires current NDVI data and calculates NDVI trend over the past 3 months
+- If insufficient NDVI data is available, the endpoint returns a 422 error
+
+### Related Endpoints
+
+- `POST /api/satellite/ndvi` - Calculate NDVI for a parcelle (required for yield prediction)
+- `GET /api/satellite/temporal` - Get temporal NDVI data (shows NDVI trends)
+- `GET /api/satellite/health-status/:parcelleId` - Get current health status (based on NDVI)
+

@@ -21,6 +21,11 @@ import type { HealthStatus, TrendDirection } from '@/components/satellite/Health
 import { TemporalSlider } from '@/components/satellite/TemporalSlider';
 import { TemporalDataChart } from '@/components/satellite/TemporalDataChart';
 import DeforestationAlert from '@/components/satellite/DeforestationAlert';
+import { KMLExportButton } from '@/components/satellite/KMLExportButton';
+import ReportOptionsModal from '@/components/satellite/ReportOptionsModal';
+import type { ReportOptions } from '@/components/satellite/ReportOptionsModal';
+import ReportDownloadLink from '@/components/satellite/ReportDownloadLink';
+import YieldPredictionDisplay from '@/components/satellite/YieldPredictionDisplay';
 import type { DeforestationEvent } from '@/lib/satellite/types';
 import type { Parcelle, ParcelleWithPlanteur, ConformityStatus, Certification, UpdateParcelleInput } from '@/types/parcelles';
 import {
@@ -85,6 +90,12 @@ function ParcelleDetailContent() {
   const [loadingAlerts, setLoadingAlerts] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
+
+  // Report generation state
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const canEdit = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:update');
   const canArchive = user && hasPermission(user.role as ExtendedUserRole, 'parcelles:delete');
@@ -479,6 +490,87 @@ function ParcelleDetailContent() {
     }
   };
 
+  // Handle generate report
+  const handleGenerateReport = async (options: ReportOptions) => {
+    console.log('=== GENERATE REPORT CALLED ===', options);
+    
+    if (!parcelle) return;
+
+    setGeneratingReport(true);
+    setReportError(null);
+    setReportUrl(null);
+
+    try {
+      console.log('Calling API...');
+      const response = await fetch('/api/satellite/reports/certification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          parcelleId: parcelle.id,
+          options,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate report');
+      }
+
+      const result = await response.json();
+
+      console.log('Report generation result:', result);
+
+      if (result.success && result.data?.reportUrl) {
+        console.log('Report URL received:', result.data.reportUrl);
+        console.log('Report fileName:', result.data.fileName);
+        
+        setReportUrl(result.data.reportUrl);
+        setShowReportModal(false);
+        
+        // Download the PDF via fetch and create a blob
+        console.log('Fetching PDF from URL...');
+        const pdfResponse = await fetch(result.data.reportUrl);
+        
+        if (!pdfResponse.ok) {
+          throw new Error('Failed to download PDF from storage');
+        }
+        
+        const pdfBlob = await pdfResponse.blob();
+        console.log('PDF blob created, size:', pdfBlob.size);
+        
+        // Create download link with blob URL
+        const blobUrl = window.URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = result.data.fileName || `certification-report-${parcelle.code || parcelleId}.pdf`;
+        document.body.appendChild(link);
+        console.log('Clicking download link...');
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up blob URL
+        window.URL.revokeObjectURL(blobUrl);
+        console.log('Download triggered successfully');
+      } else {
+        console.error('Invalid result structure:', result);
+        throw new Error('Report URL not returned');
+      }
+    } catch (err) {
+      console.error('Error generating report:', err);
+      setReportError(err instanceof Error ? err.message : 'Failed to generate report');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
+  // Handle close report download
+  const handleCloseReportDownload = () => {
+    setReportUrl(null);
+    setReportError(null);
+  };
+
   // Format date
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -737,6 +829,38 @@ function ParcelleDetailContent() {
               parcelleId={parcelle.id} 
               parcelleCode={parcelle.code} 
             />
+          )}
+          {/* KML Export Button */}
+          {parcelle.is_active && (
+            <KMLExportButton
+              parcelleIds={parcelle.id}
+              parcelleCodes={parcelle.code ?? undefined}
+              variant="outline"
+              size="md"
+              showText={true}
+            />
+          )}
+          {/* Generate Report Button */}
+          {parcelle.is_active && (
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <svg 
+                className="mr-2 h-4 w-4" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" 
+                />
+              </svg>
+              Générer Rapport
+            </button>
           )}
         </div>
       </div>
@@ -1057,6 +1181,18 @@ function ParcelleDetailContent() {
       {/* Temporal Analysis Section - Task 3.4.2 */}
       {parcelle.is_active && <TemporalAnalysisSection parcelleId={parcelle.id} />}
 
+      {/* Yield Prediction Section - Task 5.5.4 */}
+      {parcelle.is_active && (
+        <YieldPredictionDisplay
+          parcelleId={parcelle.id}
+          cooperativeAverage={undefined} // TODO: Fetch cooperative average from API
+          canEdit={canEdit ?? false}
+          onActualYieldUpdate={(actualYield) => {
+            console.log('Actual yield updated:', actualYield);
+          }}
+        />
+      )}
+
       {/* Deforestation Alerts Section - Task 4.3.3 */}
       {parcelle.is_active && (
         <div className="rounded-lg bg-white p-6 shadow">
@@ -1370,6 +1506,58 @@ function ParcelleDetailContent() {
           Voir toutes les parcelles
         </Link>
       </div>
+
+      {/* Report Options Modal */}
+      <ReportOptionsModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        onGenerate={handleGenerateReport}
+        isGenerating={generatingReport}
+      />
+
+      {/* Report Download Link */}
+      {reportUrl && (
+        <div className="mt-6">
+          <ReportDownloadLink
+            reportUrl={reportUrl}
+            parcelleCode={parcelle.code ?? 'parcelle'}
+            onClose={handleCloseReportDownload}
+          />
+        </div>
+      )}
+
+      {/* Report Error */}
+      {reportError && (
+        <div className="mt-6 rounded-md bg-red-50 p-4">
+          <div className="flex items-start gap-2">
+            <svg 
+              className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+              />
+            </svg>
+            <div>
+              <h3 className="text-sm font-medium text-red-900">
+                Erreur lors de la génération du rapport
+              </h3>
+              <p className="mt-1 text-sm text-red-700">{reportError}</p>
+              <button
+                onClick={() => setReportError(null)}
+                className="mt-2 text-sm font-medium text-red-700 hover:text-red-800 underline"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

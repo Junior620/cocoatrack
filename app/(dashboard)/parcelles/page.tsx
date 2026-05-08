@@ -22,6 +22,7 @@ import { ParcelleTable, type SortConfig } from '@/components/parcelles/ParcelleT
 import { ParcellesByPlanteur } from '@/components/parcelles/ParcellesByPlanteur';
 import { ParcelleStatsCards } from '@/components/parcelles/ParcelleStatsCards';
 import { AssignParcellesModal, type AssignResult } from '@/components/parcelles/AssignParcellesModal';
+import { KMLExportButton } from '@/components/satellite/KMLExportButton';
 import { useBatchNDVICalculation } from '@/hooks/satellite/useBatchNDVICalculation';
 import { Activity, CheckCircle, XCircle } from 'lucide-react';
 
@@ -484,6 +485,18 @@ function ParcellesContent() {
                 <FileSpreadsheet className="mr-1.5 h-4 w-4" />
                 Excel
               </button>
+              
+              {/* Batch KML Export Button */}
+              {data?.data && data.data.length > 0 && (
+                <KMLExportButton
+                  parcelleIds={data.data.map(p => p.id)}
+                  parcelleCodes={data.data.map(p => p.code).filter((code): code is string => code !== null)}
+                  variant="outline"
+                  size="sm"
+                  showText={true}
+                  className="text-sm"
+                />
+              )}
               
               {/* Batch NDVI Calculation Button */}
               <button
