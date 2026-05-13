@@ -1,6 +1,68 @@
-# Fichiers de Test - Import Planteurs CSV
+# Fichiers de Test - CocoaTrack
 
-## Colonnes Attendues
+Ce dossier contient des fichiers de test pour différentes fonctionnalités de CocoaTrack.
+
+## 📂 Contenu
+
+### 1. Import Planteurs CSV
+Fichiers CSV pour tester l'import de planteurs.
+
+### 2. Données de Test Satellite
+Scripts SQL pour créer des parcelles de test dans des régions avec excellente couverture satellite.
+
+---
+
+## 🛰️ Données de Test Satellite
+
+### Fichiers disponibles
+
+#### `satellite-test-data.sql` (Script complet)
+- **10 planteurs** + **11 parcelles**
+- **Régions** : Brésil 🇧🇷, Équateur 🇪🇨, Espagne 🇪🇸, Italie 🇮🇹, Indonésie 🇮🇩
+- **Utilisation** : Test complet NDVI, analyse temporelle, déforestation
+
+#### `quick-satellite-test.sql` (Script rapide)
+- **3 planteurs** + **3 parcelles**
+- **Régions** : Brésil 🇧🇷, Équateur 🇪🇨, Espagne 🇪🇸
+- **Utilisation** : Test rapide des fonctionnalités principales
+
+#### `SATELLITE_TEST_DATA_README.md`
+Documentation complète pour l'utilisation des données de test satellite.
+
+### Pourquoi ces régions ?
+
+Les parcelles au Cameroun ont souvent une couverture nuageuse élevée (60-80%) qui limite la disponibilité d'images satellites. Ces données de test utilisent des régions avec :
+
+- ✅ Excellente couverture Sentinel-2 (passages tous les 5 jours)
+- ✅ Moins de nuages (10-50% selon la région)
+- ✅ Végétation variée (forêts, plantations, agriculture)
+- ✅ Zones de déforestation connues (Amazonie)
+
+### Installation rapide
+
+```bash
+# Option 1 : Script rapide (3 parcelles)
+# Copier test-data/quick-satellite-test.sql dans Supabase SQL Editor
+
+# Option 2 : Script complet (11 parcelles)
+# Copier test-data/satellite-test-data.sql dans Supabase SQL Editor
+```
+
+### Parcelles de test créées
+
+| Code | Région | Type | NDVI attendu | Utilité |
+|------|--------|------|--------------|---------|
+| PAR-BR-TEST | Brésil 🇧🇷 | Forêt dense | 0.7-0.9 | Déforestation |
+| PAR-EC-TEST | Équateur 🇪🇨 | Cacao | 0.5-0.7 | NDVI réaliste |
+| PAR-ES-TEST | Espagne 🇪🇸 | Agriculture | 0.4-0.6 | Images claires |
+
+**Plus de détails** : Voir `SATELLITE_TEST_DATA_README.md`
+
+---
+
+## 📊 Import Planteurs CSV
+
+### Colonnes Attendues
 
 | Colonne | Obligatoire | Type | Description |
 |---------|-------------|------|-------------|

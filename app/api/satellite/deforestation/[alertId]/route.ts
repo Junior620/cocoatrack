@@ -125,7 +125,7 @@ async function checkAlertAccess(
     // Get parcelle with planteur and cooperative info
     const { data: parcelle, error: parcelleError } = await supabase
       .from('parcelles')
-      .select('id, planteur_id, cooperative_id')
+      .select('id, planteur_id, planteurs(cooperative_id)')
       .eq('id', parcelleId)
       .maybeSingle();
 
@@ -134,10 +134,10 @@ async function checkAlertAccess(
     }
 
     // Type assertion for parcelle
-    const parcelleData = parcelle as {
-      id: string;
-      planteur_id: string | null;
-      cooperative_id: string | null;
+    const parcelleData = {
+      id: parcelle.id,
+      planteur_id: parcelle.planteur_id,
+      cooperative_id: (parcelle.planteurs as { cooperative_id: string | null } | null)?.cooperative_id ?? null,
     };
 
     // Cooperative Manager: Check if parcelle is in their cooperative
@@ -194,8 +194,7 @@ async function logAuditEvent(
       : 'deforestation_disputed';
 
     // Create audit log entry
-    // Note: satellite_audit_logs table may not be in generated types yet
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('satellite_audit_logs')
       .insert({
         user_id: userId,

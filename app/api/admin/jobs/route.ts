@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     const { data: recentExecutions, error: executionsError } = await supabase
       .from('job_executions')
       .select('*')
-      .eq('job_type', jobType)
+      .eq('job_type', jobType as 'deforestation_detection' | 'notification_digest' | 'cache_cleanup' | 'data_archival')
       .order('started_at', { ascending: false })
       .limit(10);
 

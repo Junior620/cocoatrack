@@ -141,7 +141,7 @@ export class NotificationBatchingService {
       const supabase = createClient();
       
       // Try to get existing batch
-      const { data: existingBatch, error: selectError } = await (supabase as any)
+      const { data: existingBatch } = await (supabase as any)
         .from('notification_batches')
         .select('*')
         .eq('user_id', userId)

@@ -26,6 +26,7 @@ import {
   SatelliteError,
 } from '../types';
 import { getAccessToken, refreshToken } from '../utils/gee-auth';
+import { getEE, evaluateEE } from '../utils/gee-sdk';
 import { redisCacheService } from './redis-cache.service';
 
 // ============================================================================
@@ -123,6 +124,11 @@ interface RetryOptions {
 export class ImageryService {
   private accessToken: string | null = null;
 
+  // In-memory cache for imagery data (tileUrl + metadata)
+  // Key: "parcelleId:YYYY-MM-DD", Value: { imagery, cachedAt }
+  private imageryCache = new Map<string, { imagery: ImageryData; cachedAt: number }>();
+  private readonly IMAGERY_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
   /**
    * Get or refresh the access token
    */
@@ -169,57 +175,38 @@ export class ImageryService {
       try {
         const token = await this.getToken();
 
-        const response = await fetch(url, {
+        // Use Node.js https module with IPv4 forced to avoid IPv6 timeout issues
+        const data = await this.makeHttpsRequest<T>(url, {
           ...options,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
-            ...options.headers,
+            ...(options.headers as Record<string, string> || {}),
           },
         });
 
-        // Handle rate limiting
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          const retryAfterSeconds = retryAfter ? parseInt(retryAfter, 10) : 60;
-          
-          throw new RateLimitError(
-            'Google Earth Engine API rate limit exceeded',
-            retryAfterSeconds
-          );
-        }
-
-        // Handle authentication errors
-        if (response.status === 401) {
-          // Try refreshing token once
-          if (attempt === 1) {
-            await this.refreshAccessToken();
-            continue; // Retry with new token
-          }
-          throw new AuthenticationError('Authentication failed after token refresh');
-        }
-
-        // Handle other errors
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new SatelliteError(
-            `Google Earth Engine API error: ${errorText}`,
-            'GEE_API_ERROR',
-            response.status
-          );
-        }
-
-        // Parse and return response
-        const data = await response.json();
-        return data as T;
+        return data;
 
       } catch (error) {
         lastError = error as Error;
 
+        // Handle rate limiting
+        if ((error as SatelliteError).code === 'RATE_LIMIT_EXCEEDED') {
+          throw error;
+        }
+
+        // Handle authentication errors
+        if (error instanceof AuthenticationError) {
+          if (attempt === 1) {
+            await this.refreshAccessToken();
+            continue;
+          }
+          throw error;
+        }
+
         // Don't retry on certain errors
         if (
           error instanceof RateLimitError ||
-          error instanceof AuthenticationError ||
           error instanceof InvalidGeometryError
         ) {
           throw error;
@@ -242,6 +229,90 @@ export class ImageryService {
       'REQUEST_FAILED',
       500
     );
+  }
+
+  /**
+   * Make HTTPS request using Node.js https module with IPv4 forced.
+   * This bypasses the IPv6 timeout issue with Node.js fetch.
+   */
+  private makeHttpsRequest<T>(url: string, options: RequestInit): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const https = require('https');
+      const { URL } = require('url');
+
+      const parsed = new URL(url);
+      const body = options.body ? String(options.body) : undefined;
+
+      const reqOptions = {
+        hostname: parsed.hostname,
+        path: parsed.pathname + (parsed.search || ''),
+        method: (options.method || 'GET').toUpperCase(),
+        family: 4, // Force IPv4
+        timeout: 30000,
+        headers: {
+          ...(options.headers as Record<string, string> || {}),
+          ...(body ? { 'Content-Length': Buffer.byteLength(body) } : {}),
+        },
+      };
+
+      const req = https.request(reqOptions, (res: any) => {
+        let data = '';
+        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('end', () => {
+          // Handle rate limiting
+          if (res.statusCode === 429) {
+            const retryAfter = res.headers['retry-after'];
+            reject(new RateLimitError(
+              'Google Earth Engine API rate limit exceeded',
+              retryAfter ? parseInt(retryAfter, 10) : 60
+            ));
+            return;
+          }
+
+          // Handle auth errors
+          if (res.statusCode === 401) {
+            reject(new AuthenticationError('Authentication failed'));
+            return;
+          }
+
+          // Handle other errors
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            reject(new SatelliteError(
+              `Google Earth Engine API error (${res.statusCode}): ${data}`,
+              'GEE_API_ERROR',
+              res.statusCode
+            ));
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(data) as T);
+          } catch {
+            reject(new SatelliteError(
+              `Failed to parse GEE response: ${data.substring(0, 200)}`,
+              'PARSE_ERROR',
+              500
+            ));
+          }
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new SatelliteError('GEE API request timed out', 'TIMEOUT', 504));
+      });
+
+      req.on('error', (e: Error) => {
+        reject(new SatelliteError(
+          `GEE API request failed: ${e.message}`,
+          'REQUEST_FAILED',
+          500
+        ));
+      });
+
+      if (body) req.write(body);
+      req.end();
+    });
   }
 
   /**
@@ -331,6 +402,25 @@ export class ImageryService {
   }
 
   /**
+   * Clear the in-memory imagery cache.
+   * Useful when tile URL format changes (e.g. after a code update).
+   */
+  clearImageryCache(): void {
+    this.imageryCache.clear();
+    console.log('[ImageryService] In-memory imagery cache cleared');
+  }
+
+  /**
+   * Check if a cached tileUrl is valid (proxied through our API, not a direct GEE URL).
+   * Direct GEE URLs are blocked by CORS in the browser.
+   */
+  private isTileUrlValid(tileUrl: string): boolean {
+    // Valid URLs start with /api/satellite/tiles/ (our proxy)
+    // Invalid: direct GEE URLs (earthengine.googleapis.com)
+    return tileUrl.startsWith('/api/satellite/tiles/');
+  }
+
+  /**
    * Get satellite imagery for a parcelle
    * 
    * Retrieves the most recent cloud-free Sentinel-2 imagery for the specified
@@ -382,27 +472,58 @@ export class ImageryService {
 
     // Check Redis cache first
     const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const cacheKey = `${parcelleId}:${dateKey}`;
+
+    // Check in-memory cache first (fast, no Redis needed)
+    const memCached = this.imageryCache.get(cacheKey);
+    if (memCached && Date.now() - memCached.cachedAt < this.IMAGERY_CACHE_TTL_MS) {
+      // Invalidate cache if tileUrl is a direct GEE URL (CORS issue)
+      if (!this.isTileUrlValid(memCached.imagery.tileUrl)) {
+        console.log(`[ImageryService] Invalidating in-memory cache for ${parcelleId} — tileUrl is not proxied`);
+        this.imageryCache.delete(cacheKey);
+      } else {
+        console.log(`[ImageryService] Using in-memory cached imagery for parcelle ${parcelleId}`);
+        return memCached.imagery;
+      }
+    }
+
     const cachedImagery = await redisCacheService.getImageryData(parcelleId, dateKey);
     
     if (cachedImagery) {
-      console.log(`[ImageryService] Using cached imagery for parcelle ${parcelleId}, date ${dateKey}`);
-      return cachedImagery;
+      // Invalidate Redis cache if tileUrl is a direct GEE URL (CORS issue)
+      if (!this.isTileUrlValid(cachedImagery.tileUrl)) {
+        console.log(`[ImageryService] Invalidating Redis cache for ${parcelleId} — tileUrl is not proxied`);
+        // Don't use this cache entry, fall through to fresh generation
+      } else {
+        console.log(`[ImageryService] Using cached imagery for parcelle ${parcelleId}, date ${dateKey}`);
+        this.imageryCache.set(cacheKey, { imagery: cachedImagery, cachedAt: Date.now() });
+        return cachedImagery;
+      }
     }
 
-    // Get available dates within 30 days before target date
-    const startDate = new Date(date);
-    startDate.setDate(startDate.getDate() - 30);
+    // Get available dates — try progressively wider windows and relaxed cloud cover
+    // for tropical regions where 20% cloud-free images are rare
+    let availableDates: ImageryDate[] = [];
+    const searchWindows = [
+      { days: 30,  cloud: cloudCoverThreshold },
+      { days: 60,  cloud: Math.min(cloudCoverThreshold + 20, 60) },
+      { days: 90,  cloud: 80 },
+    ];
 
-    const availableDates = await this.getAvailableDates(
-      geometry,
-      startDate,
-      date,
-      cloudCoverThreshold
-    );
+    for (const { days, cloud } of searchWindows) {
+      const startDate = new Date(date);
+      startDate.setDate(startDate.getDate() - days);
+
+      availableDates = await this.getAvailableDates(geometry, startDate, date, cloud);
+      if (availableDates.length > 0) {
+        console.log(`[ImageryService] Found ${availableDates.length} dates with window=${days}d, cloud<${cloud}%`);
+        break;
+      }
+    }
 
     if (availableDates.length === 0) {
       throw new ImageryUnavailableError(
-        `No cloud-free imagery available for parcelle within 30 days of ${date.toISOString()}`,
+        `No imagery available for parcelle within 90 days of ${date.toISOString()}`,
         parcelleId,
         date
       );
@@ -419,7 +540,7 @@ export class ImageryService {
     );
 
     const imagery: ImageryData = {
-      id: `imagery-${parcelleId}-${mostRecentDate.date.getTime()}`,
+      id: crypto.randomUUID(),
       parcelleId,
       acquisitionDate: mostRecentDate.date,
       cloudCoverPercent: mostRecentDate.cloudCoverPercent,
@@ -430,8 +551,9 @@ export class ImageryService {
       createdAt: new Date(),
     };
 
-    // Cache the imagery data in Redis
+    // Cache the imagery data in Redis and in-memory
     await redisCacheService.setImageryData(parcelleId, dateKey, imagery);
+    this.imageryCache.set(cacheKey, { imagery, cachedAt: Date.now() });
     console.log(`[ImageryService] Cached imagery for parcelle ${parcelleId}, date ${dateKey}`);
 
     return imagery;
@@ -469,53 +591,48 @@ export class ImageryService {
     endDate: Date,
     cloudCoverThreshold: number = DEFAULT_CLOUD_COVER_THRESHOLD
   ): Promise<ImageryDate[]> {
-    // Validate geometry
     this.validateGeometry(geometry);
 
-    // TODO: In a real implementation, this would:
-    // 1. Query GEE ImageCollection for Sentinel-2
-    // 2. Filter by geometry, date range, and cloud cover
-    // 3. Extract acquisition dates and cloud cover metadata
-    // 4. Return sorted list of available dates
-    //
-    // For now, we'll return a placeholder implementation
-    // This will be completed when GEE API integration is fully set up
+    try {
+      const ee = await getEE();
+      const geeGeometry = ee.Geometry(this.toGEEGeometry(geometry));
 
-    // Placeholder: Return empty array
-    // In production, this would make an actual GEE API call
-    const dates: ImageryDate[] = [];
+      // Query Sentinel-2 collection filtered by date, bounds, and cloud cover
+      const collection = ee.ImageCollection(SENTINEL2_COLLECTION)
+        .filterDate(startDate.toISOString(), endDate.toISOString())
+        .filterBounds(geeGeometry)
+        .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', cloudCoverThreshold))
+        .sort('system:time_start', true); // ascending by date
 
-    // Example of what the real implementation would look like:
-    /*
-    const geeGeometry = this.toGEEGeometry(geometry);
-    
-    const response = await this.makeRequest<GEEImageCollectionResponse>(
-      `${GEE_API_BASE_URL}/projects/${projectId}/assets:listImages`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          collection: SENTINEL2_COLLECTION,
-          geometry: geeGeometry,
-          startTime: startDate.toISOString(),
-          endTime: endDate.toISOString(),
-          filter: {
-            cloudCover: { max: cloudCoverThreshold }
-          }
-        }),
+      // Use aggregate_array to extract properties — avoids img.id() which is not
+      // available when mapping over a List in the SDK
+      const timeStarts = await evaluateEE<number[]>(
+        collection.aggregate_array('system:time_start')
+      );
+      const cloudCovers = await evaluateEE<number[]>(
+        collection.aggregate_array('CLOUDY_PIXEL_PERCENTAGE')
+      );
+
+      const dates: ImageryDate[] = (timeStarts ?? []).map((ts, i) => ({
+        date: new Date(ts),
+        cloudCoverPercent: cloudCovers?.[i] ?? 100,
+        available: true,
+      })).filter(d => !isNaN(d.date.getTime()));
+
+      console.log(`[ImageryService] Found ${dates.length} available dates between ${startDate.toISOString().split('T')[0]} and ${endDate.toISOString().split('T')[0]}`);
+      return dates;
+
+    } catch (error) {
+      console.error('[ImageryService] getAvailableDates failed:', error);
+      if (
+        error instanceof AuthenticationError ||
+        error instanceof RateLimitError ||
+        error instanceof InvalidGeometryError
+      ) {
+        throw error;
       }
-    );
-
-    const dates: ImageryDate[] = response.features.map(feature => ({
-      date: new Date(feature.properties['system:time_start']),
-      cloudCoverPercent: this.getCloudCover(feature.properties),
-      available: true,
-    }));
-
-    // Sort by date ascending
-    dates.sort((a, b) => a.date.getTime() - b.date.getTime());
-    */
-
-    return dates;
+      return [];
+    }
   }
 
   /**
@@ -548,35 +665,125 @@ export class ImageryService {
     date: Date,
     bands: string[]
   ): Promise<BandData> {
-    // Validate geometry
     this.validateGeometry(geometry);
 
-    // Validate bands
     if (!bands || bands.length === 0) {
-      throw new SatelliteError(
-        'At least one band must be specified',
-        'INVALID_BANDS',
-        400
-      );
+      throw new SatelliteError('At least one band must be specified', 'INVALID_BANDS', 400);
     }
 
-    // TODO: In a real implementation, this would:
-    // 1. Query GEE for the specific image at the date
-    // 2. Extract the requested bands
-    // 3. Sample pixel values within the geometry
-    // 4. Return band data as 2D arrays
-    //
-    // For now, we'll return a placeholder structure
-    // This will be completed when GEE API integration is fully set up
+    const bounds = this.calculateBounds(geometry);
 
-    const bandData: BandData = {
-      red: [], // TODO: Extract B4 band data from GEE
-      nir: [], // TODO: Extract B8 band data from GEE
-      bounds: this.calculateBounds(geometry),
-      resolution: SENTINEL2_RESOLUTION,
-    };
+    // Search window: ±30 days around the requested date (wider for cloudy tropical regions)
+    const startDate = new Date(date);
+    startDate.setDate(startDate.getDate() - 30);
+    const endDate = new Date(date);
+    endDate.setDate(endDate.getDate() + 30);
 
-    return bandData;
+    try {
+      const ee = await getEE();
+      const geeGeometry = ee.Geometry(this.toGEEGeometry(geometry));
+
+      // Get the least cloudy image in the ±30 day window
+      const collection = ee.ImageCollection(SENTINEL2_COLLECTION)
+        .filterDate(startDate.toISOString(), endDate.toISOString())
+        .filterBounds(geeGeometry)
+        .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', 80)) // Relaxed for cloudy regions
+        .sort('CLOUDY_PIXEL_PERCENTAGE', true); // least cloudy first
+
+      // Check if collection has any images before proceeding
+      const collectionSize = await evaluateEE<number>(collection.size());
+      if (collectionSize === 0) {
+        throw new ImageryUnavailableError(
+          `No Sentinel-2 imagery found within 30 days of ${date.toISOString().split('T')[0]} with cloud cover < 80%`,
+          'unknown',
+          date
+        );
+      }
+
+      const image = collection.first().select(bands);
+
+      // Try sampleRectangle first for larger parcelles (better spatial detail)
+      // Fall back to reduceRegion for small parcelles
+      let redArray: number[][] = [];
+      let nirArray: number[][] = [];
+      
+      try {
+        const sampled = image.sampleRectangle({
+          region: geeGeometry,
+          defaultValue: 0,
+        });
+
+        const result = await evaluateEE<Record<string, number[][]>>(sampled);
+
+        const redBandName = bands.find(b => b === 'B4') ?? bands[0];
+        const nirBandName = bands.find(b => b === 'B8') ?? bands[bands.length - 1];
+
+        redArray = result?.[redBandName] ?? [];
+        nirArray = result?.[nirBandName] ?? [];
+      } catch (sampleError) {
+        console.log(`[ImageryService] sampleRectangle failed, falling back to reduceRegion for small parcelle`);
+      }
+
+      // If sampleRectangle failed or returned empty arrays, use reduceRegion
+      if (redArray.length === 0 || nirArray.length === 0) {
+        console.log(`[ImageryService] Using reduceRegion for small parcelle geometry`);
+        
+        const redBandName = bands.find(b => b === 'B4') ?? bands[0];
+        const nirBandName = bands.find(b => b === 'B8') ?? bands[bands.length - 1];
+        
+        // Calculate mean values over the entire geometry
+        const stats = image.reduceRegion({
+          reducer: ee.Reducer.mean(),
+          geometry: geeGeometry,
+          scale: SENTINEL2_RESOLUTION,
+          maxPixels: 1e9,
+        });
+
+        const result = await evaluateEE<Record<string, number>>(stats);
+        
+        const redMean = result?.[redBandName];
+        const nirMean = result?.[nirBandName];
+
+        if (redMean === undefined || nirMean === undefined || redMean === null || nirMean === null) {
+          throw new ImageryUnavailableError(
+            `No valid pixel data for date ${date.toISOString().split('T')[0]}. The parcelle may be outside the image coverage or completely cloud-covered.`,
+            'unknown',
+            date
+          );
+        }
+
+        // Convert single mean values to 1x1 arrays for compatibility
+        redArray = [[redMean]];
+        nirArray = [[nirMean]];
+        
+        console.log(`[ImageryService] getBands: retrieved mean values (Red: ${redMean.toFixed(2)}, NIR: ${nirMean.toFixed(2)}) for small parcelle`);
+      } else {
+        console.log(`[ImageryService] getBands: retrieved ${redArray.length}x${redArray[0]?.length ?? 0} pixels for ${bands.join(', ')}`);
+      }
+
+      return {
+        red: redArray,
+        nir: nirArray,
+        bounds,
+        resolution: SENTINEL2_RESOLUTION,
+      };
+
+    } catch (error) {
+      if (
+        error instanceof ImageryUnavailableError ||
+        error instanceof AuthenticationError ||
+        error instanceof RateLimitError ||
+        error instanceof InvalidGeometryError
+      ) {
+        throw error;
+      }
+      console.error('[ImageryService] getBands failed:', error);
+      throw new SatelliteError(
+        `Failed to retrieve band data from Google Earth Engine: ${(error as Error).message}`,
+        'BAND_RETRIEVAL_FAILED',
+        500
+      );
+    }
   }
 
   /**
@@ -676,7 +883,7 @@ export class ImageryService {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
+        process.env.SUPABASE_SERVICE_KEY!
       );
 
       // Check if tiles exist in storage
@@ -752,100 +959,120 @@ export class ImageryService {
   }
 
   /**
-   * Get Google Earth Engine Map ID for imagery
-   * 
-   * This method queries GEE to get a Map ID that can be used to generate tile URLs.
-   * The Map ID represents a rendered visualization of the imagery.
-   * 
-   * @param geometry - Parcelle geometry
-   * @param date - Imagery date
-   * @returns GEE Map ID
+   * Get Google Earth Engine Map ID for imagery using the SDK.
+   * Returns a tile URL template that proxies through our Next.js API
+   * to avoid CORS and authentication issues in the browser.
    */
   private async getGEEMapId(
     geometry: MultiPolygon,
     date: Date
   ): Promise<string> {
-    // TODO: In production, this would make an actual GEE API call:
-    // 
-    // 1. Query Sentinel-2 collection for the date and geometry
-    // 2. Apply visualization parameters (bands, min/max values)
-    // 3. Request a Map ID from GEE
-    // 4. Return the Map ID
-    //
-    // Example GEE API call structure:
-    /*
-    const geeGeometry = this.toGEEGeometry(geometry);
-    const projectId = process.env.GOOGLE_EARTH_ENGINE_PROJECT_ID;
-    
-    const response = await this.makeRequest<{ name: string }>(
-      `${GEE_API_BASE_URL}/projects/${projectId}/maps`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          expression: {
-            functionInvocationValue: {
-              functionName: 'Image.visualize',
-              arguments: {
-                image: {
-                  functionInvocationValue: {
-                    functionName: 'ImageCollection.filterBounds',
-                    arguments: {
-                      collection: SENTINEL2_COLLECTION,
-                      geometry: geeGeometry,
-                    }
-                  }
-                },
-                visParams: {
-                  bands: ['B4', 'B3', 'B2'], // RGB
-                  min: 0,
-                  max: 3000,
-                }
-              }
-            }
-          }
-        }),
-      }
-    );
-    
-    // Extract map ID from response
-    const mapId = response.name.split('/').pop();
-    return mapId;
-    */
+    const ee = await getEE();
+    const geeGeometry = ee.Geometry(this.toGEEGeometry(geometry));
 
-    // Placeholder: Return a mock map ID
-    // This will be replaced with actual GEE API integration
-    const timestamp = date.getTime();
-    return `mock-map-id-${timestamp}`;
+    // Search window: ±15 days around the requested date
+    const startDate = new Date(date);
+    startDate.setDate(startDate.getDate() - 15);
+    const endDate = new Date(date);
+    endDate.setDate(endDate.getDate() + 15);
+
+    // Get least-cloudy Sentinel-2 image in the window
+    const image = ee.ImageCollection(SENTINEL2_COLLECTION)
+      .filterDate(startDate.toISOString(), endDate.toISOString())
+      .filterBounds(geeGeometry)
+      .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', 30))
+      .sort('CLOUDY_PIXEL_PERCENTAGE', true)
+      .first()
+      .select(['B4', 'B3', 'B2']); // True color RGB
+
+    // Visualize as true-color RGB
+    const visualized = image.visualize({
+      bands: ['B4', 'B3', 'B2'],
+      min: 0,
+      max: 3000,
+      gamma: 1.4,
+    });
+
+    // Get the map ID with embedded token from the SDK
+    const mapIdResult = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      visualized.getMapId({}, (mapId: Record<string, unknown>, err: string) => {
+        if (err) reject(new Error(`GEE getMapId failed: ${err}`));
+        else {
+          console.log('[ImageryService] getMapId result keys:', Object.keys(mapId ?? {}));
+          resolve(mapId);
+        }
+      });
+    });
+
+    // The SDK can return the token in different fields depending on version:
+    // - Legacy: { mapid: string, token: string }
+    // - Newer:  { mapid: string, urlFormat: string } (token embedded in urlFormat)
+    const geeMapId = (mapIdResult.mapid ?? mapIdResult.name ?? '') as string;
+    const token = (mapIdResult.token ?? '') as string;
+    const urlFormat = (mapIdResult.urlFormat ?? '') as string;
+
+    console.log(`[ImageryService] mapid=${geeMapId}, token=${token ? 'present' : 'empty'}, urlFormat=${urlFormat ? 'present' : 'empty'}`);
+
+    // If urlFormat is available, it contains the full tile URL template with auth embedded.
+    // We return it as DIRECT so createTileUrlTemplate can extract the mapId and proxy it.
+    if (urlFormat && !token) {
+      console.log(`[ImageryService] urlFormat available — will proxy via Next.js (avoids CORS)`);
+      return `DIRECT|||${urlFormat}`;
+    }
+
+    // Return the mapid and token joined with a triple-pipe separator
+    // (avoids conflicts since GEE tokens don't contain "|||")
+    return `${geeMapId}|||${token}`;
   }
 
   /**
-   * Create a tile URL template for map libraries
-   * 
-   * Generates a URL template that can be used with Leaflet's L.TileLayer
-   * or Google Maps' ImageMapType. The template includes {z}, {x}, {y} placeholders
-   * that will be replaced by the map library with actual tile coordinates.
-   * 
-   * @param mapId - GEE Map ID
-   * @returns Tile URL template
-   * 
-   * @example
-   * ```typescript
-   * const template = createTileUrlTemplate('abc123');
-   * // Returns: 'https://earthengine.googleapis.com/v1/projects/.../maps/abc123/tiles/{z}/{x}/{y}'
-   * 
-   * // Usage with Leaflet:
-   * L.tileLayer(template, { attribution: '© Google Earth Engine' }).addTo(map);
-   * ```
+   * Create a tile URL template for map libraries.
+   *
+   * All cases route through the Next.js proxy to avoid CORS issues in the browser.
+   *
+   * Case 1: DIRECT — urlFormat from newer SDK (contains token embedded in URL).
+   *   Extract the GEE map path from the urlFormat and proxy without a token
+   *   (the proxy generates its own OAuth token via service account).
+   *
+   * Case 2: Legacy — mapId + token from older SDK.
+   *   Proxy through /api/satellite/tiles/[mapId]/{z}/{x}/{y}?token=...
    */
   private createTileUrlTemplate(mapId: string): string {
-    const projectId = process.env.GOOGLE_EARTH_ENGINE_PROJECT_ID || 'cocoatrack';
-    
-    // GEE tile URL format
-    // In production, this would be the actual GEE tiles endpoint
-    const baseUrl = `${GEE_API_BASE_URL}/projects/${projectId}/maps/${mapId}/tiles`;
-    
-    // Return template with {z}/{x}/{y} placeholders for map libraries
-    return `${baseUrl}/{z}/{x}/{y}`;
+    // Case 1: urlFormat from newer SDK
+    // urlFormat looks like: https://earthengine.googleapis.com/v1/projects/.../maps/MAP_ID/tiles/{z}/{x}/{y}?token=...
+    if (mapId.startsWith('DIRECT|||')) {
+      const urlFormat = mapId.substring('DIRECT|||'.length);
+      console.log(`[ImageryService] Tile URL (direct urlFormat): ${urlFormat.substring(0, 120)}`);
+
+      // Extract the GEE map path (everything between /v1/ and /tiles/{z}/{x}/{y})
+      // e.g. "projects/earthengine-legacy/maps/abc123-def456"
+      const match = urlFormat.match(/\/v1\/(projects\/[^/]+\/maps\/[^/]+)\/tiles/);
+      if (match) {
+        const geeMapPath = match[1];
+        // Encode as base64url to avoid slash issues in Next.js dynamic routing
+        const encodedMapId = Buffer.from(geeMapPath).toString('base64url');
+        console.log(`[ImageryService] Proxying via /api/satellite/tiles/${geeMapPath}/{z}/{x}/{y} (no token — proxy uses OAuth)`);
+        // No token needed — the proxy generates its own OAuth token
+        return `/api/satellite/tiles/${encodedMapId}/{z}/{x}/{y}`;
+      }
+
+      // Fallback: if we can't parse the map path, log a warning and use the proxy with encoded URL
+      // This should not happen with standard GEE urlFormat
+      console.warn(`[ImageryService] Could not extract mapId from urlFormat, falling back to direct URL`);
+      return urlFormat;
+    }
+
+    // Case 2: Legacy mapId + token — proxy through Next.js
+    const separatorIdx = mapId.indexOf('|||');
+    const geeMapId = separatorIdx >= 0 ? mapId.substring(0, separatorIdx) : mapId;
+    const token = separatorIdx >= 0 ? mapId.substring(separatorIdx + 3) : '';
+
+    // Encode as base64url to avoid slash issues in Next.js dynamic routing
+    const encodedMapId = Buffer.from(geeMapId).toString('base64url');
+    const encodedToken = encodeURIComponent(token);
+    const tokenParam = token ? `?token=${encodedToken}` : '';
+    console.log(`[ImageryService] Proxying via /api/satellite/tiles/${geeMapId}/{z}/{x}/{y} (legacy token: ${token ? 'present' : 'none'})`);
+    return `/api/satellite/tiles/${encodedMapId}/{z}/{x}/{y}${tokenParam}`;
   }
 
   /**
@@ -865,7 +1092,7 @@ export class ImageryService {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
+        process.env.SUPABASE_SERVICE_KEY!
       );
 
       // Store metadata as JSON
@@ -910,7 +1137,7 @@ export class ImageryService {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
+        process.env.SUPABASE_SERVICE_KEY!
       );
 
       // Extract parcelle ID from cache key
@@ -920,7 +1147,7 @@ export class ImageryService {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 90);
 
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('satellite_cache_metadata')
         .upsert({
           parcelle_id: parcelleId,

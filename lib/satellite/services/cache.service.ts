@@ -106,9 +106,8 @@ export class CacheService {
     this.supabase = createClient();
   }
 
-  // satellite_cache_metadata is not yet in database.gen.ts — cast to any to bypass type check
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private cacheTable(): any {
+  // satellite_cache_metadata is now in database.gen.ts
+  private cacheTable() {
     return (this.supabase as any).from('satellite_cache_metadata');
   }
 

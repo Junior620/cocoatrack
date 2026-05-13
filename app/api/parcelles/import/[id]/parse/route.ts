@@ -95,7 +95,7 @@ export async function POST(
       ));
     }
 
-    const typedImportFile = importFile as ParcelImportFile;
+    const typedImportFile = importFile as unknown as ParcelImportFile;
 
     // Download the file from storage
     const { data: fileData, error: downloadError } = await supabase.storage

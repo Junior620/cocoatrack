@@ -90,6 +90,8 @@ function ParcelleDetailContent() {
   const [loadingAlerts, setLoadingAlerts] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const [detectingDeforestation, setDetectingDeforestation] = useState(false);
+  const [detectionResult, setDetectionResult] = useState<{ detected: boolean; message: string } | null>(null);
 
   // Report generation state
   const [showReportModal, setShowReportModal] = useState(false);
@@ -216,6 +218,31 @@ function ParcelleDetailContent() {
   useEffect(() => {
     fetchDeforestationAlerts();
   }, [fetchDeforestationAlerts]);
+
+  // Trigger deforestation detection via GEE
+  const handleDetectDeforestation = useCallback(async () => {
+    setDetectingDeforestation(true);
+    setDetectionResult(null);
+    try {
+      const res = await fetch('/api/satellite/deforestation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parcelleId, forceRedetect: false }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      setDetectionResult({ detected: json.data.detected, message: json.data.message });
+      // Refresh alerts list
+      await fetchDeforestationAlerts();
+    } catch (err) {
+      setDetectionResult({ detected: false, message: `Erreur : ${(err as Error).message}` });
+    } finally {
+      setDetectingDeforestation(false);
+    }
+  }, [parcelleId, fetchDeforestationAlerts]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1210,23 +1237,60 @@ function ParcelleDetailContent() {
                 </span>
               )}
             </div>
-            {deforestationAlerts.length > 1 && !showAllAlerts && (
+            <div className="flex items-center gap-2">
+              {/* GEE Detection Button */}
               <button
-                onClick={() => setShowAllAlerts(true)}
-                className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
+                onClick={handleDetectDeforestation}
+                disabled={detectingDeforestation}
+                className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                title="Analyse la déforestation via Google Earth Engine (comparaison NDVI baseline 2020 vs actuel)"
               >
-                Voir toutes les alertes →
+                {detectingDeforestation ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Analyse GEE…
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Analyser via GEE
+                  </>
+                )}
               </button>
-            )}
-            {showAllAlerts && deforestationAlerts.length > 1 && (
-              <button
-                onClick={() => setShowAllAlerts(false)}
-                className="text-sm font-medium text-gray-600 hover:text-gray-700 transition-colors"
-              >
-                Masquer
-              </button>
-            )}
+              {deforestationAlerts.length > 1 && !showAllAlerts && (
+                <button
+                  onClick={() => setShowAllAlerts(true)}
+                  className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
+                >
+                  Voir toutes →
+                </button>
+              )}
+              {showAllAlerts && deforestationAlerts.length > 1 && (
+                <button
+                  onClick={() => setShowAllAlerts(false)}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-700 transition-colors"
+                >
+                  Masquer
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Detection result banner */}
+          {detectionResult && (
+            <div className={`mb-4 rounded-lg border p-3 text-sm ${
+              detectionResult.detected
+                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+            }`}>
+              {detectionResult.message}
+            </div>
+          )}
 
           {loadingAlerts ? (
             <div className="flex items-center justify-center py-8">
@@ -1576,7 +1640,79 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [customDateRange, setCustomDateRange] = useState(false);
 
-  // Fetch temporal data
+  // Backfill state
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ calculated: number; skipped: number; failed: number } | null>(null);
+  const [backfillError, setBackfillError] = useState<string | null>(null);
+
+  // Handle backfill from GEE (12 derniers mois, bouton Historique GEE)
+  const handleBackfill = useCallback(async () => {
+    setBackfilling(true);
+    setBackfillResult(null);
+    setBackfillError(null);
+    try {
+      const res = await fetch('/api/satellite/ndvi/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parcelleId, months: 12, forceRecalculate: false, mode: 'batch' }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      setBackfillResult(json.data);
+      await fetchTemporalData();
+    } catch (err) {
+      setBackfillError((err as Error).message);
+    } finally {
+      setBackfilling(false);
+    }
+  }, [parcelleId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle backfill GEE pour une période personnalisée
+  const handleCustomPeriodBackfill = useCallback(async (customStart: Date, customEnd: Date) => {
+    setBackfilling(true);
+    setBackfillResult(null);
+    setBackfillError(null);
+    try {
+      // Calculer le nombre de mois entre les deux dates
+      const monthsDiff =
+        (customEnd.getFullYear() - customStart.getFullYear()) * 12 +
+        (customEnd.getMonth() - customStart.getMonth()) + 1;
+
+      // Sentinel-2 disponible depuis juin 2015
+      const sentinel2Start = new Date('2015-06-01');
+      const clampedStart = customStart < sentinel2Start ? sentinel2Start : customStart;
+      const clampedMonths = Math.max(1, Math.min(monthsDiff, 131));
+
+      const res = await fetch('/api/satellite/ndvi/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parcelleId,
+          months: clampedMonths,
+          forceRecalculate: false,
+          mode: 'batch',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      setBackfillResult(json.data);
+      // Mettre à jour la plage de dates et recharger le graphique
+      setStartDate(clampedStart);
+      setEndDate(customEnd);
+    } catch (err) {
+      setBackfillError((err as Error).message);
+    } finally {
+      setBackfilling(false);
+    }
+  }, [parcelleId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch temporal data depuis la base (après backfill ou changement de période)
   const fetchTemporalData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -1599,14 +1735,11 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
       const result = await response.json();
 
       if (result.success && result.data?.summary?.timeline) {
-        // Convert date strings back to Date objects
         const timelineData = result.data.summary.timeline.map((point: any) => ({
           ...point,
           date: new Date(point.date),
         }));
         setTimeline(timelineData);
-        
-        // Set selected date to the most recent data point
         if (timelineData.length > 0) {
           setSelectedDate(timelineData[timelineData.length - 1].date);
         }
@@ -1623,7 +1756,14 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
     fetchTemporalData();
   }, [fetchTemporalData]);
 
-  // Handle date range change
+  // Recharger le graphique après un backfill de période personnalisée
+  useEffect(() => {
+    if (backfillResult) {
+      fetchTemporalData();
+    }
+  }, [backfillResult]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle date range change (raccourcis rapides — charge depuis la DB)
   const handleDateRangeChange = (newStartDate: Date, newEndDate: Date) => {
     setStartDate(newStartDate);
     setEndDate(newEndDate);
@@ -1643,16 +1783,58 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
             Évolution de l'indice NDVI sur les 12 derniers mois
           </p>
         </div>
-        <button
-          onClick={() => setCustomDateRange(!customDateRange)}
-          className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {customDateRange ? 'Masquer Sélecteur' : 'Période Personnalisée'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Backfill button */}
+          <button
+            onClick={handleBackfill}
+            disabled={backfilling}
+            className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            title="Récupère les données NDVI réelles des 12 derniers mois depuis Google Earth Engine"
+          >
+            {backfilling ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Chargement…
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                Historique GEE
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => setCustomDateRange(!customDateRange)}
+            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {customDateRange ? 'Masquer Sélecteur' : 'Période Personnalisée'}
+          </button>
+        </div>
       </div>
+
+      {/* Backfill result / error */}
+      {backfillResult && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          ✅ {backfillResult.calculated} mois calculés depuis GEE
+          {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà présents`}
+          {backfillResult.failed > 0 && (
+            <span className="text-amber-700"> · {backfillResult.failed} mois sans image disponible</span>
+          )}
+        </div>
+      )}
+      {backfillError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          ❌ Erreur GEE : {backfillError}
+        </div>
+      )}
 
       {/* Custom Date Range Selector */}
       {customDateRange && (
@@ -1695,66 +1877,58 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
             </div>
             <div className="flex items-end">
               <button
-                onClick={fetchTemporalData}
-                disabled={loading}
-                className="w-full rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                onClick={() => handleCustomPeriodBackfill(startDate, endDate)}
+                disabled={backfilling}
+                className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
-                {loading ? 'Chargement...' : 'Appliquer'}
+                {backfilling ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Récupération GEE…
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                    Récupérer depuis GEE
+                  </>
+                )}
               </button>
             </div>
           </div>
           
-          {/* Quick date range buttons */}
+          {/* Quick date range buttons — déclenchent un backfill GEE sur la période */}
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              onClick={() => {
-                const now = new Date();
-                handleDateRangeChange(
-                  new Date(now.setMonth(now.getMonth() - 3)),
-                  new Date()
-                );
-              }}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            >
-              3 mois
-            </button>
-            <button
-              onClick={() => {
-                const now = new Date();
-                handleDateRangeChange(
-                  new Date(now.setMonth(now.getMonth() - 6)),
-                  new Date()
-                );
-              }}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            >
-              6 mois
-            </button>
-            <button
-              onClick={() => {
-                const now = new Date();
-                handleDateRangeChange(
-                  new Date(now.setMonth(now.getMonth() - 12)),
-                  new Date()
-                );
-              }}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            >
-              12 mois
-            </button>
-            <button
-              onClick={() => {
-                const now = new Date();
-                handleDateRangeChange(
-                  new Date(now.setMonth(now.getMonth() - 24)),
-                  new Date()
-                );
-              }}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            >
-              24 mois
-            </button>
+            {[
+              { label: '3 mois', months: 3 },
+              { label: '6 mois', months: 6 },
+              { label: '12 mois', months: 12 },
+              { label: '24 mois', months: 24 },
+              { label: '5 ans', months: 60 },
+              { label: 'Depuis 2015', months: 131 },
+            ].map(({ label, months }) => (
+              <button
+                key={label}
+                disabled={backfilling}
+                onClick={() => {
+                  const end = new Date();
+                  const start = new Date();
+                  start.setMonth(start.getMonth() - months);
+                  handleCustomPeriodBackfill(start, end);
+                }}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {label}
+              </button>
+            ))}
           </div>
+          <p className="mt-2 text-xs text-gray-400">
+            Les raccourcis récupèrent les données manquantes depuis Google Earth Engine (Sentinel-2).
+          </p>
         </div>
       )}
 

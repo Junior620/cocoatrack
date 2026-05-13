@@ -778,6 +778,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
 
     // Add satellite overlay if enabled and tile URL is available
     if (showSatelliteOverlay && satelliteTileUrl) {
+      console.log('[LeafletMap] Adding satellite TileLayer with URL:', satelliteTileUrl.substring(0, 120));
       const satelliteLayer = L.tileLayer(satelliteTileUrl, {
         opacity: satelliteOpacity,
         maxZoom: 19,
@@ -865,6 +866,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
 
         const data = await response.json();
         if (data.imagery?.tileUrl) {
+          console.log('[LeafletMap] tileUrl received:', data.imagery.tileUrl.substring(0, 120));
           setSatelliteTileUrl(data.imagery.tileUrl);
           setImageryError(null);
         } else {

@@ -97,7 +97,7 @@ async function checkPredictionAccess(
     // Get parcelle with planteur and cooperative info
     const { data: parcelle, error: parcelleError } = await supabase
       .from('parcelles')
-      .select('id, planteur_id, cooperative_id')
+      .select('id, planteur_id, planteurs(cooperative_id)')
       .eq('id', parcelleId)
       .maybeSingle();
 
@@ -105,10 +105,10 @@ async function checkPredictionAccess(
       return { hasAccess: false, error: 'Parcelle not found' };
     }
 
-    const parcelleData = parcelle as {
-      id: string;
-      planteur_id: string | null;
-      cooperative_id: string | null;
+    const parcelleData = {
+      id: parcelle.id,
+      planteur_id: parcelle.planteur_id,
+      cooperative_id: (parcelle.planteurs as { cooperative_id: string | null } | null)?.cooperative_id ?? null,
     };
 
     // Cooperative Manager: Check if parcelle is in their cooperative

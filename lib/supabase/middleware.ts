@@ -51,7 +51,15 @@ export async function updateSession(request: NextRequest) {
     (route) => request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith(route + '/')
   ) || request.nextUrl.pathname === '/' || request.nextUrl.pathname.startsWith('/api/auth');
 
-  if (!user && !isPublicRoute) {
+  // Allow API routes authenticated via CRON_SECRET (CLI / cron jobs)
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization');
+  const isCronAuthenticated = cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+  // Allow GEE tile proxy — tiles are fetched by Leaflet without session cookies
+  const isTileProxy = request.nextUrl.pathname.startsWith('/api/satellite/tiles/');
+
+  if (!user && !isPublicRoute && !isCronAuthenticated && !isTileProxy) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectTo', request.nextUrl.pathname);

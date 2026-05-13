@@ -1,27 +1,24 @@
 /**
  * GET /api/satellite/deforestation
+ * POST /api/satellite/deforestation
  * 
- * Retrieve deforestation alerts for a parcelle.
- * 
- * This endpoint:
- * 1. Validates query parameters (parcelleId, status)
- * 2. Authenticates the user
- * 3. Authorizes access to the parcelle
- * 4. Calls DeforestationService to retrieve alerts
- * 5. Returns alerts with summary statistics
+ * GET  - Retrieve deforestation alerts for a parcelle.
+ * POST - Trigger deforestation detection via GEE for a parcelle.
  * 
  * Requirements: Task 4.2.1
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, createServiceRoleSupabaseClient } from '@/lib/supabase/server';
 import { deforestationService } from '@/lib/satellite/services/deforestation.service';
 import { z } from 'zod';
 import {
   NDVICalculationError,
+  InsufficientDataError,
   type DeforestationCheckResponse,
   type DeforestationEvent,
 } from '@/lib/satellite/types';
+import type { MultiPolygon } from 'geojson';
 
 // ============================================================================
 // Request Validation Schema
@@ -100,7 +97,7 @@ async function checkParcelleAccess(
     // Get parcelle with planteur and cooperative info
     const { data: parcelle, error: parcelleError } = await supabase
       .from('parcelles')
-      .select('id, planteur_id, cooperative_id')
+      .select('id, planteur_id, planteurs(cooperative_id)')
       .eq('id', parcelleId)
       .maybeSingle();
 
@@ -109,10 +106,10 @@ async function checkParcelleAccess(
     }
 
     // Type assertion for parcelle
-    const parcelleData = parcelle as {
-      id: string;
-      planteur_id: string | null;
-      cooperative_id: string | null;
+    const parcelleData = {
+      id: parcelle.id,
+      planteur_id: parcelle.planteur_id,
+      cooperative_id: (parcelle.planteurs as { cooperative_id: string | null } | null)?.cooperative_id ?? null,
     };
 
     // Cooperative Manager: Check if parcelle is in their cooperative
@@ -298,5 +295,149 @@ export async function GET(request: NextRequest) {
       500,
       'INTERNAL_ERROR'
     );
+  }
+}
+
+// ============================================================================
+// POST Handler — Trigger deforestation detection via GEE
+// ============================================================================
+
+const DetectRequestSchema = z.object({
+  parcelleId: z.string().uuid('Invalid parcelle ID format'),
+  baselineDate: z.string().optional(), // ISO date string, defaults to 2020-12-31
+  currentDate: z.string().optional(),  // ISO date string, defaults to today
+  forceRedetect: z.boolean().optional().default(false),
+});
+
+/**
+ * POST /api/satellite/deforestation
+ *
+ * Triggers deforestation detection for a parcelle using GEE.
+ * Compares baseline NDVI (Dec 31, 2020 by default) with current NDVI.
+ *
+ * Accepts either:
+ *   a) A valid Supabase session cookie (browser users)
+ *   b) Authorization: Bearer <CRON_SECRET> (CLI / cron jobs)
+ *
+ * Request Body:
+ * {
+ *   "parcelleId": "uuid",
+ *   "baselineDate": "2020-12-31",  // optional
+ *   "currentDate": "2026-05-13",   // optional
+ *   "forceRedetect": false         // optional
+ * }
+ */
+export async function POST(request: NextRequest) {
+  try {
+    // Step 1: Parse and validate
+    const body = await request.json();
+    const validation = DetectRequestSchema.safeParse(body);
+    if (!validation.success) {
+      return errorResponse(
+        validation.error.errors.map(e => e.message).join(', '),
+        400,
+        'VALIDATION_ERROR'
+      );
+    }
+
+    const { parcelleId, baselineDate, currentDate, forceRedetect } = validation.data;
+
+    // Step 2: Authenticate — session cookie or CRON_SECRET
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get('authorization');
+    const isCronAuth = cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+    const supabase = isCronAuth
+      ? createServiceRoleSupabaseClient()
+      : await createServerSupabaseClient();
+
+    if (!isCronAuth) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        return errorResponse('Authentication required', 401, 'UNAUTHORIZED');
+      }
+    }
+
+    // Step 3: Get parcelle geometry and surface
+    const { data: parcelle, error: parcelleError } = await supabase
+      .from('parcelles')
+      .select('id, geometry, surface_hectares')
+      .eq('id', parcelleId)
+      .single();
+
+    if (parcelleError || !parcelle) {
+      return errorResponse('Parcelle not found', 404, 'NOT_FOUND');
+    }
+
+    const geometry = parcelle.geometry as unknown as MultiPolygon;
+    if (!geometry || geometry.type !== 'MultiPolygon') {
+      return errorResponse('Parcelle has no valid geometry', 422, 'INVALID_GEOMETRY');
+    }
+
+    const surfaceHectares = (parcelle as any).surface_hectares ?? 1.0;
+
+    // Step 4: Check if already detected recently (unless forceRedetect)
+    if (!forceRedetect) {
+      const existing = await deforestationService.getAlerts(parcelleId, undefined, supabase);
+      if (existing.length > 0) {
+        const mostRecent = existing.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0];
+        const hoursSince = (Date.now() - new Date(mostRecent.createdAt).getTime()) / 3600000;
+        if (hoursSince < 24) {
+          return NextResponse.json({
+            success: true,
+            data: {
+              message: 'Detection already run recently (< 24h). Use forceRedetect: true to override.',
+              lastDetection: mostRecent.createdAt,
+              alertCount: existing.length,
+            },
+          });
+        }
+      }
+    }
+
+    // Step 5: Run detection via GEE
+    console.log(`[Deforestation API] Starting detection for parcelle ${parcelleId}`);
+
+    const result = await deforestationService.detectDeforestation(
+      parcelleId,
+      geometry,
+      surfaceHectares,
+      {
+        baselineDate: baselineDate ? new Date(baselineDate) : undefined,
+        currentDate: currentDate ? new Date(currentDate) : undefined,
+        storeEvents: true,
+        supabase,
+      }
+    );
+
+    console.log(
+      `[Deforestation API] Detection complete for ${parcelleId}: ` +
+      `detected=${result.detected}, ndviChange=${result.ndviChange.toFixed(4)}`
+    );
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        detected: result.detected,
+        baselineNDVI: result.baselineNDVI,
+        currentNDVI: result.currentNDVI,
+        ndviChange: result.ndviChange,
+        affectedAreaHectares: result.affectedAreaHectares,
+        affectedAreaPercent: result.affectedAreaPercent,
+        event: result.event ?? null,
+        message: result.detected
+          ? `⚠️ Déforestation détectée — perte NDVI de ${Math.abs(result.ndviChange * 100).toFixed(1)}% sur ${result.affectedAreaHectares.toFixed(2)} ha`
+          : `✅ Aucune déforestation détectée (variation NDVI: ${result.ndviChange.toFixed(4)})`,
+      },
+    });
+
+  } catch (error) {
+    if (error instanceof NDVICalculationError || error instanceof InsufficientDataError) {
+      return errorResponse(error.message, 422, 'DETECTION_ERROR');
+    }
+    console.error('[Deforestation API] Unexpected error in POST:', error);
+    return errorResponse('Internal server error', 500, 'INTERNAL_ERROR');
   }
 }

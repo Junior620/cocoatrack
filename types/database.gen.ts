@@ -1503,6 +1503,700 @@ export type Database = {
           },
         ]
       }
+      job_executions: {
+        Row: {
+          id: string
+          job_name: string
+          job_type: "deforestation_detection" | "notification_digest" | "cache_cleanup" | "data_archival"
+          status: "running" | "completed" | "failed" | "cancelled"
+          started_at: string
+          completed_at: string | null
+          duration_ms: number | null
+          items_processed: number
+          items_failed: number
+          error_message: string | null
+          error_details: Json | null
+          execution_metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          job_name: string
+          job_type: "deforestation_detection" | "notification_digest" | "cache_cleanup" | "data_archival"
+          status: "running" | "completed" | "failed" | "cancelled"
+          started_at?: string
+          completed_at?: string | null
+          duration_ms?: number | null
+          items_processed?: number
+          items_failed?: number
+          error_message?: string | null
+          error_details?: Json | null
+          execution_metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          job_name?: string
+          job_type?: "deforestation_detection" | "notification_digest" | "cache_cleanup" | "data_archival"
+          status?: "running" | "completed" | "failed" | "cancelled"
+          started_at?: string
+          completed_at?: string | null
+          duration_ms?: number | null
+          items_processed?: number
+          items_failed?: number
+          error_message?: string | null
+          error_details?: Json | null
+          execution_metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notification_batches: {
+        Row: {
+          id: string
+          user_id: string
+          batch_date: string
+          notification_count: number
+          sent_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          batch_date?: string
+          notification_count?: number
+          sent_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          batch_date?: string
+          notification_count?: number
+          sent_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_batches_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batched_notifications: {
+        Row: {
+          id: string
+          batch_id: string
+          user_id: string
+          type: string
+          title: string
+          body: string
+          priority: "critical" | "high" | "medium" | "low"
+          metadata: Json | null
+          action_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          batch_id: string
+          user_id: string
+          type: string
+          title: string
+          body: string
+          priority: "critical" | "high" | "medium" | "low"
+          metadata?: Json | null
+          action_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          batch_id?: string
+          user_id?: string
+          type?: string
+          title?: string
+          body?: string
+          priority?: "critical" | "high" | "medium" | "low"
+          metadata?: Json | null
+          action_url?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batched_notifications_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "notification_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batched_notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      satellite_cache_metadata: {
+        Row: {
+          id: string
+          parcelle_id: string
+          cache_key: string
+          data_type: "imagery" | "ndvi" | "bands"
+          storage_url: string
+          size_bytes: number
+          last_accessed_at: string
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          parcelle_id: string
+          cache_key: string
+          data_type: "imagery" | "ndvi" | "bands"
+          storage_url: string
+          size_bytes: number
+          last_accessed_at?: string
+          expires_at: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          parcelle_id?: string
+          cache_key?: string
+          data_type?: "imagery" | "ndvi" | "bands"
+          storage_url?: string
+          size_bytes?: number
+          last_accessed_at?: string
+          expires_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "satellite_cache_metadata_parcelle_id_fkey"
+            columns: ["parcelle_id"]
+            isOneToOne: false
+            referencedRelation: "parcelles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      satellite_audit_logs: {
+        Row: {
+          id: string
+          user_id: string
+          parcelle_id: string | null
+          event_type: "imagery_retrieved" | "ndvi_calculated" | "deforestation_detected" | "deforestation_acknowledged" | "deforestation_disputed" | "kml_exported" | "report_generated" | "cache_accessed" | "api_request" | "error_occurred"
+          event_description: string
+          event_metadata: Json | null
+          ip_address: string | null
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          parcelle_id?: string | null
+          event_type: "imagery_retrieved" | "ndvi_calculated" | "deforestation_detected" | "deforestation_acknowledged" | "deforestation_disputed" | "kml_exported" | "report_generated" | "cache_accessed" | "api_request" | "error_occurred"
+          event_description: string
+          event_metadata?: Json | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          parcelle_id?: string | null
+          event_type?: "imagery_retrieved" | "ndvi_calculated" | "deforestation_detected" | "deforestation_acknowledged" | "deforestation_disputed" | "kml_exported" | "report_generated" | "cache_accessed" | "api_request" | "error_occurred"
+          event_description?: string
+          event_metadata?: Json | null
+          ip_address?: string | null
+          user_agent?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "satellite_audit_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "satellite_audit_logs_parcelle_id_fkey"
+            columns: ["parcelle_id"]
+            isOneToOne: false
+            referencedRelation: "parcelles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      collection_receipts: {
+        Row: {
+          id: string
+          cooperative_id: string
+          planteur_id: string
+          chef_planteur_id: string
+          contract_number: string
+          receipt_number: string
+          campaign: string
+          region: string | null
+          department: string | null
+          arrondissement: string | null
+          village: string | null
+          transaction_date: string
+          professional_card_number: string | null
+          payment_mode: "Espèces" | "Autres" | null
+          amount_paid: number | null
+          balance: number | null
+          pdf_url: string
+          pdf_file_name: string
+          pdf_file_size: number
+          extraction_method: "manual" | "ocr"
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cooperative_id: string
+          planteur_id: string
+          chef_planteur_id: string
+          contract_number: string
+          receipt_number: string
+          campaign: string
+          region?: string | null
+          department?: string | null
+          arrondissement?: string | null
+          village?: string | null
+          transaction_date: string
+          professional_card_number?: string | null
+          payment_mode?: "Espèces" | "Autres" | null
+          amount_paid?: number | null
+          balance?: number | null
+          pdf_url: string
+          pdf_file_name: string
+          pdf_file_size: number
+          extraction_method: "manual" | "ocr"
+          created_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cooperative_id?: string
+          planteur_id?: string
+          chef_planteur_id?: string
+          contract_number?: string
+          receipt_number?: string
+          campaign?: string
+          region?: string | null
+          department?: string | null
+          arrondissement?: string | null
+          village?: string | null
+          transaction_date?: string
+          professional_card_number?: string | null
+          payment_mode?: "Espèces" | "Autres" | null
+          amount_paid?: number | null
+          balance?: number | null
+          pdf_url?: string
+          pdf_file_name?: string
+          pdf_file_size?: number
+          extraction_method?: "manual" | "ocr"
+          created_by?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_receipts_cooperative_id_fkey"
+            columns: ["cooperative_id"]
+            isOneToOne: false
+            referencedRelation: "cooperatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_receipts_planteur_id_fkey"
+            columns: ["planteur_id"]
+            isOneToOne: false
+            referencedRelation: "planteurs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_receipts_chef_planteur_id_fkey"
+            columns: ["chef_planteur_id"]
+            isOneToOne: false
+            referencedRelation: "chef_planteurs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collection_receipts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      receipt_deliveries: {
+        Row: {
+          id: string
+          collection_receipt_id: string
+          delivery_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          collection_receipt_id: string
+          delivery_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          collection_receipt_id?: string
+          delivery_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receipt_deliveries_collection_receipt_id_fkey"
+            columns: ["collection_receipt_id"]
+            isOneToOne: false
+            referencedRelation: "collection_receipts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipt_deliveries_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      satellite_imagery: {
+        Row: {
+          id: string
+          parcelle_id: string
+          acquisition_date: string
+          cloud_cover_percent: number
+          satellite_source: string
+          tile_url: string
+          bounds: Json
+          resolution_meters: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          parcelle_id: string
+          acquisition_date: string
+          cloud_cover_percent: number
+          satellite_source?: string
+          tile_url: string
+          bounds: Json
+          resolution_meters: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          parcelle_id?: string
+          acquisition_date?: string
+          cloud_cover_percent?: number
+          satellite_source?: string
+          tile_url?: string
+          bounds?: Json
+          resolution_meters?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "satellite_imagery_parcelle_id_fkey"
+            columns: ["parcelle_id"]
+            isOneToOne: false
+            referencedRelation: "parcelles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ndvi_results: {
+        Row: {
+          id: string
+          parcelle_id: string
+          imagery_id: string | null
+          calculation_date: string
+          mean_ndvi: number
+          min_ndvi: number
+          max_ndvi: number
+          std_dev_ndvi: number
+          health_status: "excellent" | "good" | "fair" | "poor" | "critical"
+          ndvi_raster_url: string | null
+          ndvi_raster_bounds: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          parcelle_id: string
+          imagery_id?: string | null
+          calculation_date: string
+          mean_ndvi: number
+          min_ndvi: number
+          max_ndvi: number
+          std_dev_ndvi: number
+          health_status: "excellent" | "good" | "fair" | "poor" | "critical"
+          ndvi_raster_url?: string | null
+          ndvi_raster_bounds?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          parcelle_id?: string
+          imagery_id?: string | null
+          calculation_date?: string
+          mean_ndvi?: number
+          min_ndvi?: number
+          max_ndvi?: number
+          std_dev_ndvi?: number
+          health_status?: "excellent" | "good" | "fair" | "poor" | "critical"
+          ndvi_raster_url?: string | null
+          ndvi_raster_bounds?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ndvi_results_parcelle_id_fkey"
+            columns: ["parcelle_id"]
+            isOneToOne: false
+            referencedRelation: "parcelles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ndvi_results_imagery_id_fkey"
+            columns: ["imagery_id"]
+            isOneToOne: false
+            referencedRelation: "satellite_imagery"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deforestation_events: {
+        Row: {
+          id: string
+          parcelle_id: string
+          baseline_date: string
+          detection_date: string
+          baseline_ndvi: number
+          current_ndvi: number
+          ndvi_change: number
+          affected_area_hectares: number
+          affected_area_percent: number
+          status: "pending" | "acknowledged" | "disputed" | "resolved"
+          acknowledged_by: string | null
+          acknowledged_at: string | null
+          acknowledgment_notes: string | null
+          disputed_by: string | null
+          disputed_at: string | null
+          dispute_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          parcelle_id: string
+          baseline_date: string
+          detection_date: string
+          baseline_ndvi: number
+          current_ndvi: number
+          ndvi_change: number
+          affected_area_hectares: number
+          affected_area_percent: number
+          status?: "pending" | "acknowledged" | "disputed" | "resolved"
+          acknowledged_by?: string | null
+          acknowledged_at?: string | null
+          acknowledgment_notes?: string | null
+          disputed_by?: string | null
+          disputed_at?: string | null
+          dispute_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          parcelle_id?: string
+          baseline_date?: string
+          detection_date?: string
+          baseline_ndvi?: number
+          current_ndvi?: number
+          ndvi_change?: number
+          affected_area_hectares?: number
+          affected_area_percent?: number
+          status?: "pending" | "acknowledged" | "disputed" | "resolved"
+          acknowledged_by?: string | null
+          acknowledged_at?: string | null
+          acknowledgment_notes?: string | null
+          disputed_by?: string | null
+          disputed_at?: string | null
+          dispute_reason?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deforestation_events_parcelle_id_fkey"
+            columns: ["parcelle_id"]
+            isOneToOne: false
+            referencedRelation: "parcelles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deforestation_events_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deforestation_events_disputed_by_fkey"
+            columns: ["disputed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      yield_predictions: {
+        Row: {
+          id: string
+          parcelle_id: string
+          prediction_date: string
+          harvest_season: string
+          predicted_yield_kg_per_ha: number
+          confidence_level: "high" | "medium" | "low"
+          confidence_interval_lower: number
+          confidence_interval_upper: number
+          model_version: string
+          input_features: Json
+          actual_yield_kg_per_ha: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          parcelle_id: string
+          prediction_date: string
+          harvest_season: string
+          predicted_yield_kg_per_ha: number
+          confidence_level: "high" | "medium" | "low"
+          confidence_interval_lower: number
+          confidence_interval_upper: number
+          model_version: string
+          input_features: Json
+          actual_yield_kg_per_ha?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          parcelle_id?: string
+          prediction_date?: string
+          harvest_season?: string
+          predicted_yield_kg_per_ha?: number
+          confidence_level?: "high" | "medium" | "low"
+          confidence_interval_lower?: number
+          confidence_interval_upper?: number
+          model_version?: string
+          input_features?: Json
+          actual_yield_kg_per_ha?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "yield_predictions_parcelle_id_fkey"
+            columns: ["parcelle_id"]
+            isOneToOne: false
+            referencedRelation: "parcelles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scanned_invoices: {
+        Row: {
+          id: string
+          invoice_id: string
+          storage_path: string
+          original_filename: string
+          file_size_bytes: number
+          mime_type: "application/pdf" | "image/jpeg" | "image/png" | "image/webp"
+          thumbnail_path: string | null
+          created_by: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          storage_path: string
+          original_filename: string
+          file_size_bytes: number
+          mime_type: "application/pdf" | "image/jpeg" | "image/png" | "image/webp"
+          thumbnail_path?: string | null
+          created_by: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          storage_path?: string
+          original_filename?: string
+          file_size_bytes?: number
+          mime_type?: "application/pdf" | "image/jpeg" | "image/png" | "image/webp"
+          thumbnail_path?: string | null
+          created_by?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scanned_invoices_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      model_parameters: {
+        Row: {
+          id: string
+          model_version: string
+          parameters: Json
+          training_date: string
+          data_points_used: number
+          accuracy_metrics: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          model_version: string
+          parameters: Json
+          training_date: string
+          data_points_used: number
+          accuracy_metrics: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          model_version?: string
+          parameters?: Json
+          training_date?: string
+          data_points_used?: number
+          accuracy_metrics?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       chef_planteurs_with_stats: {

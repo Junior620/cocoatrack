@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
         if (status !== 'applied') {
           // Import exists but not yet applied — return it so the UI can resume
           console.log(`[upload] Resuming existing import ${(existingImport as { id: string }).id} (status: ${status})`);
-          const response = NextResponse.json(existingRecord as ParcelImportFile, { status: 200 });
+          const response = NextResponse.json(existingRecord as unknown as ParcelImportFile, { status: 200 });
           addSecurityHeaders(response);
           return response;
         }
@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Build response with 201 Created status
-    const response = NextResponse.json(importRecord as ParcelImportFile, { status: 201 });
+    const response = NextResponse.json(importRecord as unknown as ParcelImportFile, { status: 201 });
 
     // Add security headers
     addSecurityHeaders(response);

@@ -141,6 +141,7 @@ export function GoogleMapClient({
         const params = new URLSearchParams({
           parcelleId: selectedParcelleId,
           cloudCoverThreshold: '20',
+          daysOffset: '365', // Chercher dans les 12 derniers mois
         });
 
         const response = await fetch(`/api/satellite/imagery?${params.toString()}`);

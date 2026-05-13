@@ -176,11 +176,11 @@ export async function POST(request: NextRequest) {
             : null,
         },
         complianceStatus,
-        deforestation: deforestationEvents || undefined,
-        ndviTrend: ndviTrend || undefined,
-        baselineImagery: baselineImagery || undefined,
-        currentImagery: currentImagery || undefined,
-        yieldPrediction: yieldPrediction,
+        deforestation: (deforestationEvents || undefined) as unknown as CertificationReportData['deforestation'],
+        ndviTrend: (ndviTrend || undefined) as unknown as CertificationReportData['ndviTrend'],
+        baselineImagery: (baselineImagery || undefined) as unknown as CertificationReportData['baselineImagery'],
+        currentImagery: (currentImagery || undefined) as unknown as CertificationReportData['currentImagery'],
+        yieldPrediction: yieldPrediction as unknown as CertificationReportData['yieldPrediction'],
         generatedBy: user.email || user.id,
       };
 

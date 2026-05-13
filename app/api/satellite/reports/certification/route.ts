@@ -108,7 +108,7 @@ async function checkParcelleAccess(
     // Get parcelle with planteur and cooperative info
     const { data: parcelle, error: parcelleError } = await supabase
       .from('parcelles')
-      .select('id, planteur_id, planteur:planteurs!inner(cooperative_id)')
+      .select('id, planteur_id, planteur:planteurs(cooperative_id)')
       .eq('id', parcelleId)
       .maybeSingle();
 

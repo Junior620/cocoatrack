@@ -125,7 +125,7 @@ export async function POST(
       ));
     }
 
-    const typedImportFile = importFile as ParcelImportFile;
+    const typedImportFile = importFile as unknown as ParcelImportFile;
 
     // Check if status is 'parsed' (ready for preview)
     if (typedImportFile.import_status !== 'parsed') {

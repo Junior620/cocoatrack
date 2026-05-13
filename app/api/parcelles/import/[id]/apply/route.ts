@@ -155,7 +155,7 @@ export async function POST(
       ));
     }
 
-    const typedImportFile = importFile as ParcelImportFile;
+    const typedImportFile = importFile as unknown as ParcelImportFile;
 
     // Check if already applied - REFUSE with VALIDATION_ERROR "Already applied"
     if (typedImportFile.import_status === 'applied') {

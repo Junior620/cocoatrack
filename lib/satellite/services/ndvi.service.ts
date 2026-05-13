@@ -176,14 +176,30 @@ export class NDVIService {
       const bandData = await this.retrieveBands(geometry, date);
 
       // Step 3: Calculate pixel-wise NDVI values (OPTIMIZED: uses Web Worker)
-      const ndviValues = await this.calculatePixelWiseNDVI(
-        bandData.red,
-        bandData.nir
-      );
+      // Special case: if band data is 1x1 (from reduceRegion for small parcelles),
+      // calculate NDVI directly from the mean values without the pixel-count check
+      let ndviValues: number[];
+      let isMeanValueOnly = false;
+
+      if (bandData.red.length === 1 && bandData.red[0].length === 1) {
+        // Single mean value from reduceRegion — calculate NDVI directly
+        isMeanValueOnly = true;
+        const red = bandData.red[0][0];
+        const nir = bandData.nir[0][0];
+        const ndvi = this.calculatePixelNDVI(nir, red);
+        ndviValues = [ndvi];
+        console.log(`[NDVI Service] Small parcelle: direct NDVI from mean values = ${ndvi.toFixed(4)}`);
+      } else {
+        ndviValues = await this.calculatePixelWiseNDVI(
+          bandData.red,
+          bandData.nir
+        );
+      }
 
       // Step 4: Validate we have sufficient data
+      // Skip pixel count check for mean-value-only calculations (small parcelles)
       const validPixelCount = ndviValues.filter(v => !isNaN(v)).length;
-      if (validPixelCount < MIN_PIXEL_COUNT) {
+      if (!isMeanValueOnly && validPixelCount < MIN_PIXEL_COUNT) {
         throw new InsufficientDataError(
           `Insufficient valid pixels for NDVI calculation. Required: ${MIN_PIXEL_COUNT}, Available: ${validPixelCount}`,
           MIN_PIXEL_COUNT,

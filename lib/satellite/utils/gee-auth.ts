@@ -177,6 +177,68 @@ export async function createJWT(config: GEEAuthConfig): Promise<string> {
 }
 
 /**
+ * Fallback: Exchange JWT using Node.js https module with IPv4 forced.
+ * Used when fetch() fails due to IPv6 timeout issues.
+ */
+async function exchangeJWTViaHttps(jwt: string): Promise<AuthToken> {
+  return new Promise((resolve, reject) => {
+    const https = require('https');
+    const body = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
+    }).toString();
+
+    const options = {
+      hostname: 'oauth2.googleapis.com',
+      path: '/token',
+      method: 'POST',
+      family: 4, // Force IPv4
+      timeout: 15000,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+
+    const req = https.request(options, (res: any) => {
+      let data = '';
+      res.on('data', (chunk: string) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (!parsed.access_token || !parsed.expires_in) {
+            reject(new AuthenticationError(
+              `Invalid token response: ${data}`
+            ));
+            return;
+          }
+          const expiresAt = new Date(Date.now() + parsed.expires_in * 1000);
+          resolve({
+            accessToken: parsed.access_token,
+            expiresAt,
+            tokenType: parsed.token_type || 'Bearer',
+          });
+        } catch (e) {
+          reject(new AuthenticationError(`Failed to parse token response: ${data}`));
+        }
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new AuthenticationError('Token exchange timed out (IPv4 fallback)'));
+    });
+
+    req.on('error', (e: Error) => {
+      reject(new AuthenticationError(`Token exchange failed (IPv4 fallback): ${e.message}`));
+    });
+
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
  * Exchange JWT for an access token
  * 
  * @param {string} jwt - Signed JWT
@@ -185,16 +247,34 @@ export async function createJWT(config: GEEAuthConfig): Promise<string> {
  */
 async function exchangeJWTForToken(jwt: string): Promise<AuthToken> {
   try {
-    const response = await fetch(TOKEN_URI, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion: jwt,
-      }),
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+    // Use undici (Node.js built-in) with explicit IPv4 to avoid IPv6 timeout issues
+    const body = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: jwt,
     });
+
+    let response: Response;
+    try {
+      // Try with standard fetch first
+      response = await fetch(TOKEN_URI, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
+        signal: controller.signal,
+      });
+    } catch {
+      // Fallback: use Node.js https module directly (bypasses IPv6 issues)
+      clearTimeout(timeoutId);
+      const result = await exchangeJWTViaHttps(jwt);
+      return result;
+    }
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();

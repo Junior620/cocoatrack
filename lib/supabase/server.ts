@@ -2,15 +2,23 @@
 // This client is used in Server Components, Route Handlers, and Server Actions
 
 import { createServerClient } from '@supabase/ssr';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 import type { Database } from '@/types/database.gen';
 
 /**
+ * Common typed Supabase client type used across server-side code.
+ * Both createServerSupabaseClient and createServiceRoleSupabaseClient
+ * return this type, avoiding union incompatibility issues.
+ */
+export type SupabaseServerClient = SupabaseClient<Database>;
+
+/**
  * Creates a Supabase client for use in server components and route handlers.
  * This client reads and writes cookies for session management.
  */
-export async function createServerSupabaseClient() {
+export async function createServerSupabaseClient(): Promise<SupabaseServerClient> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -40,6 +48,25 @@ export async function createServerSupabaseClient() {
         }
       },
     },
+  }) as any as SupabaseServerClient;
+}
+
+/**
+ * Creates a Supabase client with the service role key.
+ * Bypasses RLS — use only in trusted server-side contexts (cron jobs, admin routes).
+ */
+export function createServiceRoleSupabaseClient(): SupabaseServerClient {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error(
+      'Missing Supabase service role environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_KEY'
+    );
+  }
+
+  return createClient<Database>(supabaseUrl, serviceKey, {
+    auth: { persistSession: false },
   });
 }
 
