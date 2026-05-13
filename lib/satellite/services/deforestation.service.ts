@@ -754,6 +754,19 @@ export class DeforestationService {
         );
       }
 
+      // First, get the parcelle_id from the alert
+      const { data: alertData, error: fetchError } = await client
+        .from('deforestation_events')
+        .select('parcelle_id')
+        .eq('id', alertId)
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      const parcelleId = alertData?.parcelle_id;
+
       // Update alert status
       const { error } = await client
         .from('deforestation_events')
@@ -767,6 +780,13 @@ export class DeforestationService {
 
       if (error) {
         throw error;
+      }
+
+      // Invalidate cache for the parcelle
+      if (parcelleId) {
+        const { getCacheService } = await import('./cache.service');
+        const cacheService = getCacheService();
+        await cacheService.invalidateOnAlertAcknowledgment(parcelleId);
       }
     } catch (error) {
       throw new NDVICalculationError(
@@ -832,6 +852,19 @@ export class DeforestationService {
         );
       }
 
+      // First, get the parcelle_id from the alert
+      const { data: alertData, error: fetchError } = await client
+        .from('deforestation_events')
+        .select('parcelle_id')
+        .eq('id', alertId)
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      const parcelleId = alertData?.parcelle_id;
+
       // Update alert status
       const { error } = await client
         .from('deforestation_events')
@@ -845,6 +878,13 @@ export class DeforestationService {
 
       if (error) {
         throw error;
+      }
+
+      // Invalidate cache for the parcelle
+      if (parcelleId) {
+        const { getCacheService } = await import('./cache.service');
+        const cacheService = getCacheService();
+        await cacheService.invalidateOnAlertAcknowledgment(parcelleId);
       }
     } catch (error) {
       throw new NDVICalculationError(

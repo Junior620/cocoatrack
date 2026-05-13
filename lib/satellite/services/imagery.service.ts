@@ -26,6 +26,7 @@ import {
   SatelliteError,
 } from '../types';
 import { getAccessToken, refreshToken } from '../utils/gee-auth';
+import { redisCacheService } from './redis-cache.service';
 
 // ============================================================================
 // Constants
@@ -335,6 +336,11 @@ export class ImageryService {
    * Retrieves the most recent cloud-free Sentinel-2 imagery for the specified
    * parcelle geometry and date. Filters imagery by cloud cover threshold.
    * 
+   * This method implements Redis caching:
+   * 1. Checks Redis cache for existing imagery data
+   * 2. If cache hit, returns cached data immediately
+   * 3. If cache miss, retrieves from GEE and caches the result
+   * 
    * @param parcelleId - Parcelle ID
    * @param geometry - Parcelle geometry (MultiPolygon)
    * @param date - Target date (defaults to current date)
@@ -372,6 +378,15 @@ export class ImageryService {
         cloudCoverThreshold,
         DEFAULT_CLOUD_COVER_THRESHOLD
       );
+    }
+
+    // Check Redis cache first
+    const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const cachedImagery = await redisCacheService.getImageryData(parcelleId, dateKey);
+    
+    if (cachedImagery) {
+      console.log(`[ImageryService] Using cached imagery for parcelle ${parcelleId}, date ${dateKey}`);
+      return cachedImagery;
     }
 
     // Get available dates within 30 days before target date
@@ -414,6 +429,10 @@ export class ImageryService {
       resolutionMeters: SENTINEL2_RESOLUTION,
       createdAt: new Date(),
     };
+
+    // Cache the imagery data in Redis
+    await redisCacheService.setImageryData(parcelleId, dateKey, imagery);
+    console.log(`[ImageryService] Cached imagery for parcelle ${parcelleId}, date ${dateKey}`);
 
     return imagery;
   }
@@ -901,7 +920,7 @@ export class ImageryService {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 90);
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('satellite_cache_metadata')
         .upsert({
           parcelle_id: parcelleId,
@@ -926,25 +945,39 @@ export class ImageryService {
    * 
    * This method applies optimization parameters to reduce tile size while
    * maintaining visual quality for web display. Optimizations include:
-   * - Compression (JPEG for RGB, PNG for transparency)
+   * - WebP format for better compression (with JPEG fallback)
+   * - Progressive loading support
    * - Resolution adjustment (256x256 or 512x512 pixels per tile)
-   * - Color depth reduction
+   * - Quality-based compression
+   * 
+   * Task 6.4.1: Added WebP format support and progressive loading
    * 
    * @param tileSize - Tile size in pixels (default 256)
-   * @param quality - JPEG quality 0-100 (default 85)
+   * @param quality - Image quality 0-100 (default 85)
+   * @param format - Image format ('webp' or 'jpeg', default 'webp')
+   * @param progressive - Enable progressive loading (default true)
    * @returns Optimization parameters
    */
   getOptimizationParams(
     tileSize: number = 256,
-    quality: number = 85
+    quality: number = 85,
+    format: 'webp' | 'jpeg' = 'webp',
+    progressive: boolean = true
   ): Record<string, unknown> {
     return {
       tileSize,
       quality,
-      format: 'image/jpeg', // JPEG for smaller file size
-      compression: 'JPEG',
+      format: format === 'webp' ? 'image/webp' : 'image/jpeg',
+      compression: format === 'webp' ? 'WEBP' : 'JPEG',
+      progressive, // Enable progressive loading
       maxZoom: 18, // Limit zoom level to prevent excessive API calls
       minZoom: 10, // Minimum zoom for satellite imagery
+      // WebP-specific optimizations
+      ...(format === 'webp' && {
+        webpQuality: quality,
+        webpMethod: 4, // Compression method (0-6, 4 is balanced)
+        webpLossless: false, // Use lossy compression for smaller files
+      }),
     };
   }
 

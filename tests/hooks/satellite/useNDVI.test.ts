@@ -15,6 +15,18 @@ import type { NDVIResult } from '@/lib/satellite/types';
 // Mock Setup
 // ============================================================================
 
+// Mock useOnlineStatus hook
+vi.mock('@/hooks/useOnlineStatus', () => ({
+  useOnlineStatus: vi.fn(() => ({
+    isOnline: true,
+    isOffline: false,
+  })),
+}));
+
+// Import the mocked hook for manipulation in tests
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+const mockUseOnlineStatus = useOnlineStatus as ReturnType<typeof vi.fn>;
+
 // Mock fetch globally
 global.fetch = vi.fn();
 
@@ -43,6 +55,12 @@ describe('useNDVI Hook', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
+    
+    // Reset online status to default (online)
+    mockUseOnlineStatus.mockReturnValue({
+      isOnline: true,
+      isOffline: false,
+    });
   });
 
   afterEach(() => {
@@ -594,6 +612,192 @@ describe('useNDVI Hook', () => {
       });
 
       expect(result.current.recommendation).toBeNull();
+    });
+  });
+
+  // ==========================================================================
+  // Offline Mode Tests
+  // ==========================================================================
+
+  describe('Offline Mode', () => {
+    it('should prevent calculation when offline', async () => {
+      // Mock offline status
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: false,
+        isOffline: true,
+      });
+
+      const { result } = renderHook(() =>
+        useNDVI({
+          parcelleId: 'test-parcelle',
+          autoCalculate: false,
+        })
+      );
+
+      // Trigger calculation
+      await result.current.calculate();
+
+      // Should set error and not make API call
+      expect(result.current.error).toContain('hors ligne');
+      expect(result.current.loading).toBe(false);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should preserve existing NDVI data when going offline', async () => {
+      // Start online and fetch data
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            ndvi: mockNDVIResult,
+            cached: false,
+            recommendation: 'Good health',
+          },
+        }),
+      } as Response);
+
+      const { result, rerender } = renderHook(() =>
+        useNDVI({
+          parcelleId: 'test-parcelle',
+          autoCalculate: false,
+        })
+      );
+
+      // Calculate NDVI while online
+      await result.current.calculate();
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      const onlineNDVI = result.current.ndvi;
+      expect(onlineNDVI).not.toBeNull();
+
+      // Go offline
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: false,
+        isOffline: true,
+      });
+
+      // Rerender to apply offline status
+      rerender();
+
+      // Try to calculate again (should fail but preserve data)
+      await result.current.calculate();
+
+      // NDVI data should still be present
+      expect(result.current.ndvi).toEqual(onlineNDVI);
+      expect(result.current.error).toContain('hors ligne');
+    });
+
+    it('should handle network errors gracefully in offline mode', async () => {
+      // Mock network error (simulating offline)
+      mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+      const { result } = renderHook(() =>
+        useNDVI({
+          parcelleId: 'test-parcelle',
+          autoCalculate: false,
+        })
+      );
+
+      // Trigger calculation
+      await result.current.calculate();
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Should show connection error
+      expect(result.current.error).toContain('connexion');
+    });
+
+    it('should allow calculation when coming back online', async () => {
+      // Start offline
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: false,
+        isOffline: true,
+      });
+
+      const { result, rerender } = renderHook(() =>
+        useNDVI({
+          parcelleId: 'test-parcelle',
+          autoCalculate: false,
+        })
+      );
+
+      // Try to calculate while offline
+      await result.current.calculate();
+      expect(result.current.error).toContain('hors ligne');
+      expect(mockFetch).not.toHaveBeenCalled();
+
+      // Go back online
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: true,
+        isOffline: false,
+      });
+
+      // Mock successful response
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            ndvi: mockNDVIResult,
+            cached: false,
+            recommendation: 'Good health',
+          },
+        }),
+      } as Response);
+
+      // Rerender to apply online status
+      rerender();
+
+      // Calculate again (should succeed)
+      await result.current.calculate();
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Should have NDVI data and no error
+      expect(result.current.ndvi).not.toBeNull();
+      expect(result.current.error).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should show cached data indicator when offline', async () => {
+      // Start online and fetch cached data
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            ndvi: mockNDVIResult,
+            cached: true,
+            recommendation: 'Good health',
+          },
+        }),
+      } as Response);
+
+      const { result } = renderHook(() =>
+        useNDVI({
+          parcelleId: 'test-parcelle',
+          autoCalculate: false,
+        })
+      );
+
+      // Calculate NDVI
+      await result.current.calculate();
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // Should indicate data is cached
+      expect(result.current.cached).toBe(true);
+      expect(result.current.ndvi).not.toBeNull();
     });
   });
 });

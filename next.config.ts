@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
       'jspdf',
       'xlsx',
     ],
+    // Task 6.4.4: Code splitting for satellite features
+    // Separate satellite feature code into its own chunk
+    optimizeCss: true,
   },
 
   // Image optimization configuration
@@ -70,6 +73,51 @@ const nextConfig: NextConfig = {
     'lucide-react': {
       transform: 'lucide-react/dist/esm/icons/{{kebabCase member}}',
     },
+  },
+
+  // Turbopack configuration (empty to silence Next.js 16 warning)
+  // This allows webpack config to coexist with Turbopack
+  turbopack: {},
+
+  // Webpack configuration for code splitting
+  webpack: (config, { isServer }) => {
+    // Task 6.4.4: Code splitting for satellite features
+    if (!isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization.splitChunks,
+          cacheGroups: {
+            ...config.optimization.splitChunks?.cacheGroups,
+            // Separate satellite feature code into its own chunk
+            satellite: {
+              test: /[\\/](components|hooks|lib)[\\/]satellite[\\/]/,
+              name: 'satellite',
+              chunks: 'async',
+              priority: 10,
+              reuseExistingChunk: true,
+            },
+            // Separate map libraries into their own chunk
+            maps: {
+              test: /[\\/]node_modules[\\/](leaflet|react-leaflet|mapbox-gl|react-map-gl)[\\/]/,
+              name: 'maps',
+              chunks: 'async',
+              priority: 9,
+              reuseExistingChunk: true,
+            },
+            // Separate chart libraries into their own chunk
+            charts: {
+              test: /[\\/]node_modules[\\/](recharts|d3-.*)[\\/]/,
+              name: 'charts',
+              chunks: 'async',
+              priority: 8,
+              reuseExistingChunk: true,
+            },
+          },
+        },
+      };
+    }
+    return config;
   },
 
   // Headers for service worker and caching

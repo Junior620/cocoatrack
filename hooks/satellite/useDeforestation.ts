@@ -18,7 +18,7 @@ import type { DeforestationEvent } from '@/lib/satellite/types';
 /**
  * Hook options
  */
-interface UseDeforestationOptions {
+export interface UseDeforestationOptions {
   /** Parcelle ID to fetch deforestation alerts for */
   parcelleId: string;
   /** Optional baseline date for EUDR compliance (defaults to Dec 31, 2020) */
@@ -56,7 +56,7 @@ interface AlertSummary {
 /**
  * Hook return value
  */
-interface UseDeforestationReturn {
+export interface UseDeforestationReturn {
   /** List of deforestation alerts */
   alerts: DeforestationEvent[];
   /** Whether alerts are being fetched */

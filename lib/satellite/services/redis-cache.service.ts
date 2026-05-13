@@ -418,6 +418,211 @@ export class RedisCacheService {
       console.log('[Redis Cache] Disconnected');
     }
   }
+
+  // ============================================================================
+  // Imagery Caching Methods
+  // ============================================================================
+
+  /**
+   * Generate cache key for imagery data
+   * 
+   * Format: `imagery:{parcelleId}:{date}`
+   * Example: `imagery:123e4567-e89b-12d3-a456-426614174000:2024-01-15`
+   * 
+   * @param parcelleId - Parcelle ID
+   * @param date - Imagery date (YYYY-MM-DD format)
+   * @returns Formatted cache key string
+   */
+  private generateImageryKey(parcelleId: string, date: string): string {
+    return `imagery:${parcelleId}:${date}`;
+  }
+
+  /**
+   * Get cached imagery data
+   * 
+   * Retrieves cached imagery data from Redis if available.
+   * Returns null if cache miss or Redis unavailable.
+   * 
+   * @param parcelleId - Parcelle ID
+   * @param date - Imagery date (YYYY-MM-DD format)
+   * @returns Cached imagery data or null
+   */
+  async getImageryData(parcelleId: string, date: string): Promise<any | null> {
+    try {
+      await this.connect();
+
+      if (!this.isConnected || !this.client) {
+        this.stats.misses++;
+        return null;
+      }
+
+      const cacheKey = this.generateImageryKey(parcelleId, date);
+      const cachedData = await this.client.get(cacheKey);
+
+      if (!cachedData) {
+        this.stats.misses++;
+        return null;
+      }
+
+      this.stats.hits++;
+      console.log(`[Redis Cache] Imagery cache hit for key: ${cacheKey}`);
+      return JSON.parse(cachedData);
+    } catch (error) {
+      console.error('[Redis Cache] Error retrieving cached imagery:', error);
+      this.stats.errors++;
+      return null;
+    }
+  }
+
+  /**
+   * Set cached imagery data
+   * 
+   * Stores imagery data in Redis with 7-day TTL.
+   * 
+   * @param parcelleId - Parcelle ID
+   * @param date - Imagery date (YYYY-MM-DD format)
+   * @param data - Imagery data to cache
+   * @returns True if successfully cached
+   */
+  async setImageryData(parcelleId: string, date: string, data: any): Promise<boolean> {
+    try {
+      await this.connect();
+
+      if (!this.isConnected || !this.client) {
+        return false;
+      }
+
+      const cacheKey = this.generateImageryKey(parcelleId, date);
+      const ttl = 7 * 24 * 60 * 60; // 7 days in seconds
+
+      await this.client.setex(
+        cacheKey,
+        ttl,
+        JSON.stringify(data)
+      );
+
+      console.log(`[Redis Cache] Cached imagery for key: ${cacheKey} (TTL: ${ttl}s)`);
+      return true;
+    } catch (error) {
+      console.error('[Redis Cache] Error caching imagery:', error);
+      this.stats.errors++;
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // NDVI Caching Methods
+  // ============================================================================
+
+  /**
+   * Generate cache key for NDVI data
+   * 
+   * Format: `ndvi:{parcelleId}:{date}`
+   * Example: `ndvi:123e4567-e89b-12d3-a456-426614174000:2024-01-15`
+   * 
+   * @param parcelleId - Parcelle ID
+   * @param date - Calculation date (YYYY-MM-DD format)
+   * @returns Formatted cache key string
+   */
+  private generateNDVIKey(parcelleId: string, date: string): string {
+    return `ndvi:${parcelleId}:${date}`;
+  }
+
+  /**
+   * Get cached NDVI data
+   * 
+   * Retrieves cached NDVI result from Redis if available.
+   * Returns null if cache miss or Redis unavailable.
+   * 
+   * @param parcelleId - Parcelle ID
+   * @param date - Calculation date (YYYY-MM-DD format)
+   * @returns Cached NDVI result or null
+   */
+  async getNDVIData(parcelleId: string, date: string): Promise<any | null> {
+    try {
+      await this.connect();
+
+      if (!this.isConnected || !this.client) {
+        this.stats.misses++;
+        return null;
+      }
+
+      const cacheKey = this.generateNDVIKey(parcelleId, date);
+      const cachedData = await this.client.get(cacheKey);
+
+      if (!cachedData) {
+        this.stats.misses++;
+        return null;
+      }
+
+      // Check if data has been invalidated
+      const invalidationKey = this.generateInvalidationKey(parcelleId);
+      const invalidationTimestamp = await this.client.get(invalidationKey);
+
+      if (invalidationTimestamp) {
+        const data = JSON.parse(cachedData);
+        const invalidatedAt = parseInt(invalidationTimestamp, 10);
+        const cachedAt = data.cachedAt || 0;
+
+        if (cachedAt < invalidatedAt) {
+          console.log(`[Redis Cache] NDVI cache invalidated for parcelle ${parcelleId}`);
+          await this.client.del(cacheKey);
+          this.stats.misses++;
+          return null;
+        }
+      }
+
+      this.stats.hits++;
+      console.log(`[Redis Cache] NDVI cache hit for key: ${cacheKey}`);
+      return JSON.parse(cachedData);
+    } catch (error) {
+      console.error('[Redis Cache] Error retrieving cached NDVI:', error);
+      this.stats.errors++;
+      return null;
+    }
+  }
+
+  /**
+   * Set cached NDVI data
+   * 
+   * Stores NDVI result in Redis with 24-hour TTL.
+   * Adds a `cachedAt` timestamp for invalidation tracking.
+   * 
+   * @param parcelleId - Parcelle ID
+   * @param date - Calculation date (YYYY-MM-DD format)
+   * @param data - NDVI result to cache
+   * @returns True if successfully cached
+   */
+  async setNDVIData(parcelleId: string, date: string, data: any): Promise<boolean> {
+    try {
+      await this.connect();
+
+      if (!this.isConnected || !this.client) {
+        return false;
+      }
+
+      const cacheKey = this.generateNDVIKey(parcelleId, date);
+      const ttl = TEMPORAL_CACHE_TTL; // 24 hours
+
+      const dataWithTimestamp = {
+        ...data,
+        cachedAt: Date.now(),
+      };
+
+      await this.client.setex(
+        cacheKey,
+        ttl,
+        JSON.stringify(dataWithTimestamp)
+      );
+
+      console.log(`[Redis Cache] Cached NDVI for key: ${cacheKey} (TTL: ${ttl}s)`);
+      return true;
+    } catch (error) {
+      console.error('[Redis Cache] Error caching NDVI:', error);
+      this.stats.errors++;
+      return false;
+    }
+  }
 }
 
 // ============================================================================

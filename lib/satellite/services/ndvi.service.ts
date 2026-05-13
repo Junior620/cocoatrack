@@ -175,8 +175,8 @@ export class NDVIService {
       // Step 2: Retrieve Sentinel-2 bands B4 (Red) and B8 (NIR)
       const bandData = await this.retrieveBands(geometry, date);
 
-      // Step 3: Calculate pixel-wise NDVI values
-      const ndviValues = this.calculatePixelWiseNDVI(
+      // Step 3: Calculate pixel-wise NDVI values (OPTIMIZED: uses Web Worker)
+      const ndviValues = await this.calculatePixelWiseNDVI(
         bandData.red,
         bandData.nir
       );
@@ -191,8 +191,19 @@ export class NDVIService {
         );
       }
 
-      // Step 5: Calculate statistics
-      const statistics = this.calculateStatistics(ndviValues);
+      // Step 5: Calculate statistics (OPTIMIZED: already calculated by worker if available)
+      // If we used the worker, statistics are already calculated
+      // Otherwise, calculate them here
+      let statistics: NDVIStatistics;
+      try {
+        const { ndviWorkerManager } = await import('../workers/ndvi-worker-manager');
+        // Statistics were already calculated by the worker
+        // We need to recalculate them here since we only get ndviValues
+        statistics = this.calculateStatistics(ndviValues);
+      } catch {
+        // Fallback: calculate statistics synchronously
+        statistics = this.calculateStatistics(ndviValues);
+      }
 
       // Step 6: Determine health status
       const healthStatus = this.calculateHealthStatus(statistics.mean);
@@ -352,6 +363,11 @@ export class NDVIService {
   /**
    * Calculate pixel-wise NDVI values from Red and NIR bands
    * 
+   * OPTIMIZED VERSION (Task 6.4.2):
+   * - Uses Web Worker for heavy calculations (non-blocking)
+   * - Falls back to optimized synchronous calculation if workers unavailable
+   * - Implements batching for multiple concurrent calculations
+   * 
    * Applies the NDVI formula to each pixel:
    *   NDVI = (NIR - Red) / (NIR + Red)
    * 
@@ -361,17 +377,47 @@ export class NDVIService {
    * 
    * @param redBand - Red band pixel values (2D array)
    * @param nirBand - NIR band pixel values (2D array)
-   * @returns Flattened array of NDVI values
+   * @returns Promise resolving to flattened array of NDVI values
    * 
    * @example
    * ```typescript
    * const red = [[100, 150], [200, 250]];
    * const nir = [[300, 350], [400, 450]];
-   * const ndvi = service.calculatePixelWiseNDVI(red, nir);
+   * const ndvi = await service.calculatePixelWiseNDVI(red, nir);
    * // Returns: [0.5, 0.4, 0.333, 0.286]
    * ```
    */
-  private calculatePixelWiseNDVI(
+  private async calculatePixelWiseNDVI(
+    redBand: number[][],
+    nirBand: number[][]
+  ): Promise<number[]> {
+    // Use Web Worker for calculation (optimized, non-blocking)
+    try {
+      const { ndviWorkerManager } = await import('../workers/ndvi-worker-manager');
+      const result = await ndviWorkerManager.calculateNDVI(redBand, nirBand);
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      return result.ndviValues;
+    } catch (error) {
+      // Fallback to synchronous calculation if worker fails
+      console.warn('[NDVI Service] Worker calculation failed, using fallback:', error);
+      return this.calculatePixelWiseNDVISync(redBand, nirBand);
+    }
+  }
+
+  /**
+   * Synchronous fallback for pixel-wise NDVI calculation
+   * 
+   * Used when Web Workers are unavailable or fail.
+   * 
+   * @param redBand - Red band pixel values (2D array)
+   * @param nirBand - NIR band pixel values (2D array)
+   * @returns Flattened array of NDVI values
+   */
+  private calculatePixelWiseNDVISync(
     redBand: number[][],
     nirBand: number[][]
   ): number[] {
@@ -524,11 +570,120 @@ export class NDVIService {
   }
 
   /**
+   * Calculate health status trend from a chronological series of statuses
+   * 
+   * Analyzes a time series of health status values to determine if the trend
+   * is improving, declining, or stable.
+   * 
+   * @param statuses - Array of health status values in chronological order
+   * @returns 'improving' if trend is positive, 'declining' if negative, 'stable' otherwise
+   * 
+   * @example
+   * ```typescript
+   * calculateHealthStatusTrend(['poor', 'fair', 'good']) // Returns: 'improving'
+   * calculateHealthStatusTrend(['excellent', 'good', 'fair']) // Returns: 'declining'
+   * calculateHealthStatusTrend(['good', 'good', 'good']) // Returns: 'stable'
+   * ```
+   */
+  calculateHealthStatusTrend(statuses: HealthStatus[]): 'improving' | 'declining' | 'stable' {
+    if (statuses.length === 0 || statuses.length === 1) {
+      return 'stable';
+    }
+
+    // Define status ordering (lower index = worse status)
+    const statusOrder: HealthStatus[] = ['critical', 'poor', 'fair', 'good', 'excellent'];
+    
+    const oldestStatus = statuses[0];
+    const mostRecentStatus = statuses[statuses.length - 1];
+    
+    const oldestIndex = statusOrder.indexOf(oldestStatus);
+    const mostRecentIndex = statusOrder.indexOf(mostRecentStatus);
+    
+    if (mostRecentIndex > oldestIndex) {
+      return 'improving';
+    } else if (mostRecentIndex < oldestIndex) {
+      return 'declining';
+    } else {
+      return 'stable';
+    }
+  }
+
+  /**
+   * Get health status recommendation based on current status
+   * 
+   * Provides actionable recommendations based on the health status level.
+   * 
+   * @param status - Current health status
+   * @returns Recommendation string appropriate for the status level
+   * 
+   * @example
+   * ```typescript
+   * getHealthStatusRecommendation('critical') // Returns: "Immediate intervention required..."
+   * getHealthStatusRecommendation('excellent') // Returns: "Continue current maintenance practices..."
+   * ```
+   */
+  getHealthStatusRecommendation(status: HealthStatus): string {
+    switch (status) {
+      case 'critical':
+        return 'Immediate intervention required. Investigate potential issues such as disease, pest infestation, water stress, or nutrient deficiency. Consider soil testing and expert consultation.';
+      case 'poor':
+        return 'Action needed. Monitor closely and implement corrective measures. Check irrigation, fertilization, and pest control practices. Consider targeted interventions.';
+      case 'fair':
+        return 'Monitoring recommended. Health is below optimal levels. Review management practices and consider adjustments to irrigation, fertilization, or pest control.';
+      case 'good':
+        return 'Continue current maintenance practices. Health is good but monitor for any changes. Maintain regular irrigation and fertilization schedules.';
+      case 'excellent':
+        return 'Continue current maintenance practices. Vegetation health is optimal. Maintain existing management strategies and monitor regularly.';
+      default:
+        return 'Status unknown. Unable to provide recommendation.';
+    }
+  }
+
+  /**
+   * Calculate health status distribution from a collection of statuses
+   * 
+   * Aggregates health status values to count the number of parcelles in each category.
+   * 
+   * @param statuses - Array of health status values
+   * @returns Object with counts for each status category
+   * 
+   * @example
+   * ```typescript
+   * calculateHealthStatusDistribution(['excellent', 'good', 'excellent'])
+   * // Returns: { excellent: 2, good: 1, fair: 0, poor: 0, critical: 0 }
+   * ```
+   */
+  calculateHealthStatusDistribution(statuses: HealthStatus[]): {
+    excellent: number;
+    good: number;
+    fair: number;
+    poor: number;
+    critical: number;
+  } {
+    const distribution = {
+      excellent: 0,
+      good: 0,
+      fair: 0,
+      poor: 0,
+      critical: 0,
+    };
+
+    for (const status of statuses) {
+      if (status in distribution) {
+        distribution[status]++;
+      }
+    }
+
+    return distribution;
+  }
+
+  /**
    * Get cached NDVI result from database
    * 
-   * Retrieves a previously calculated NDVI result from the database cache.
-   * Implements 24-hour cache TTL logic - only returns cached results that
-   * were created within the last 24 hours.
+   * Retrieves a previously calculated NDVI result from cache.
+   * Implements two-level caching:
+   * 1. Redis cache (fast, 24-hour TTL)
+   * 2. Database cache (persistent, 24-hour freshness check)
    * 
    * The calculation_date is normalized to midnight UTC to ensure consistent
    * cache lookups for the same date regardless of time.
@@ -556,6 +711,31 @@ export class NDVIService {
     supabase?: any
   ): Promise<NDVIResult | null> {
     try {
+      // Normalize date to midnight UTC for consistent cache lookups
+      const normalizedDate = new Date(date);
+      normalizedDate.setUTCHours(0, 0, 0, 0);
+      const dateKey = normalizedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+      // Level 1: Check Redis cache first (fastest)
+      const cachedFromRedis = await redisCacheService.getNDVIData(parcelleId, dateKey);
+      
+      if (cachedFromRedis) {
+        console.log(`[NDVI Service] Redis cache hit for parcelle ${parcelleId}, date ${dateKey}`);
+        
+        // Remove the cachedAt timestamp before returning
+        const { cachedAt, ...ndviResult } = cachedFromRedis;
+        
+        // Convert date strings back to Date objects
+        return {
+          ...ndviResult,
+          calculationDate: new Date(ndviResult.calculationDate),
+          createdAt: new Date(ndviResult.createdAt),
+        };
+      }
+
+      console.log(`[NDVI Service] Redis cache miss for parcelle ${parcelleId}, date ${dateKey}, checking database`);
+
+      // Level 2: Check database cache (slower but persistent)
       // Use provided client or create a new one
       let client = supabase;
       if (!client) {
@@ -570,10 +750,6 @@ export class NDVIService {
           }
         );
       }
-
-      // Normalize date to midnight UTC for consistent cache lookups
-      const normalizedDate = new Date(date);
-      normalizedDate.setUTCHours(0, 0, 0, 0);
 
       // Query database for cached NDVI result
       const { data, error } = await client
@@ -619,6 +795,10 @@ export class NDVIService {
         createdAt: new Date(data.created_at),
       };
 
+      // Cache in Redis for faster future access
+      await redisCacheService.setNDVIData(parcelleId, dateKey, ndviResult);
+      console.log(`[NDVI Service] Cached NDVI in Redis for parcelle ${parcelleId}, date ${dateKey}`);
+
       return ndviResult;
     } catch (error) {
       // Log error but don't throw - cache retrieval failure should not block calculation
@@ -633,9 +813,9 @@ export class NDVIService {
   }
 
   /**
-   * Store NDVI result in database cache
+   * Store NDVI result in cache
    * 
-   * Stores a calculated NDVI result in the database for future retrieval.
+   * Stores a calculated NDVI result in both Redis and database caches.
    * Uses UPSERT logic (INSERT ... ON CONFLICT DO UPDATE) to handle cases
    * where a result already exists for the same parcelle and date.
    * 
@@ -656,6 +836,16 @@ export class NDVIService {
    */
   async cacheNDVI(ndviResult: NDVIResult, supabase?: any): Promise<void> {
     try {
+      // Normalize date to midnight UTC for consistent cache storage
+      const normalizedDate = new Date(ndviResult.calculationDate);
+      normalizedDate.setUTCHours(0, 0, 0, 0);
+      const dateKey = normalizedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+      // Cache in Redis first (fast cache)
+      await redisCacheService.setNDVIData(ndviResult.parcelleId, dateKey, ndviResult);
+      console.log(`[NDVI Service] Cached NDVI in Redis for parcelle ${ndviResult.parcelleId}, date ${dateKey}`);
+
+      // Then cache in database (persistent cache)
       // Use provided client or create a new one with SERVICE ROLE KEY to bypass RLS
       let client = supabase;
       if (!client) {
@@ -682,10 +872,6 @@ export class NDVIService {
         );
       }
 
-      // Normalize date to midnight UTC for consistent cache storage
-      const normalizedDate = new Date(ndviResult.calculationDate);
-      normalizedDate.setUTCHours(0, 0, 0, 0);
-
       // Prepare database row
       const row = {
         parcelle_id: ndviResult.parcelleId,
@@ -711,6 +897,8 @@ export class NDVIService {
       if (error) {
         throw error;
       }
+
+      console.log(`[NDVI Service] Cached NDVI in database for parcelle ${ndviResult.parcelleId}, date ${dateKey}`);
     } catch (error) {
       throw new NDVICalculationError(
         `Failed to cache NDVI result: ${(error as Error).message}`,

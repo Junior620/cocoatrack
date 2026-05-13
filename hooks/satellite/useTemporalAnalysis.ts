@@ -17,7 +17,7 @@ import type { TemporalDataPoint, NDVITrend } from '@/lib/satellite/types';
 /**
  * Hook options
  */
-interface UseTemporalAnalysisOptions {
+export interface UseTemporalAnalysisOptions {
   /** Parcelle ID to analyze */
   parcelleId: string;
   /** Start date of the analysis period */
@@ -44,7 +44,7 @@ interface TemporalAnalysisSummary {
 /**
  * Hook return value
  */
-interface UseTemporalAnalysisReturn {
+export interface UseTemporalAnalysisReturn {
   /** Timeline of NDVI data points */
   timeline: TemporalDataPoint[];
   /** Whether temporal data fetching is in progress */

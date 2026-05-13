@@ -371,6 +371,20 @@ export async function PATCH(
 
     const row = rows[0];
 
+    // Invalidate cache if geometry was updated
+    // This ensures cached satellite imagery and NDVI data are refreshed
+    if (validatedInput.geometry !== undefined) {
+      try {
+        const { getCacheService } = await import('@/lib/satellite/services/cache.service');
+        const cacheService = getCacheService();
+        await cacheService.invalidateOnParcelleUpdate(id, true);
+        console.log(`[PATCH /api/parcelles/${id}] Cache invalidated due to geometry update`);
+      } catch (cacheError) {
+        // Log error but don't fail the request
+        console.error('[PATCH /api/parcelles/[id]] Error invalidating cache:', cacheError);
+      }
+    }
+
     // Transform to ParcelleWithPlanteur response
     const parcelle = transformRpcRow(row);
 

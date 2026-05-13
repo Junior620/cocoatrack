@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { NDVIResult, HealthStatus } from '@/lib/satellite/types';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 
 // ============================================================================
 // Types
@@ -17,7 +18,7 @@ import type { NDVIResult, HealthStatus } from '@/lib/satellite/types';
 /**
  * Hook options
  */
-interface UseNDVIOptions {
+export interface UseNDVIOptions {
   /** Parcelle ID to calculate NDVI for */
   parcelleId: string;
   /** Optional date for NDVI calculation (defaults to current date) */
@@ -31,7 +32,7 @@ interface UseNDVIOptions {
 /**
  * Hook return value
  */
-interface UseNDVIReturn {
+export interface UseNDVIReturn {
   /** NDVI result data (null if not yet calculated) */
   ndvi: NDVIResult | null;
   /** Whether NDVI calculation is in progress */
@@ -87,6 +88,9 @@ export function useNDVI({
   const [error, setError] = useState<string | null>(null);
   const [cached, setCached] = useState(false);
   const [recommendation, setRecommendation] = useState<string | null>(null);
+  
+  // Track online/offline status
+  const { isOnline, isOffline } = useOnlineStatus();
 
   /**
    * Calculate NDVI by calling the API endpoint
@@ -95,6 +99,14 @@ export function useNDVI({
     // Validate parcelleId
     if (!parcelleId) {
       setError('Parcelle ID is required');
+      return;
+    }
+
+    // Check if offline - prevent calculation but allow cached data
+    if (isOffline) {
+      setError('Vous êtes hors ligne. Le calcul NDVI nécessite une connexion internet. Les données en cache sont affichées si disponibles.');
+      setLoading(false);
+      // Don't clear existing NDVI data - keep showing cached data
       return;
     }
 
@@ -159,17 +171,25 @@ export function useNDVI({
     } catch (err) {
       // Handle errors
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(errorMessage);
-      setNdvi(null);
-      setCached(false);
-      setRecommendation(null);
+      
+      // Check if it's a network error (offline)
+      if (err instanceof TypeError && errorMessage.includes('fetch')) {
+        setError('Impossible de se connecter au serveur. Vérifiez votre connexion internet.');
+      } else {
+        setError(errorMessage);
+      }
+      
+      // Don't clear existing NDVI data on error - keep showing cached data
+      // setNdvi(null);
+      // setCached(false);
+      // setRecommendation(null);
 
       // Log error for debugging
       console.error('Error calculating NDVI:', err);
     } finally {
       setLoading(false);
     }
-  }, [parcelleId, date, forceRecalculate]);
+  }, [parcelleId, date, forceRecalculate, isOffline]);
 
   /**
    * Auto-calculate NDVI when autoCalculate is enabled
