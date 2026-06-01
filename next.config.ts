@@ -156,6 +156,20 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // Cache videos
+      {
+        source: '/:path*.mp4',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=86400',
+          },
+          {
+            key: 'Content-Type',
+            value: 'video/mp4',
+          },
+        ],
+      },
       // Security headers
       {
         source: '/:path*',

@@ -183,7 +183,7 @@ function ParcelleDetailContent() {
 
   useEffect(() => {
     fetchHealthStatus();
-  }, [fetchHealthStatus]);
+  }, [parcelleId, fetchHealthStatus]);
 
   // Fetch deforestation alerts
   const fetchDeforestationAlerts = useCallback(async () => {
@@ -218,7 +218,7 @@ function ParcelleDetailContent() {
 
   useEffect(() => {
     fetchDeforestationAlerts();
-  }, [fetchDeforestationAlerts]);
+  }, [parcelleId, fetchDeforestationAlerts]);
 
   // Trigger deforestation detection via GEE
   const handleDetectDeforestation = useCallback(async () => {

@@ -80,9 +80,9 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder files (manifest.json, sw.js, icons, etc.)
+     * - public folder files (manifest.json, sw.js, icons, videos, etc.)
      * - api routes that don't need auth
      */
-    '/((?!_next/static|_next/image|favicon.ico|manifest\\.json|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest\\.json|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp4|webm|ogg)$).*)',
   ],
 };
