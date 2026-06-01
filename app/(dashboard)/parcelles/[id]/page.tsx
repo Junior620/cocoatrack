@@ -26,6 +26,7 @@ import ReportOptionsModal from '@/components/satellite/ReportOptionsModal';
 import type { ReportOptions } from '@/components/satellite/ReportOptionsModal';
 import ReportDownloadLink from '@/components/satellite/ReportDownloadLink';
 import YieldPredictionDisplay from '@/components/satellite/YieldPredictionDisplay';
+import NDVIBackfillButton from '@/components/satellite/NDVIBackfillButton';
 import type { DeforestationEvent } from '@/lib/satellite/types';
 import type { Parcelle, ParcelleWithPlanteur, ConformityStatus, Certification, UpdateParcelleInput } from '@/types/parcelles';
 import {
@@ -1188,18 +1189,27 @@ function ParcelleDetailContent() {
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" 
               />
             </svg>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm font-medium text-gray-900">
               Aucune donnée NDVI disponible pour cette parcelle
             </p>
+            <p className="mt-1 text-sm text-gray-500">
+              Calculez le NDVI actuel ou récupérez l'historique depuis les archives satellite
+            </p>
             {canEdit && parcelle.is_active && (
-              <button
-                onClick={handleRecalculateNDVI}
-                disabled={recalculatingNDVI}
-                className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
-              >
-                <RefreshCw className={`h-4 w-4 ${recalculatingNDVI ? 'animate-spin' : ''}`} />
-                {recalculatingNDVI ? 'Calcul en cours...' : 'Calculer NDVI'}
-              </button>
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  onClick={handleRecalculateNDVI}
+                  disabled={recalculatingNDVI}
+                  className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`h-4 w-4 ${recalculatingNDVI ? 'animate-spin' : ''}`} />
+                  {recalculatingNDVI ? 'Calcul en cours...' : 'Calculer NDVI Actuel'}
+                </button>
+                <NDVIBackfillButton
+                  parcelleId={parcelle.id}
+                  onComplete={fetchHealthStatus}
+                />
+              </div>
             )}
           </div>
         )}

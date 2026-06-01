@@ -52,3 +52,5 @@ supabase/.temp/
 gee-service-account.json
 *-service-account.json
 google-credentials.json
+ste-scpb-97d3cdb4d2df.json
+scripts/gee-credentials.txt

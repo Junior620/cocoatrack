@@ -144,6 +144,18 @@ export const YieldPredictionDisplay = dynamic(
 );
 
 // ============================================================================
+// NDVI Calculation Components (Lazy Loaded)
+// ============================================================================
+
+export const NDVIBackfillButton = dynamic(
+  () => import('./NDVIBackfillButton'),
+  {
+    loading: () => <SatelliteLoadingFallback />,
+    ssr: false,
+  }
+);
+
+// ============================================================================
 // Cache and Status Components (Lazy Loaded)
 // ============================================================================
 
