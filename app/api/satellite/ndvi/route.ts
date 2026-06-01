@@ -38,9 +38,17 @@ const NDVIRequestSchema = z.object({
   parcelleId: z.string().uuid('Invalid parcelle ID format'),
   date: z
     .string()
-    .datetime({ message: 'Invalid date format. Use ISO 8601 format.' })
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?)?$/, 'Invalid date format. Use ISO 8601 format (YYYY-MM-DD or full datetime).')
     .optional()
-    .transform((val) => (val ? new Date(val) : new Date())),
+    .transform((val) => {
+      if (!val) return new Date();
+      // Handle both YYYY-MM-DD and full ISO datetime
+      const date = new Date(val);
+      if (isNaN(date.getTime())) {
+        throw new Error('Invalid date value');
+      }
+      return date;
+    }),
   forceRecalculate: z.boolean().optional().default(false),
 });
 

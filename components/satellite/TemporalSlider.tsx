@@ -170,8 +170,14 @@ export function TemporalSlider({
   const handleDateSelect = useCallback(
     (index: number) => {
       if (index >= 0 && index < state.timeline.length) {
-        setState(prev => ({ ...prev, selectedIndex: index }));
-        onDateChange(state.timeline[index].date);
+        const selectedDate = state.timeline[index].date;
+        // Ensure we have a valid Date object
+        if (selectedDate && selectedDate instanceof Date && !isNaN(selectedDate.getTime())) {
+          setState(prev => ({ ...prev, selectedIndex: index }));
+          onDateChange(selectedDate);
+        } else {
+          console.error('Invalid date in timeline at index', index, selectedDate);
+        }
       }
     },
     [state.timeline, onDateChange]
@@ -192,7 +198,11 @@ export function TemporalSlider({
             // Stop at the end
             return { ...prev, isPlaying: false, selectedIndex: prev.timeline.length - 1 };
           }
-          onDateChange(prev.timeline[nextIndex].date);
+          const nextDate = prev.timeline[nextIndex].date;
+          // Validate date before calling onDateChange
+          if (nextDate && nextDate instanceof Date && !isNaN(nextDate.getTime())) {
+            onDateChange(nextDate);
+          }
           return { ...prev, selectedIndex: nextIndex };
         });
       }, animationSpeed);
@@ -423,10 +433,10 @@ export function TemporalSlider({
               </h4>
               <div className="mt-1 flex items-center gap-4 text-xs text-gray-600">
                 <span>
-                  NDVI: <span className="font-medium">{currentDataPoint.ndvi.toFixed(3)}</span>
+                  NDVI: <span className="font-medium">{currentDataPoint.ndvi !== null ? currentDataPoint.ndvi.toFixed(3) : 'N/A'}</span>
                 </span>
                 <span>
-                  Nuages: <span className="font-medium">{currentDataPoint.cloudCover.toFixed(0)}%</span>
+                  Nuages: <span className="font-medium">{currentDataPoint.cloudCover !== null ? currentDataPoint.cloudCover.toFixed(0) : '0'}%</span>
                 </span>
                 <div
                   className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-white"

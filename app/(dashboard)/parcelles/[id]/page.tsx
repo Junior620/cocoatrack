@@ -423,11 +423,20 @@ function ParcelleDetailContent() {
   const handleTemporalDateChange = useCallback(async (date: Date) => {
     if (!parcelle) return;
 
+    // Validate date
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      console.error('Invalid date provided to handleTemporalDateChange:', date);
+      return;
+    }
+
     setSelectedDate(date);
     setIsLoadingTemporalData(true);
     setHealthStatusError(null);
 
     try {
+      // Format date as YYYY-MM-DD
+      const dateStr = date.toISOString().split('T')[0];
+      
       // Fetch NDVI data for the selected date
       const response = await fetch('/api/satellite/ndvi', {
         method: 'POST',
@@ -436,7 +445,7 @@ function ParcelleDetailContent() {
         },
         body: JSON.stringify({
           parcelleId: parcelle.id,
-          date: date.toISOString().split('T')[0],
+          date: dateStr,
           forceRecalculate: false,
         }),
       });
