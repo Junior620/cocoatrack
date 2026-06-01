@@ -1773,14 +1773,14 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
 
   useEffect(() => {
     fetchTemporalData();
-  }, [fetchTemporalData]);
+  }, [parcelleId, startDate, endDate]); // ✅ Dépendances directes au lieu de la fonction
 
   // Recharger le graphique après un backfill de période personnalisée
   useEffect(() => {
     if (backfillResult) {
       fetchTemporalData();
     }
-  }, [backfillResult]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [backfillResult, fetchTemporalData]); // Ajout de fetchTemporalData pour éviter les warnings
 
   // Handle date range change (raccourcis rapides — charge depuis la DB)
   const handleDateRangeChange = (newStartDate: Date, newEndDate: Date) => {
