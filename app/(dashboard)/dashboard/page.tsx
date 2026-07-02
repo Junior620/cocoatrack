@@ -3,7 +3,8 @@
 // CocoaTrack V2 - Enhanced Dashboard Page
 // Main dashboard with KPIs, charts, alerts, and activity calendar
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { 
   KPIGrid, 
   TrendChart, 
@@ -23,12 +24,14 @@ import {
   useDashboardRealtime,
   useRefreshDashboard,
   useEntityCounts,
+  useESGMetrics,
 } from '@/lib/hooks';
+import { buildDashboardFilters } from '@/lib/api/dashboard';
 import { useAuth } from '@/lib/auth';
 import { RefreshCw, Calendar } from 'lucide-react';
 
 type Period = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
-type Metric = 'deliveries' | 'weightKg' | 'amountXAF';
+type Metric = 'deliveries' | 'weightKg' | 'amountXAF' | 'pricePerKg';
 
 const periodLabels: Record<Period, string> = {
   all: 'Toutes les données',
@@ -43,33 +46,36 @@ const metricLabels: Record<Metric, string> = {
   deliveries: 'Livraisons',
   weightKg: 'Poids (kg)',
   amountXAF: 'Montant (XAF)',
+  pricePerKg: 'Prix moyen (XAF/kg)',
 };
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>('all');
   const [chartMetric, setChartMetric] = useState<Metric>('weightKg');
+  const [trendYear, setTrendYear] = useState(() => new Date().getFullYear());
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const { user } = useAuth();
   const cooperativeId = user?.cooperative_id ?? undefined;
 
-  const filters = {
-    cooperativeId,
-    ...(period === 'custom' && customFrom && customTo
-      ? { dateFrom: customFrom, dateTo: customTo }
-      : {}),
-  };
+  const filters = buildDashboardFilters(
+    period,
+    { cooperativeId },
+    customFrom,
+    customTo
+  );
 
   // Fetch data
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = 
     useDashboardMetricsWithComparison(period, filters);
   
   const { data: dailyTrend, isLoading: trendLoading } = useDailyTrend(filters);
-  const { data: topPlanteurs, isLoading: planteursLoading } = useTopPlanteurs(filters);
+  const { data: topPlanteurs, isLoading: planteursLoading } = useTopPlanteurs(filters, 5);
   const { data: topChefPlanteurs, isLoading: chefsLoading } = useTopChefPlanteurs(filters);
 
   // Fetch entity counts (planteurs, chef planteurs, today's deliveries)
   const { data: entityCounts, isLoading: entityCountsLoading } = useEntityCounts(cooperativeId);
+  const { data: esgMetrics, isLoading: esgLoading } = useESGMetrics(filters);
 
   // Subscribe to realtime updates
   useDashboardRealtime(cooperativeId);
@@ -80,6 +86,18 @@ export default function DashboardPage() {
   const isLoading = metricsLoading || trendLoading || planteursLoading || chefsLoading;
   const hasData = (metrics?.totalDeliveries ?? 0) > 0;
 
+  const availableTrendYears = useMemo(() => {
+    const years = new Set<number>([new Date().getFullYear()]);
+    for (const point of dailyTrend ?? []) {
+      years.add(new Date(`${point.date}T12:00:00`).getFullYear());
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [dailyTrend]);
+
+  const filteredTrend = (dailyTrend ?? []).filter((point) => {
+    return new Date(`${point.date}T12:00:00`).getFullYear() === trendYear;
+  });
+
   // Transform daily trend for activity calendar
   const activityData = dailyTrend?.map(d => ({
     date: d.date,
@@ -89,7 +107,7 @@ export default function DashboardPage() {
   return (
     <PageTransition className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -98,7 +116,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Period selector and refresh */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="relative">
             <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             <select
@@ -115,7 +133,7 @@ export default function DashboardPage() {
           </div>
 
           {period === 'custom' && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="date"
                 value={customFrom}
@@ -135,7 +153,7 @@ export default function DashboardPage() {
           <button
             onClick={refresh}
             disabled={isLoading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-50 transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:opacity-50 transition-all ml-auto sm:ml-0"
             title="Actualiser"
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -173,9 +191,11 @@ export default function DashboardPage() {
       <KPIGrid 
         metrics={metrics ?? null} 
         loading={metricsLoading} 
-        trendData={dailyTrend ?? undefined}
+        trendData={filteredTrend ?? undefined}
         entityCounts={entityCounts ?? null}
         entityCountsLoading={entityCountsLoading}
+        esgMetrics={esgMetrics ?? null}
+        esgLoading={esgLoading}
       />
 
       {/* Orphan Parcelles Widget - only shows if orphan_count > 0 */}
@@ -193,47 +213,75 @@ export default function DashboardPage() {
       {/* Charts Section - only show if has data or loading */}
       {(hasData || isLoading) && (
         <AnimatedSection animation="fadeUp" delay={0.2}>
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
             {/* Trend chart */}
-            <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-4">
+            <div className="flex h-full flex-col rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+              <div className="mb-4 shrink-0 space-y-3">
                 <h3 className="text-lg font-semibold text-gray-900">Tendances</h3>
-                <select
-                  value={chartMetric}
-                  onChange={(e) => setChartMetric(e.target.value as Metric)}
-                  className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-600 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                >
-                  {Object.entries(metricLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                    {(Object.keys(metricLabels) as Metric[]).map((metric) => (
+                      <button
+                        key={metric}
+                        onClick={() => setChartMetric(metric)}
+                        className={`whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          chartMetric === metric
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-800'
+                        }`}
+                      >
+                        {metricLabels[metric]}
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={trendYear}
+                    onChange={(e) => setTrendYear(Number(e.target.value))}
+                    className="w-full sm:w-auto px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-medium text-gray-600 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    aria-label="Filtrer par année"
+                  >
+                    {availableTrendYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              {!trendLoading && (!dailyTrend || dailyTrend.length === 0) ? (
-                <EmptyState type="chart" />
-              ) : (
-                <TrendChart
-                  data={dailyTrend ?? []}
-                  loading={trendLoading}
-                  metric={chartMetric}
-                />
-              )}
+              <div className="flex min-h-0 flex-1 flex-col">
+                {!trendLoading && (!filteredTrend || filteredTrend.length === 0) ? (
+                  <div className="flex flex-1 items-center justify-center min-h-[13rem]">
+                    <EmptyState type="chart" />
+                  </div>
+                ) : (
+                  <TrendChart
+                    data={filteredTrend ?? []}
+                    loading={trendLoading}
+                    metric={chartMetric}
+                    fillHeight
+                  />
+                )}
+              </div>
             </div>
 
             {/* Top Planteurs */}
-            <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 10 Planteurs</h3>
+            <div className="flex h-full flex-col rounded-xl bg-white p-6 shadow-sm border border-gray-100">
+              <h3 className="mb-4 shrink-0 text-lg font-semibold text-gray-900">Top 5 Planteurs</h3>
+              <div className="flex min-h-0 flex-1 flex-col">
               {!planteursLoading && (!topPlanteurs || topPlanteurs.length === 0) ? (
-                <EmptyState type="performers" />
+                <div className="flex flex-1 items-center justify-center min-h-[13rem]">
+                  <EmptyState type="performers" />
+                </div>
               ) : (
                 <TopPerformers
-                  data={topPlanteurs ?? []}
+                  data={(topPlanteurs ?? []).slice(0, 5)}
                   loading={planteursLoading}
                   title=""
                   type="planteur"
+                  embedded
                 />
               )}
+              </div>
             </div>
           </div>
         </AnimatedSection>
@@ -247,13 +295,20 @@ export default function DashboardPage() {
             <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 10 Fournisseurs</h3>
               {!chefsLoading && (!topChefPlanteurs || topChefPlanteurs.length === 0) ? (
-                <EmptyState type="performers" />
+                <EmptyState
+                  type="performers"
+                  title="Aucun fournisseur classé pour cette période."
+                  description="Les fournisseurs apparaîtront ici dès qu’ils auront des livraisons. Associez un fournisseur à vos livraisons importées si besoin."
+                  actionLabel="Voir les validations en attente"
+                  actionHref="/chef-planteurs?validation_status=pending"
+                />
               ) : (
                 <TopPerformers
                   data={topChefPlanteurs ?? []}
                   loading={chefsLoading}
                   title=""
                   type="chef_planteur"
+                  embedded
                 />
               )}
             </div>
@@ -270,35 +325,37 @@ export default function DashboardPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <ActivityCalendar data={activityData} loading={trendLoading} />
             
-            {/* Info card */}
-            <div className="rounded-xl bg-gradient-to-br from-primary-50 to-emerald-50 border border-primary-100 p-6">
-              <h3 className="text-lg font-semibold text-primary-900 mb-4">Informations</h3>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3">
-                  <div className="p-1.5 rounded-lg bg-primary-100">
-                    <svg className="h-4 w-4 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <span className="text-sm text-primary-800">Les données sont mises à jour en temps réel</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="p-1.5 rounded-lg bg-primary-100">
-                    <svg className="h-4 w-4 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <span className="text-sm text-primary-800">Les pourcentages comparent avec la période précédente</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="p-1.5 rounded-lg bg-primary-100">
-                    <svg className="h-4 w-4 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <span className="text-sm text-primary-800">Utilisez <kbd className="px-1.5 py-0.5 bg-white/80 rounded text-xs font-mono">Ctrl+K</kbd> pour rechercher rapidement</span>
-                </li>
-              </ul>
+            {/* ESG compact card */}
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-5">
+              <h3 className="text-base font-semibold text-emerald-900 mb-3">Risques & Conformité</h3>
+              <div className="space-y-2 text-sm">
+                <p className="flex items-center justify-between text-emerald-800">
+                  <span>Conformité ESG</span>
+                  <span className="font-semibold">{(esgMetrics?.conformitePct ?? 0).toFixed(1)}%</span>
+                </p>
+                <p className="flex items-center justify-between text-emerald-800">
+                  <span>Parcelles à risque</span>
+                  <span className="font-semibold">{esgMetrics?.parcellesARisque ?? 0}</span>
+                </p>
+                <p className="flex items-center justify-between text-emerald-800">
+                  <span>Alertes déforestation</span>
+                  <span className="font-semibold">{esgMetrics?.pendingDeforestationEvents ?? 0}</span>
+                </p>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href="/parcelles"
+                  className="inline-flex rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-50"
+                >
+                  Voir les parcelles concernées
+                </Link>
+                <Link
+                  href="/chef-planteurs?validation_status=pending"
+                  className="inline-flex rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-50"
+                >
+                  Voir validations
+                </Link>
+              </div>
             </div>
           </div>
         </AnimatedSection>

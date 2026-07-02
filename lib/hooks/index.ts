@@ -14,6 +14,7 @@ export {
   useRefreshDashboard,
   useDeliveryLocations,
   useEntityCounts,
+  useESGMetrics,
   dashboardKeys,
 } from './useDashboard';
 export {

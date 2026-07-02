@@ -43,15 +43,45 @@ export function OrphanParcellesWidget({ cooperativeId }: OrphanParcellesWidgetPr
 
       try {
         // Query for orphan parcelles (planteur_id IS NULL)
+        // Note: some environments expose cooperative_id on parcelles, others don't.
+        // We try cooperative filter first, then gracefully fallback.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error: queryError } = await (supabase as any)
+        let query = (supabase as any)
           .from('parcelles')
           .select('surface_hectares')
           .eq('is_active', true)
           .is('planteur_id', null);
 
+        if (cooperativeId) {
+          query = query.eq('cooperative_id', cooperativeId);
+        }
+
+        const { data, error: queryError } = await query;
+
         if (queryError) {
-          throw new Error(queryError.message);
+          // fallback without cooperative filter if the column is absent in this env
+          const { data: fallbackData, error: fallbackError } = await (supabase as any)
+            .from('parcelles')
+            .select('surface_hectares')
+            .eq('is_active', true)
+            .is('planteur_id', null);
+
+          if (fallbackError) {
+            throw new Error(fallbackError.message);
+          }
+
+          const typedFallbackData = (fallbackData || []) as Array<{ surface_hectares: number | null }>;
+          const orphanCount = typedFallbackData.length;
+          const orphanSurface = typedFallbackData.reduce(
+            (sum, p) => sum + (Number(p.surface_hectares) || 0),
+            0
+          );
+
+          setStats({
+            orphan_count: orphanCount,
+            orphan_surface_ha: Math.round(orphanSurface * 100) / 100,
+          });
+          return;
         }
 
         const typedData = (data || []) as Array<{ surface_hectares: number | null }>;
@@ -111,6 +141,9 @@ export function OrphanParcellesWidget({ cooperativeId }: OrphanParcellesWidgetPr
             <p className="text-xs text-amber-700 mt-1">
               {stats.orphan_count} parcelle{stats.orphan_count > 1 ? 's' : ''} ({stats.orphan_surface_ha.toFixed(1)} ha) sans planteur
             </p>
+            <span className="mt-2 inline-flex items-center rounded-lg bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+              Assigner maintenant
+            </span>
           </div>
 
           {/* Arrow */}

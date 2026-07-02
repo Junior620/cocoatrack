@@ -15,12 +15,15 @@ interface KPICardProps {
   value: number | string;
   subtitle: string;
   change?: number;
+  changeContext?: string;
+  isNewActivity?: boolean;
   loading?: boolean;
   formatValue?: (value: number | string) => string;
   icon?: React.ReactNode;
   animateCounter?: boolean;
   sparklineData?: SparklineData[];
   gradient?: 'green' | 'orange' | 'blue' | 'purple' | 'red';
+  className?: string;
 }
 
 function formatNumber(value: number | string): string {
@@ -158,7 +161,21 @@ function KPICardSkeleton() {
   );
 }
 
-function ChangeIndicator({ change }: { change: number }) {
+function ChangeIndicator({
+  change,
+  isNewActivity = false,
+}: {
+  change: number;
+  isNewActivity?: boolean;
+}) {
+  if (isNewActivity) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
+        Nouvelle activité
+      </span>
+    );
+  }
+
   const isPositive = change >= 0;
   
   return (
@@ -185,12 +202,15 @@ export function KPICard({
   value,
   subtitle,
   change,
+  changeContext,
+  isNewActivity = false,
   loading = false,
   formatValue = formatNumber,
   icon,
   animateCounter = true,
   sparklineData,
   gradient = 'green',
+  className = '',
 }: KPICardProps) {
   const valueRef = useRef<HTMLParagraphElement>(null);
   const cardRef = useFadeIn<HTMLDivElement>(0, 0.5);
@@ -224,8 +244,8 @@ export function KPICard({
   return (
     <div 
       ref={cardRef}
-      className={`relative overflow-hidden rounded-xl bg-white p-6 shadow-sm border ${style.border} 
-        hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out cursor-default group`}
+      className={`relative overflow-hidden rounded-xl bg-white p-4 sm:p-6 shadow-sm border ${style.border} 
+        hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out cursor-default group ${className}`}
     >
       {/* Gradient background */}
       <div className={`absolute inset-0 bg-gradient-to-br ${style.bg} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
@@ -233,7 +253,7 @@ export function KPICard({
       {/* Content */}
       <div className="relative">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-500">{title}</p>
           {icon && (
             <div className={`p-2.5 rounded-xl ${style.iconBg} ${style.iconColor} 
               group-hover:scale-110 transition-transform duration-300`}>
@@ -244,21 +264,26 @@ export function KPICard({
         
         <p
           ref={valueRef}
-          className="text-3xl font-bold text-gray-900 tracking-tight transition-all duration-300"
+          className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight transition-all duration-300"
         >
           {formatValue(displayValue)}
         </p>
         
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <p className="text-sm text-gray-500">{subtitle}</p>
-            {change !== undefined && <ChangeIndicator change={change} />}
+            <p className="text-xs sm:text-sm text-gray-500">{subtitle}</p>
+            {change !== undefined && (
+              <ChangeIndicator change={change} isNewActivity={isNewActivity} />
+            )}
           </div>
           
           {sparklineData && sparklineData.length > 0 && (
             <Sparkline data={sparklineData} color={style.sparkline} />
           )}
         </div>
+        {change !== undefined && changeContext && (
+          <p className="mt-1 text-xs text-gray-400">{changeContext}</p>
+        )}
       </div>
     </div>
   );

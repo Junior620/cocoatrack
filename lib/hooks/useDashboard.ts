@@ -16,13 +16,15 @@ export const dashboardKeys = {
   metricsWithComparison: (period: string, filters: DashboardFilters) =>
     [...dashboardKeys.all, 'metricsWithComparison', period, filters] as const,
   dailyTrend: (filters: DashboardFilters) => [...dashboardKeys.all, 'dailyTrend', filters] as const,
-  topPlanteurs: (filters: DashboardFilters) => [...dashboardKeys.all, 'topPlanteurs', filters] as const,
-  topChefPlanteurs: (filters: DashboardFilters) =>
-    [...dashboardKeys.all, 'topChefPlanteurs', filters] as const,
+  topPlanteurs: (filters: DashboardFilters, limit = 10) =>
+    [...dashboardKeys.all, 'topPlanteurs', filters, limit] as const,
+  topChefPlanteurs: (filters: DashboardFilters, limit = 10) =>
+    [...dashboardKeys.all, 'topChefPlanteurs', filters, limit] as const,
   fullData: (period: string, filters: DashboardFilters) =>
     [...dashboardKeys.all, 'fullData', period, filters] as const,
   entityCounts: (cooperativeId?: string) =>
     [...dashboardKeys.all, 'entityCounts', cooperativeId] as const,
+  esgMetrics: (filters: DashboardFilters) => [...dashboardKeys.all, 'esgMetrics', filters] as const,
 };
 
 type Period = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -68,7 +70,7 @@ export function useDailyTrend(filters: DashboardFilters = {}) {
  */
 export function useTopPlanteurs(filters: DashboardFilters = {}, limit: number = 10) {
   return useQuery({
-    queryKey: dashboardKeys.topPlanteurs(filters),
+    queryKey: dashboardKeys.topPlanteurs(filters, limit),
     queryFn: () => dashboardApi.getTopPlanteurs(filters, limit),
     staleTime: 5 * 60 * 1000, // 5 minutes (heavy query)
   });
@@ -79,7 +81,7 @@ export function useTopPlanteurs(filters: DashboardFilters = {}, limit: number = 
  */
 export function useTopChefPlanteurs(filters: DashboardFilters = {}, limit: number = 10) {
   return useQuery({
-    queryKey: dashboardKeys.topChefPlanteurs(filters),
+    queryKey: dashboardKeys.topChefPlanteurs(filters, limit),
     queryFn: () => dashboardApi.getTopChefPlanteurs(filters, limit),
     staleTime: 5 * 60 * 1000, // 5 minutes (heavy query)
   });
@@ -199,6 +201,17 @@ export function useEntityCounts(cooperativeId?: string) {
   return useQuery({
     queryKey: dashboardKeys.entityCounts(cooperativeId),
     queryFn: () => dashboardApi.getEntityCounts(cooperativeId),
+    staleTime: 60 * 1000, // 1 minute
+  });
+}
+
+/**
+ * Hook to fetch ESG/traçabilité metrics from existing data.
+ */
+export function useESGMetrics(filters: DashboardFilters = {}) {
+  return useQuery({
+    queryKey: dashboardKeys.esgMetrics(filters),
+    queryFn: () => dashboardApi.getESGMetrics(filters),
     staleTime: 60 * 1000, // 1 minute
   });
 }

@@ -25,6 +25,21 @@ export default function ResetPasswordPage() {
 
   const supabase = createClient();
 
+  const passwordRules = {
+    minLength: password.length >= 8,
+    hasUpper: /[A-Z]/.test(password),
+    hasLower: /[a-z]/.test(password),
+    hasNumber: /\d/.test(password),
+    hasSpecial: /[^A-Za-z0-9]/.test(password),
+  };
+
+  const passwordScore = Object.values(passwordRules).filter(Boolean).length;
+  const strengthLabel =
+    passwordScore <= 2 ? 'Faible' : passwordScore <= 4 ? 'Moyen' : 'Fort';
+  const strengthColor =
+    passwordScore <= 2 ? 'bg-red-500' : passwordScore <= 4 ? 'bg-amber-500' : 'bg-green-500';
+  const passwordsMatch = password.length > 0 && confirmPassword.length > 0 && password === confirmPassword;
+
   useEffect(() => {
     // Check if we have a valid recovery session
     const checkSession = async () => {
@@ -83,8 +98,19 @@ export default function ResetPasswordPage() {
   // Loading state
   if (isValidSession === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-[#234D1E] to-[#1a3a16]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent" />
+      <div
+        className="relative min-h-screen flex items-center justify-center p-5 sm:p-8 overflow-hidden"
+        style={{
+          backgroundImage: "url('/cocoa-auth-bg.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-black/45" />
+        <div className="pointer-events-none absolute -top-28 -right-24 h-80 w-80 rounded-full bg-white/12 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
+        <div className="relative z-10 h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent" />
       </div>
     );
   }
@@ -92,9 +118,20 @@ export default function ResetPasswordPage() {
   // Invalid session
   if (isValidSession === false) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-[#234D1E] to-[#1a3a16]">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-10">
+      <div
+        className="relative min-h-screen flex items-center justify-center p-5 sm:p-8 overflow-hidden"
+        style={{
+          backgroundImage: "url('/cocoa-auth-bg.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-black/45" />
+        <div className="pointer-events-none absolute -top-28 -right-24 h-80 w-80 rounded-full bg-white/12 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
+        <div className="relative z-10 w-full max-w-md">
+          <div className="bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8 lg:p-10 border border-white/50 backdrop-blur-md ring-1 ring-black/5">
             <div className="text-center mb-6">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
                 <AlertCircle className="h-8 w-8 text-red-600" />
@@ -119,9 +156,20 @@ export default function ResetPasswordPage() {
   // Success state
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-[#234D1E] to-[#1a3a16]">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-10">
+      <div
+        className="relative min-h-screen flex items-center justify-center p-5 sm:p-8 overflow-hidden"
+        style={{
+          backgroundImage: "url('/cocoa-auth-bg.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-black/45" />
+        <div className="pointer-events-none absolute -top-28 -right-24 h-80 w-80 rounded-full bg-white/12 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
+        <div className="relative z-10 w-full max-w-md">
+          <div className="bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8 lg:p-10 border border-white/50 backdrop-blur-md ring-1 ring-black/5">
             <div className="text-center mb-6">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
                 <CheckCircle className="h-8 w-8 text-green-600" />
@@ -139,8 +187,19 @@ export default function ResetPasswordPage() {
 
   // Reset password form
   return (
-    <div className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-[#234D1E] to-[#1a3a16]">
-      <div className="w-full max-w-md">
+    <div
+      className="relative min-h-screen flex items-center justify-center p-5 sm:p-8 overflow-hidden"
+      style={{
+        backgroundImage: "url('/cocoa-auth-bg.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-black/45" />
+      <div className="pointer-events-none absolute -top-28 -right-24 h-80 w-80 rounded-full bg-white/12 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
+      <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
@@ -160,12 +219,13 @@ export default function ResetPasswordPage() {
             />
           </div>
           <h1 className="text-2xl font-bold text-white">CocoaTrack</h1>
+          <p className="text-white/80 mt-1">Gestion intelligente des livraisons de cacao</p>
         </div>
 
         {/* Form Card */}
-        <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-10">
+        <div className="bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8 lg:p-10 border border-white/50 backdrop-blur-md ring-1 ring-black/5">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Nouveau mot de passe</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Nouveau mot de passe</h2>
             <p className="text-gray-500 mt-2">
               Choisissez un mot de passe sécurisé
             </p>
@@ -173,7 +233,7 @@ export default function ResetPasswordPage() {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
-              <div className="rounded-xl bg-red-50 border border-red-200 p-4">
+              <div className="rounded-xl bg-red-50 border border-red-200 p-4" role="alert" aria-live="polite">
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
@@ -190,6 +250,8 @@ export default function ResetPasswordPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  autoFocus
                   className="w-full px-4 py-3.5 pr-12 text-base rounded-xl border-2 border-[#234D1E] text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#234D1E]/30 transition-all"
                   placeholder="••••••••"
                   disabled={isSubmitting}
@@ -198,13 +260,34 @@ export default function ResetPasswordPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors rounded-md p-1 focus:outline-none focus:ring-2 focus:ring-[#234D1E]/30"
                   disabled={isSubmitting}
+                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              <p className="mt-1 text-sm text-gray-500">Minimum 8 caractères</p>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Force du mot de passe</span>
+                  <span className="font-medium text-gray-700">{strengthLabel}</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${strengthColor}`}
+                    style={{ width: `${(passwordScore / 5) * 100}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-1 text-xs text-gray-600 sm:grid-cols-2">
+                  <p className={passwordRules.minLength ? 'text-green-700' : ''}>- 8 caracteres minimum</p>
+                  <p className={passwordRules.hasUpper ? 'text-green-700' : ''}>- 1 majuscule</p>
+                  <p className={passwordRules.hasLower ? 'text-green-700' : ''}>- 1 minuscule</p>
+                  <p className={passwordRules.hasNumber ? 'text-green-700' : ''}>- 1 chiffre</p>
+                  <p className={passwordRules.hasSpecial ? 'text-green-700 sm:col-span-2' : 'sm:col-span-2'}>
+                    - 1 caractere special
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Confirm Password */}
@@ -219,6 +302,7 @@ export default function ResetPasswordPage() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
                   className="w-full px-4 py-3.5 pr-12 text-base rounded-xl border-2 border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#234D1E] focus:ring-2 focus:ring-[#234D1E]/30 transition-all"
                   placeholder="••••••••"
                   disabled={isSubmitting}
@@ -227,12 +311,27 @@ export default function ResetPasswordPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors rounded-md p-1 focus:outline-none focus:ring-2 focus:ring-[#234D1E]/30"
                   disabled={isSubmitting}
+                  aria-label={
+                    showConfirmPassword
+                      ? 'Masquer la confirmation du mot de passe'
+                      : 'Afficher la confirmation du mot de passe'
+                  }
                 >
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {confirmPassword.length > 0 && !passwordsMatch && (
+                <p className="mt-2 text-sm text-red-600" aria-live="polite">
+                  Les mots de passe ne correspondent pas.
+                </p>
+              )}
+              {passwordsMatch && (
+                <p className="mt-2 text-sm text-green-700" aria-live="polite">
+                  Les mots de passe correspondent.
+                </p>
+              )}
             </div>
 
             {/* Submit */}
@@ -260,7 +359,7 @@ export default function ResetPasswordPage() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-white/70 text-sm mt-6">
+        <p className="text-center text-white/80 text-sm mt-6">
           © 2024 CocoaTrack. Tous droits réservés.
         </p>
       </div>

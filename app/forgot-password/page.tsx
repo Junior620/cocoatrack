@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
+  const [submittedEmail, setSubmittedEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -34,7 +35,9 @@ export default function ForgotPasswordPage() {
         throw new Error(data.error || 'Une erreur est survenue');
       }
 
+      setSubmittedEmail(email);
       setSuccess(true);
+      setEmail('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
@@ -44,16 +47,27 @@ export default function ForgotPasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-[#234D1E] to-[#1a3a16]">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-10">
+      <div
+        className="relative min-h-screen flex items-center justify-center p-5 sm:p-8 overflow-hidden"
+        style={{
+          backgroundImage: "url('/cocoa-auth-bg.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-black/45" />
+        <div className="pointer-events-none absolute -top-28 -right-24 h-80 w-80 rounded-full bg-white/12 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
+        <div className="relative z-10 w-full max-w-md">
+          <div className="bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8 lg:p-10 border border-white/50 backdrop-blur-md ring-1 ring-black/5">
             <div className="text-center mb-6">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Email envoyé !</h2>
               <p className="text-gray-600">
-                Si un compte existe avec l&apos;adresse <strong>{email}</strong>, vous recevrez un email avec les instructions pour réinitialiser votre mot de passe.
+                Si un compte existe avec l&apos;adresse <strong>{submittedEmail}</strong>, vous recevrez un email avec les instructions pour réinitialiser votre mot de passe.
               </p>
             </div>
 
@@ -77,8 +91,19 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-8 bg-gradient-to-b from-[#234D1E] to-[#1a3a16]">
-      <div className="w-full max-w-md">
+    <div
+      className="relative min-h-screen flex items-center justify-center p-5 sm:p-8 overflow-hidden"
+      style={{
+        backgroundImage: "url('/cocoa-auth-bg.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-black/45" />
+      <div className="pointer-events-none absolute -top-28 -right-24 h-80 w-80 rounded-full bg-white/12 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
+      <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-3">
@@ -98,12 +123,13 @@ export default function ForgotPasswordPage() {
             />
           </div>
           <h1 className="text-2xl font-bold text-white">CocoaTrack</h1>
+          <p className="text-white/80 mt-1">Gestion intelligente des livraisons de cacao</p>
         </div>
 
         {/* Form Card */}
-        <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-10">
+        <div className="bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8 lg:p-10 border border-white/50 backdrop-blur-md ring-1 ring-black/5">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Mot de passe oublié</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Mot de passe oublié</h2>
             <p className="text-gray-500 mt-2">
               Entrez votre email pour recevoir un lien de réinitialisation
             </p>
@@ -111,7 +137,7 @@ export default function ForgotPasswordPage() {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
-              <div className="rounded-xl bg-red-50 border border-red-200 p-4">
+              <div className="rounded-xl bg-red-50 border border-red-200 p-4" role="alert" aria-live="polite">
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
@@ -127,6 +153,9 @@ export default function ForgotPasswordPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                inputMode="email"
+                autoFocus
                 className="w-full px-4 py-3.5 text-base rounded-xl border-2 border-[#234D1E] text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#234D1E]/30 transition-all"
                 placeholder="votre.email@cooperative.com"
                 disabled={isSubmitting}
@@ -167,7 +196,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-white/70 text-sm mt-6">
+        <p className="text-center text-white/80 text-sm mt-6">
           © 2024 CocoaTrack. Tous droits réservés.
         </p>
       </div>

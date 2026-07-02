@@ -34,6 +34,11 @@ export interface DashboardMetricsWithComparison extends DashboardMetrics {
     weightChange: number;
     amountChange: number;
     priceChange: number;
+    deliveriesIsNewActivity?: boolean;
+    weightIsNewActivity?: boolean;
+    amountIsNewActivity?: boolean;
+    priceIsNewActivity?: boolean;
+    contextLabel: string;
   };
 }
 
@@ -57,6 +62,9 @@ export interface TopPerformer {
   totalDeliveries: number;
   totalWeightKg: number;
   totalAmountXAF: number;
+  village?: string | null;
+  lastDeliveryAt?: string | null;
+  validationStatus?: 'pending' | 'validated' | 'rejected' | null;
 }
 
 export interface DashboardData {
@@ -64,6 +72,19 @@ export interface DashboardData {
   dailyTrend: TimeSeriesPoint[];
   topPlanteurs: TopPerformer[];
   topChefPlanteurs: TopPerformer[];
+}
+
+export interface ESGMetrics {
+  totalParcelles: number;
+  conformesParcelles: number;
+  conformitePct: number;
+  parcellesARisque: number;
+  risquePct: number;
+  pendingDeforestationEvents: number;
+  verifiedChefPlanteurs: number;
+  verificationPct: number;
+  traceableDeliveries: number;
+  traceabilityPct: number;
 }
 
 export interface DeliveryLocation {
@@ -76,6 +97,51 @@ export interface DeliveryLocation {
   date?: string;
 }
 
+type DeliveryMetricRow = {
+  weight_kg: number;
+  total_amount: number;
+};
+
+type DeliveryTrendRow = {
+  delivered_at: string;
+  weight_kg: number;
+  total_amount: number;
+};
+
+type DeliveryPlanteurRow = {
+  planteur_id: string;
+  delivered_at: string;
+  weight_kg: number;
+  total_amount: number;
+};
+
+type DeliveryChefRow = {
+  chef_planteur_id: string | null;
+  planteur_id: string;
+  delivered_at: string;
+  weight_kg: number;
+  total_amount: number;
+};
+
+type PlanteurLookupRow = {
+  id: string;
+  name: string;
+  code: string;
+  localite: string | null;
+};
+
+type ChefLookupRow = {
+  id: string;
+  name: string;
+  code: string;
+  validation_status: 'pending' | 'validated' | 'rejected' | null;
+};
+
+type PlanteurChefRow = {
+  id: string;
+  chef_planteur_id: string | null;
+};
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -85,6 +151,10 @@ function calculatePercentageChange(current: number, previous: number): number {
     return current > 0 ? 100 : 0;
   }
   return Math.round(((current - previous) / previous) * 100 * 10) / 10;
+}
+
+function isNewActivity(current: number, previous: number): boolean {
+  return previous === 0 && current > 0;
 }
 
 function getDateRange(
@@ -146,6 +216,86 @@ function getPreviousPeriodRange(from: string, to: string) {
   };
 }
 
+export type DashboardPeriod = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
+
+export function buildDashboardFilters(
+  period: DashboardPeriod,
+  base: DashboardFilters = {},
+  customFrom?: string,
+  customTo?: string
+): DashboardFilters {
+  if (period === 'all') {
+    return base;
+  }
+  const { from, to } = getDateRange(
+    period === 'custom' ? 'custom' : period,
+    customFrom,
+    customTo
+  );
+  return { ...base, dateFrom: from, dateTo: to };
+}
+
+function aggregateDeliveriesByDate(rows: DeliveryTrendRow[]): TimeSeriesPoint[] {
+  const dateMap = new Map<string, TimeSeriesPoint>();
+
+  for (const row of rows) {
+    const date = row.delivered_at.split('T')[0];
+    const existing = dateMap.get(date);
+
+    if (existing) {
+      existing.deliveries += 1;
+      existing.weightKg += Number(row.weight_kg);
+      existing.amountXAF += Number(row.total_amount);
+    } else {
+      dateMap.set(date, {
+        date,
+        deliveries: 1,
+        weightKg: Number(row.weight_kg),
+        amountXAF: Number(row.total_amount),
+      });
+    }
+  }
+
+  return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function getMetricsFromDeliveries(filters: DashboardFilters = {}): Promise<DashboardMetrics> {
+  const supabase = createClient();
+  const { cooperativeId, dateFrom, dateTo } = filters;
+
+  let query = supabase
+    .from('deliveries')
+    .select('weight_kg, total_amount');
+
+  if (cooperativeId) {
+    query = query.eq('cooperative_id', cooperativeId);
+  }
+  if (dateFrom) {
+    query = query.gte('delivered_at', `${dateFrom}T00:00:00`);
+  }
+  if (dateTo) {
+    query = query.lte('delivered_at', `${dateTo}T23:59:59`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to fetch dashboard metrics: ${error.message}`);
+  }
+
+  const rows = (data || []) as DeliveryMetricRow[];
+  const totalWeightKg = rows.reduce((sum, row) => sum + Number(row.weight_kg), 0);
+  const totalAmountXAF = rows.reduce((sum, row) => sum + Number(row.total_amount), 0);
+
+  return {
+    totalDeliveries: rows.length,
+    totalWeightKg: Math.round(totalWeightKg * 100) / 100,
+    totalAmountXAF,
+    averagePricePerKg:
+      totalWeightKg > 0 ? Math.round((totalAmountXAF / totalWeightKg) * 100) / 100 : 0,
+  };
+}
+
 // ============================================================================
 // API FUNCTIONS
 // ============================================================================
@@ -164,7 +314,7 @@ async function getMetrics(filters: DashboardFilters = {}): Promise<DashboardMetr
   const { data, error } = await supabase.rpc('get_dashboard_metrics_all', params as any);
 
   if (error) {
-    throw new Error(`Failed to fetch dashboard metrics: ${error.message}`);
+    return getMetricsFromDeliveries(filters);
   }
 
   const result: GetDashboardMetricsAllResult = (data as any)?.[0] || { 
@@ -215,6 +365,23 @@ async function getMetricsWithComparison(
         currentMetrics.averagePricePerKg,
         previousMetrics.averagePricePerKg
       ),
+      deliveriesIsNewActivity: isNewActivity(
+        currentMetrics.totalDeliveries,
+        previousMetrics.totalDeliveries
+      ),
+      weightIsNewActivity: isNewActivity(
+        currentMetrics.totalWeightKg,
+        previousMetrics.totalWeightKg
+      ),
+      amountIsNewActivity: isNewActivity(
+        currentMetrics.totalAmountXAF,
+        previousMetrics.totalAmountXAF
+      ),
+      priceIsNewActivity: isNewActivity(
+        currentMetrics.averagePricePerKg,
+        previousMetrics.averagePricePerKg
+      ),
+      contextLabel: 'vs période précédente',
     },
   };
 }
@@ -223,20 +390,20 @@ async function getDailyTrend(filters: DashboardFilters = {}): Promise<TimeSeries
   const supabase = createClient();
   const { cooperativeId, dateFrom, dateTo } = filters;
 
-  // Use dashboard_all_deliveries view to include NULL cooperative deliveries
+  // Aggregate directly from deliveries (includes NULL cooperative_id rows)
   let query = supabase
-    .from('dashboard_all_deliveries')
-    .select('period_date, total_deliveries, total_weight_kg, total_amount_xaf')
-    .order('period_date', { ascending: true });
+    .from('deliveries')
+    .select('delivered_at, weight_kg, total_amount')
+    .order('delivered_at', { ascending: true });
 
   if (cooperativeId) {
     query = query.eq('cooperative_id', cooperativeId);
   }
   if (dateFrom) {
-    query = query.gte('period_date', dateFrom);
+    query = query.gte('delivered_at', `${dateFrom}T00:00:00`);
   }
   if (dateTo) {
-    query = query.lte('period_date', dateTo);
+    query = query.lte('delivered_at', `${dateTo}T23:59:59`);
   }
 
   const { data, error } = await query;
@@ -245,28 +412,7 @@ async function getDailyTrend(filters: DashboardFilters = {}): Promise<TimeSeries
     throw new Error(`Failed to fetch daily trend: ${error.message}`);
   }
 
-  // Group by date (sum across cooperatives if needed)
-  const dateMap = new Map<string, TimeSeriesPoint>();
-  
-  for (const row of data || []) {
-    const r = row as { period_date: string; total_deliveries: number; total_weight_kg: number; total_amount_xaf: number };
-    const existing = dateMap.get(r.period_date);
-    
-    if (existing) {
-      existing.deliveries += r.total_deliveries;
-      existing.weightKg += Number(r.total_weight_kg);
-      existing.amountXAF += Number(r.total_amount_xaf);
-    } else {
-      dateMap.set(r.period_date, {
-        date: r.period_date,
-        deliveries: r.total_deliveries,
-        weightKg: Number(r.total_weight_kg),
-        amountXAF: Number(r.total_amount_xaf),
-      });
-    }
-  }
-
-  return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  return aggregateDeliveriesByDate((data || []) as DeliveryTrendRow[]);
 }
 
 async function getTopPlanteurs(
@@ -278,49 +424,70 @@ async function getTopPlanteurs(
 
   let query = supabase
     .from('deliveries')
-    .select(`
-      planteur_id,
-      planteur:planteurs!deliveries_planteur_id_fkey(id, name, code),
-      weight_kg,
-      total_amount
-    `);
+    .select('planteur_id, delivered_at, weight_kg, total_amount');
 
   if (cooperativeId) {
     query = query.eq('cooperative_id', cooperativeId);
   }
   if (dateFrom) {
-    query = query.gte('delivered_at', dateFrom);
+    query = query.gte('delivered_at', `${dateFrom}T00:00:00`);
   }
   if (dateTo) {
-    query = query.lte('delivered_at', dateTo);
+    query = query.lte('delivered_at', `${dateTo}T23:59:59`);
   }
 
-  const { data, error } = await query;
+  const { data: deliveries, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch top planteurs: ${error.message}`);
   }
 
+  const deliveryRows = (deliveries || []) as DeliveryPlanteurRow[];
+
+  const planteurIds = [
+    ...new Set(deliveryRows.map((row) => row.planteur_id).filter(Boolean)),
+  ];
+
+  if (planteurIds.length === 0) {
+    return [];
+  }
+
+  const { data: planteurs, error: planteursError } = await supabase
+    .from('planteurs')
+    .select('id, name, code, localite')
+    .in('id', planteurIds);
+
+  if (planteursError) {
+    throw new Error(`Failed to fetch planteurs for ranking: ${planteursError.message}`);
+  }
+
+  const planteurLookup = new Map(
+    ((planteurs || []) as PlanteurLookupRow[]).map((p) => [p.id, p])
+  );
   const planteurMap = new Map<string, TopPerformer>();
 
-  for (const row of data || []) {
-    const r = row as { planteur: { id: string; name: string; code: string } | null; weight_kg: number; total_amount: number };
-    const planteur = r.planteur;
+  for (const row of deliveryRows) {
+    const planteur = planteurLookup.get(row.planteur_id);
     if (!planteur) continue;
 
     const existing = planteurMap.get(planteur.id);
     if (existing) {
       existing.totalDeliveries += 1;
-      existing.totalWeightKg += Number(r.weight_kg);
-      existing.totalAmountXAF += Number(r.total_amount);
+      existing.totalWeightKg += Number(row.weight_kg);
+      existing.totalAmountXAF += Number(row.total_amount);
+      if (!existing.lastDeliveryAt || new Date(row.delivered_at) > new Date(existing.lastDeliveryAt)) {
+        existing.lastDeliveryAt = row.delivered_at;
+      }
     } else {
       planteurMap.set(planteur.id, {
         id: planteur.id,
         name: planteur.name,
         code: planteur.code,
         totalDeliveries: 1,
-        totalWeightKg: Number(r.weight_kg),
-        totalAmountXAF: Number(r.total_amount),
+        totalWeightKg: Number(row.weight_kg),
+        totalAmountXAF: Number(row.total_amount),
+        village: planteur.localite ?? null,
+        lastDeliveryAt: row.delivered_at,
       });
     }
   }
@@ -343,49 +510,97 @@ async function getTopChefPlanteurs(
 
   let query = supabase
     .from('deliveries')
-    .select(`
-      chef_planteur_id,
-      chef_planteur:chef_planteurs!deliveries_chef_planteur_id_fkey(id, name, code),
-      weight_kg,
-      total_amount
-    `);
+    .select('chef_planteur_id, planteur_id, delivered_at, weight_kg, total_amount');
 
   if (cooperativeId) {
     query = query.eq('cooperative_id', cooperativeId);
   }
   if (dateFrom) {
-    query = query.gte('delivered_at', dateFrom);
+    query = query.gte('delivered_at', `${dateFrom}T00:00:00`);
   }
   if (dateTo) {
-    query = query.lte('delivered_at', dateTo);
+    query = query.lte('delivered_at', `${dateTo}T23:59:59`);
   }
 
-  const { data, error } = await query;
+  const { data: deliveries, error } = await query;
 
   if (error) {
     throw new Error(`Failed to fetch top chef planteurs: ${error.message}`);
   }
 
+  const deliveryRows = (deliveries || []) as DeliveryChefRow[];
+
+  const planteurIdsNeedingChef = [
+    ...new Set(
+      deliveryRows
+        .filter((row) => !row.chef_planteur_id && row.planteur_id)
+        .map((row) => row.planteur_id)
+    ),
+  ];
+
+  const planteurChefMap = new Map<string, string>();
+  if (planteurIdsNeedingChef.length > 0) {
+    const { data: planteurs } = await supabase
+      .from('planteurs')
+      .select('id, chef_planteur_id')
+      .in('id', planteurIdsNeedingChef);
+
+    for (const planteur of (planteurs || []) as PlanteurChefRow[]) {
+      if (planteur.chef_planteur_id) {
+        planteurChefMap.set(planteur.id, planteur.chef_planteur_id);
+      }
+    }
+  }
+
+  const chefIds = [
+    ...new Set(
+      deliveryRows
+        .map((row) => row.chef_planteur_id || planteurChefMap.get(row.planteur_id))
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  if (chefIds.length === 0) {
+    return [];
+  }
+
+  const { data: chefs, error: chefsError } = await supabase
+    .from('chef_planteurs')
+    .select('id, name, code, validation_status')
+    .in('id', chefIds);
+
+  if (chefsError) {
+    throw new Error(`Failed to fetch chef planteurs for ranking: ${chefsError.message}`);
+  }
+
+  const chefLookup = new Map(((chefs || []) as ChefLookupRow[]).map((chef) => [chef.id, chef]));
   const chefMap = new Map<string, TopPerformer>();
 
-  for (const row of data || []) {
-    const r = row as { chef_planteur: { id: string; name: string; code: string } | null; weight_kg: number; total_amount: number };
-    const chef = r.chef_planteur;
+  for (const row of deliveryRows) {
+    const chefId = row.chef_planteur_id || planteurChefMap.get(row.planteur_id);
+    if (!chefId) continue;
+
+    const chef = chefLookup.get(chefId);
     if (!chef) continue;
 
     const existing = chefMap.get(chef.id);
     if (existing) {
       existing.totalDeliveries += 1;
-      existing.totalWeightKg += Number(r.weight_kg);
-      existing.totalAmountXAF += Number(r.total_amount);
+      existing.totalWeightKg += Number(row.weight_kg);
+      existing.totalAmountXAF += Number(row.total_amount);
+      if (!existing.lastDeliveryAt || new Date(row.delivered_at) > new Date(existing.lastDeliveryAt)) {
+        existing.lastDeliveryAt = row.delivered_at;
+      }
     } else {
       chefMap.set(chef.id, {
         id: chef.id,
         name: chef.name,
         code: chef.code,
         totalDeliveries: 1,
-        totalWeightKg: Number(r.weight_kg),
-        totalAmountXAF: Number(r.total_amount),
+        totalWeightKg: Number(row.weight_kg),
+        totalAmountXAF: Number(row.total_amount),
+        validationStatus: chef.validation_status ?? null,
+        lastDeliveryAt: row.delivered_at,
       });
     }
   }
@@ -491,6 +706,7 @@ export interface EntityCounts {
   livraisonsAujourdhui: number;
   poidsAujourdhui: number;
   totalParcelles: number;
+  derniereLivraisonAujourdhui?: string | null;
 }
 
 async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
@@ -563,12 +779,24 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
   };
   
   const todayMetricsQuery = supabase.rpc('get_dashboard_metrics_all', params as any);
+  let latestDeliveryTodayQuery = supabase
+    .from('deliveries')
+    .select('delivered_at')
+    .gte('delivered_at', `${today}T00:00:00`)
+    .lte('delivered_at', `${today}T23:59:59`)
+    .order('delivered_at', { ascending: false })
+    .limit(1);
 
-  const [planteursResult, chefsResult, pendingResult, todayResult] = await Promise.all([
+  if (cooperativeId) {
+    latestDeliveryTodayQuery = latestDeliveryTodayQuery.eq('cooperative_id', cooperativeId);
+  }
+
+  const [planteursResult, chefsResult, pendingResult, todayResult, latestDeliveryTodayResult] = await Promise.all([
     planteursQuery,
     chefPlanteursQuery,
     pendingChefsQuery,
     todayMetricsQuery,
+    latestDeliveryTodayQuery,
   ]);
 
   const todayData: GetDashboardMetricsAllResult = (todayResult.data as any)?.[0] || { 
@@ -584,6 +812,111 @@ async function getEntityCounts(cooperativeId?: string): Promise<EntityCounts> {
     livraisonsAujourdhui: Number(todayData.total_deliveries),
     poidsAujourdhui: Math.round(Number(todayData.total_weight_kg) * 100) / 100,
     totalParcelles: parcellesCount,
+    derniereLivraisonAujourdhui:
+      (latestDeliveryTodayResult.data?.[0] as { delivered_at: string } | undefined)?.delivered_at ?? null,
+  };
+}
+
+async function getESGMetrics(filters: DashboardFilters = {}): Promise<ESGMetrics> {
+  const supabase = createClient();
+  const { cooperativeId, dateFrom, dateTo } = filters;
+
+  let deliveriesTraceabilityQuery = supabase
+    .from('deliveries')
+    .select('id, planteur_id, chef_planteur_id, delivered_at');
+
+  if (cooperativeId) {
+    deliveriesTraceabilityQuery = deliveriesTraceabilityQuery.eq('cooperative_id', cooperativeId);
+  }
+  if (dateFrom) {
+    deliveriesTraceabilityQuery = deliveriesTraceabilityQuery.gte('delivered_at', dateFrom);
+  }
+  if (dateTo) {
+    deliveriesTraceabilityQuery = deliveriesTraceabilityQuery.lte('delivered_at', dateTo);
+  }
+
+  let chefPlanteursQuery = supabase
+    .from('chef_planteurs')
+    .select('id, validation_status');
+  if (cooperativeId) {
+    chefPlanteursQuery = chefPlanteursQuery.eq('cooperative_id', cooperativeId);
+  }
+
+  const deforestationQuery = supabase
+    .from('deforestation_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending');
+
+  // Parcelles are filtered by cooperative through planteurs relationship
+  let parcellesRows: Array<{ conformity_status: string | null; risk_flags: unknown }> = [];
+  if (cooperativeId) {
+    const { data: planteurIds } = await supabase
+      .from('planteurs')
+      .select('id')
+      .eq('cooperative_id', cooperativeId);
+
+    const ids = (planteurIds || []).map((p: { id: string }) => p.id);
+    if (ids.length > 0) {
+      const { data: parcellesData } = await (supabase as any)
+        .from('parcelles')
+        .select('conformity_status, risk_flags')
+        .eq('is_active', true)
+        .in('planteur_id', ids);
+      parcellesRows = (parcellesData || []) as Array<{ conformity_status: string | null; risk_flags: unknown }>;
+    }
+  } else {
+    const { data: parcellesData } = await (supabase as any)
+      .from('parcelles')
+      .select('conformity_status, risk_flags')
+      .eq('is_active', true);
+    parcellesRows = (parcellesData || []) as Array<{ conformity_status: string | null; risk_flags: unknown }>;
+  }
+
+  const [deliveriesResult, chefsResult, deforestationResult] = await Promise.all([
+    deliveriesTraceabilityQuery,
+    chefPlanteursQuery,
+    deforestationQuery,
+  ]);
+
+  const deliveriesRows = (deliveriesResult.data || []) as Array<{
+    id: string;
+    planteur_id: string | null;
+    chef_planteur_id: string | null;
+  }>;
+  const totalDeliveries = deliveriesRows.length;
+  const traceableDeliveries = deliveriesRows.filter((d) => d.planteur_id && d.chef_planteur_id).length;
+
+  const chefsRows = (chefsResult.data || []) as Array<{ validation_status: 'pending' | 'validated' | 'rejected' }>;
+  const totalChefs = chefsRows.length;
+  const verifiedChefs = chefsRows.filter((c) => c.validation_status === 'validated').length;
+
+  const totalParcelles = parcellesRows.length;
+  const conformesParcelles = parcellesRows.filter((p) => p.conformity_status === 'conforme').length;
+  const parcellesARisque = parcellesRows.filter((p) => {
+    if (!p.risk_flags || typeof p.risk_flags !== 'object') return false;
+    const flags = p.risk_flags as Record<string, unknown>;
+    const deforestation = flags.deforestation as { flag?: boolean } | undefined;
+    const zoneProtegee = flags.zone_protegee as { flag?: boolean } | undefined;
+    const overlap = flags.overlap as { flag?: boolean } | undefined;
+    return Boolean(deforestation?.flag || zoneProtegee?.flag || overlap?.flag);
+  }).length;
+
+  const conformitePct = totalParcelles > 0 ? Math.round((conformesParcelles / totalParcelles) * 1000) / 10 : 0;
+  const risquePct = totalParcelles > 0 ? Math.round((parcellesARisque / totalParcelles) * 1000) / 10 : 0;
+  const verificationPct = totalChefs > 0 ? Math.round((verifiedChefs / totalChefs) * 1000) / 10 : 0;
+  const traceabilityPct = totalDeliveries > 0 ? Math.round((traceableDeliveries / totalDeliveries) * 1000) / 10 : 0;
+
+  return {
+    totalParcelles,
+    conformesParcelles,
+    conformitePct,
+    parcellesARisque,
+    risquePct,
+    pendingDeforestationEvents: deforestationResult.count || 0,
+    verifiedChefPlanteurs: verifiedChefs,
+    verificationPct,
+    traceableDeliveries,
+    traceabilityPct,
   };
 }
 
@@ -600,4 +933,6 @@ export const dashboardApi = {
   getDashboardData,
   getDeliveryLocations,
   getEntityCounts,
+  getESGMetrics,
+  buildDashboardFilters,
 };

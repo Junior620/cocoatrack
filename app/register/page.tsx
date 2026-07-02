@@ -2,34 +2,52 @@
 // Public registration is disabled - only admins can create accounts
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShieldAlert, ArrowRight, UserPlus } from 'lucide-react';
 
 export default function RegisterPage() {
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* Background gradient orange */}
-      <div 
+      {/* Background image */}
+      <div
         className="absolute inset-0"
         style={{
-          background: 'linear-gradient(135deg, #E68A1F 0%, #D47A1C 50%, #C9A12B 100%)',
+          backgroundImage: "url('/cocoa-auth-bg.jpg')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
         }}
       />
+      <div className="absolute inset-0 bg-black/45" />
+      <div className="pointer-events-none absolute -top-28 -right-24 h-80 w-80 rounded-full bg-white/12 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-black/10 blur-3xl" />
       
       {/* Content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-5 sm:p-6">
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-6">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <div className="w-12 h-12 rounded-xl bg-[#234D1E] flex items-center justify-center">
-                <span className="text-xl">🌿</span>
-              </div>
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <Image
+                src="/logo-afrexia.png"
+                alt="Afrexia"
+                width={56}
+                height={56}
+                className="object-contain"
+              />
+              <Image
+                src="/logo-scpb.png"
+                alt="SCPB"
+                width={56}
+                height={56}
+                className="object-contain"
+              />
             </div>
             <h1 className="text-2xl font-bold text-white">CocoaTrack</h1>
           </div>
 
           {/* Card */}
-          <div className="bg-white rounded-2xl shadow-2xl p-8 backdrop-blur-sm">
+          <div className="bg-white/95 rounded-3xl shadow-2xl p-6 sm:p-8 backdrop-blur-sm border border-white/40">
             <div className="text-center">
               {/* Icon */}
               <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -64,7 +82,7 @@ export default function RegisterPage() {
               {/* Login button */}
               <Link
                 href="/login"
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-[#234D1E] text-white font-semibold hover:bg-[#1a3a16] transition-all shadow-lg shadow-[#234D1E]/30"
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-[#234D1E] text-white font-semibold hover:bg-[#1a3a16] transition-all shadow-lg shadow-[#234D1E]/30"
               >
                 Aller à la connexion
                 <ArrowRight className="h-5 w-5" />
