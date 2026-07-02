@@ -46,14 +46,14 @@ function LoginForm() {
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
       {error && (
-        <div className="rounded-xl bg-red-50 border border-red-200 p-4" role="alert" aria-live="polite">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="rounded-xl bg-red-500/20 border border-red-300/40 p-4 backdrop-blur-sm" role="alert" aria-live="polite">
+          <p className="text-sm text-red-100">{error}</p>
         </div>
       )}
 
       {/* Email */}
       <div>
-        <label className="flex items-center gap-2 text-base font-medium text-gray-700 mb-2">
+        <label className="flex items-center gap-2 text-base font-medium text-white/90 mb-2">
           <Mail className="h-5 w-5 text-[#234D1E]" />
           Email <span className="text-red-500">*</span>
         </label>
@@ -65,7 +65,7 @@ function LoginForm() {
           autoComplete="email"
           inputMode="email"
           autoFocus
-          className="w-full px-4 py-3.5 text-base rounded-xl border-2 border-[#234D1E] text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#234D1E]/30 transition-all"
+          className="w-full px-4 py-3.5 text-base rounded-xl border border-white/40 bg-white/85 text-gray-900 placeholder-gray-500 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white/60 transition-all"
           placeholder="votre.email@cooperative.com"
           disabled={isSubmitting}
         />
@@ -73,7 +73,7 @@ function LoginForm() {
 
       {/* Password */}
       <div>
-        <label className="flex items-center gap-2 text-base font-medium text-gray-700 mb-2">
+        <label className="flex items-center gap-2 text-base font-medium text-white/90 mb-2">
           <Lock className="h-5 w-5 text-[#E68A1F]" />
           Mot de passe <span className="text-red-500">*</span>
         </label>
@@ -85,7 +85,7 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             onKeyUp={(e) => setIsCapsLockOn(e.getModifierState('CapsLock'))}
             autoComplete="current-password"
-            className="w-full px-4 py-3.5 pr-12 text-base rounded-xl border-2 border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#234D1E] focus:ring-2 focus:ring-[#234D1E]/30 transition-all"
+            className="w-full px-4 py-3.5 pr-12 text-base rounded-xl border border-white/40 bg-white/85 text-gray-900 placeholder-gray-500 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-white/40 focus:border-white/60 transition-all"
             placeholder="••••••••"
             disabled={isSubmitting}
           />
@@ -114,7 +114,7 @@ function LoginForm() {
         <Link
           prefetch={false}
           href="/forgot-password"
-          className="text-sm text-[#234D1E] hover:text-[#1a3a16] font-medium transition-colors"
+          className="text-sm text-white hover:text-white/80 font-medium transition-colors"
         >
           Mot de passe oublié ?
         </Link>
@@ -143,7 +143,7 @@ function LoginForm() {
       </button>
 
       {/* Security badge */}
-      <div className="flex items-center justify-center gap-2 text-sm text-gray-400 pt-2">
+      <div className="flex items-center justify-center gap-2 text-sm text-white/70 pt-2">
         <Shield className="h-4 w-4" />
         <span>Accès sécurisé</span>
       </div>
@@ -151,15 +151,15 @@ function LoginForm() {
       {/* Divider */}
       <div className="relative py-2">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-200" />
+          <div className="w-full border-t border-white/30" />
         </div>
         <div className="relative flex justify-center">
-          <span className="bg-white px-4 text-sm text-gray-400">ou</span>
+          <span className="px-4 text-sm text-white/60">ou</span>
         </div>
       </div>
 
       {/* Account info */}
-      <p className="text-center text-base text-gray-600">
+      <p className="text-center text-base text-white/80">
         Besoin d&apos;un compte ? Contactez votre administrateur.
       </p>
     </form>
@@ -169,9 +169,9 @@ function LoginForm() {
 function LoginFormFallback() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="h-20 bg-gray-100 rounded-xl" />
-      <div className="h-20 bg-gray-100 rounded-xl" />
-      <div className="h-14 bg-gray-200 rounded-xl" />
+      <div className="h-20 bg-white/15 rounded-xl" />
+      <div className="h-20 bg-white/15 rounded-xl" />
+      <div className="h-14 bg-white/20 rounded-xl" />
     </div>
   );
 }
@@ -216,10 +216,10 @@ export default function LoginPage() {
           </div>
 
           {/* Form Card */}
-          <div className="relative bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl p-6 sm:p-8 lg:p-10 border border-white/50 ring-1 ring-black/5">
+          <div className="relative rounded-3xl border border-white/30 bg-white/20 p-6 shadow-2xl shadow-black/25 backdrop-blur-xl ring-1 ring-white/20 sm:p-8 lg:p-10">
             <div className="text-center mb-8">
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Connexion</h2>
-              <p className="text-gray-500 mt-2">Accédez à votre espace de gestion</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white">Connexion</h2>
+              <p className="text-white/75 mt-2">Accédez à votre espace de gestion</p>
             </div>
 
             <Suspense fallback={<LoginFormFallback />}>
