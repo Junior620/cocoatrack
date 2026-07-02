@@ -1,0 +1,76 @@
+═══════════════════════════════════════════════════════════
+  CAPTURES D'ÉCRAN MÉMOIRE - INSTRUCTIONS ULTRA-RAPIDES
+═══════════════════════════════════════════════════════════
+
+✅ PROBLÈME RÉSOLU - Tout fonctionne maintenant !
+
+═══════════════════════════════════════════════════════════
+  ÉTAPE 1 : DÉMARRER
+═══════════════════════════════════════════════════════════
+
+Dans le terminal :
+  npm run dev
+
+Attendre : "Ready in X ms" ou "compiled successfully"
+
+═══════════════════════════════════════════════════════════
+  ÉTAPE 2 : OUVRIR LA PAGE
+═══════════════════════════════════════════════════════════
+
+Dans le navigateur :
+  http://localhost:3000/examples/yield-prediction
+
+Tu verras 6 sections avec des exemples visuels
+
+═══════════════════════════════════════════════════════════
+  ÉTAPE 3 : PRENDRE LES CAPTURES
+═══════════════════════════════════════════════════════════
+
+Sur Linux : Ctrl+Shift+PrtScn → Sélectionner zone
+
+CAPTURE 1 - Section 1 "État Initial"
+  → Nom : figure_3_X_1_interface_demande.png
+  → Contenu : Bouton "Générer Prévision"
+
+CAPTURE 2 - Section 2 "Confiance Élevée"
+  → Nom : figure_3_X_2_resultat_complet.png
+  → Contenu : 865 kg/ha, badge vert HIGH
+
+CAPTURE 3 - Section 3 "Comparaison Niveaux"
+  → Nom : figure_3_X_4_comparaison_niveaux.png
+  → Contenu : 3 cartes côte à côte (HIGH/MEDIUM/LOW)
+
+═══════════════════════════════════════════════════════════
+  ÉTAPE 4 : SAUVEGARDER
+═══════════════════════════════════════════════════════════
+
+Sauvegarder dans :
+  docs/memoir/captures/
+
+Format : PNG uniquement
+
+═══════════════════════════════════════════════════════════
+  EN CAS DE PROBLÈME
+═══════════════════════════════════════════════════════════
+
+Page ne charge pas ?
+  → Relancer : Ctrl+C puis npm run dev
+
+Erreur cache ?
+  → ./scripts/restart-dev-clean.sh
+  → npm run dev
+
+═══════════════════════════════════════════════════════════
+  GUIDES DISPONIBLES
+═══════════════════════════════════════════════════════════
+
+Court      : CAPTURES_PRET.md
+Rapide     : CAPTURES_ECRAN_MEMOIRE.md
+Complet    : docs/memoir/GUIDE_CAPTURES_ECRAN.md
+Technique  : RESOLUTION_CACHE_TURBOPACK.md
+
+═══════════════════════════════════════════════════════════
+  C'EST PRÊT ! LANCE npm run dev ET FAIS TES CAPTURES !
+═══════════════════════════════════════════════════════════
+
+Temps estimé : 15 minutes pour les 3 captures

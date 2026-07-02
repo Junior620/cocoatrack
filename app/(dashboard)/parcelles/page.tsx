@@ -23,6 +23,7 @@ import { ParcellesByPlanteur } from '@/components/parcelles/ParcellesByPlanteur'
 import { ParcelleStatsCards } from '@/components/parcelles/ParcelleStatsCards';
 import { AssignParcellesModal, type AssignResult } from '@/components/parcelles/AssignParcellesModal';
 import { KMLExportButton } from '@/components/satellite/KMLExportButton';
+import RiskExportButton from '@/components/satellite/RiskExportButton';
 import { useBatchNDVICalculation } from '@/hooks/satellite/useBatchNDVICalculation';
 import { Activity, CheckCircle, XCircle } from 'lucide-react';
 
@@ -509,6 +510,27 @@ function ParcellesContent() {
                 {calculating ? 'Calcul en cours...' : 'Calculer la santé'}
               </button>
             </div>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {/* Risk Export Section - Outside filters, prominently displayed */}
+      {viewMode === 'list' && (
+        <AnimatedSection animation="fadeUp" delay={0.25}>
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl shadow-sm border border-blue-100">
+            <div className="mb-4">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">
+                Export par Catégorie de Risque
+              </h3>
+              <p className="text-sm text-gray-600">
+                Exportez les parcelles à risque ou en bonne santé avec leurs analyses complètes
+              </p>
+            </div>
+            <RiskExportButton
+              regions={villages}
+              showQuickActions={true}
+              className="w-full"
+            />
           </div>
         </AnimatedSection>
       )}
