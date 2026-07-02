@@ -360,7 +360,7 @@ export default function ResetPasswordPage() {
 
         {/* Footer */}
         <p className="text-center text-white/80 text-sm mt-6">
-          © 2024 CocoaTrack. Tous droits réservés.
+          © 2026 CocoaTrack. Tous droits réservés.
         </p>
       </div>
     </div>
