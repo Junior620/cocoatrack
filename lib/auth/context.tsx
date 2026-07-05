@@ -46,10 +46,10 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
   // Refresh the current user's profile
   const refreshProfile = useCallback(async () => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (!user) {
+    if (!session?.user) {
       setState({
         user: null,
         profile: null,
@@ -59,7 +59,7 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
       return;
     }
 
-    const profile = await fetchProfile(user.id);
+    const profile = await fetchProfile(session.user.id);
     setState({
       user: profile ? profileToAuthUser(profile) : null,
       profile,
@@ -110,7 +110,7 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
     });
   }, [supabase]);
 
-  // Listen for auth state changes
+  // Listen for auth state changes — skip initial refresh when SSR already provided profile
   useEffect(() => {
     const {
       data: { subscription },
@@ -133,9 +133,10 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
       }
     });
 
-    // Initial fetch if no initial profile provided
     if (!initialProfile) {
       refreshProfile();
+    } else {
+      setState((prev) => ({ ...prev, isLoading: false }));
     }
 
     return () => {

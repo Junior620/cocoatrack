@@ -6,6 +6,8 @@ export type { PlanteurAutocompleteProps, PlanteurOption } from './PlanteurAutoco
 
 export { ChefPlanteurAutocomplete } from './ChefPlanteurAutocomplete';
 export type { ChefPlanteurAutocompleteProps, ChefPlanteurOption } from './ChefPlanteurAutocomplete';
+export { ReceiptInvoiceStatusBadge } from './ReceiptInvoiceStatusBadge';
+export { ReceiptWorkflowPipeline } from './ReceiptWorkflowPipeline';
 
 export { PdfViewer } from './PdfViewer';
 

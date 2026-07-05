@@ -25,6 +25,10 @@ export const dashboardKeys = {
   entityCounts: (cooperativeId?: string) =>
     [...dashboardKeys.all, 'entityCounts', cooperativeId] as const,
   esgMetrics: (filters: DashboardFilters) => [...dashboardKeys.all, 'esgMetrics', filters] as const,
+  uninvoicedReceipts: (cooperativeId?: string) =>
+    [...dashboardKeys.all, 'uninvoicedReceipts', cooperativeId] as const,
+  receiptPipeline: (cooperativeId?: string) =>
+    [...dashboardKeys.all, 'receiptPipeline', cooperativeId] as const,
 };
 
 type Period = 'all' | 'today' | 'week' | 'month' | 'year' | 'custom';
@@ -213,5 +217,21 @@ export function useESGMetrics(filters: DashboardFilters = {}) {
     queryKey: dashboardKeys.esgMetrics(filters),
     queryFn: () => dashboardApi.getESGMetrics(filters),
     staleTime: 60 * 1000, // 1 minute
+  });
+}
+
+export function useUninvoicedReceiptsCount(cooperativeId?: string) {
+  return useQuery({
+    queryKey: dashboardKeys.uninvoicedReceipts(cooperativeId),
+    queryFn: () => dashboardApi.getUninvoicedReceiptsCount(cooperativeId),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useReceiptPipelineStats(cooperativeId?: string) {
+  return useQuery({
+    queryKey: dashboardKeys.receiptPipeline(cooperativeId),
+    queryFn: () => dashboardApi.getReceiptPipelineStats(cooperativeId),
+    staleTime: 60 * 1000,
   });
 }

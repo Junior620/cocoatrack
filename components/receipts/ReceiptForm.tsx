@@ -267,17 +267,13 @@ export function ReceiptForm({
       }
     });
 
-    // Chef planteur: require either ID (from search) or manual name
-    if (!formData.chefPlanteurId.trim() && !formData.chefPlanteurName.trim()) {
-      newErrors.chefPlanteurId = 'Ce champ est obligatoire';
-    }
-    
-    // Validate amount paid
+    // Fournisseur optionnel — pas de validation obligatoire
+
     const amountError = validateField('amountPaid', formData.amountPaid);
     if (amountError) {
       newErrors.amountPaid = amountError;
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }, [formData, validateField]);
@@ -310,7 +306,7 @@ export function ReceiptForm({
           if (body.duplicates && body.duplicates.length > 0) {
             pendingSubmitData.current = formData;
             setPendingDuplicates(body.duplicates);
-            return; // Wait for user decision
+            return;
           }
         }
       } catch {
@@ -551,7 +547,7 @@ export function ReceiptForm({
               {/* Chef planteur: saisie manuelle OU recherche en BD */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nom de l&apos;acheteur (collecteur) <span className="text-red-500">*</span>
+                  Fournisseur <span className="text-gray-400 font-normal">(optionnel)</span>
                 </label>
                 <input
                   type="text"

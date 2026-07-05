@@ -14,6 +14,7 @@ import { chefPlanteursApi } from '@/lib/api/chef-planteurs';
 import { createClient } from '@/lib/supabase/client';
 import type { CreateDeliveryInput } from '@/lib/validations/delivery';
 import type { QualityGrade } from '@/types';
+import { DeliveriesSubNav } from '@/components/deliveries/DeliveriesSubNav';
 
 interface SelectOption {
   id: string;
@@ -37,6 +38,8 @@ export default function BatchDeliveryPage() {
   
   // Options for selects
   const [chefPlanteurs, setChefPlanteurs] = useState<SelectOption[]>([]);
+  const [defaultPlanteurs, setDefaultPlanteurs] = useState<SelectOption[]>([]);
+  const [planteurChefMap, setPlanteurChefMap] = useState<Map<string, string | null>>(new Map());
   const [planteursByChef, setPlanteursByChef] = useState<Record<string, SelectOption[]>>({});
   const [warehouses, setWarehouses] = useState<SelectOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
@@ -77,21 +80,45 @@ export default function BatchDeliveryPage() {
         })));
 
         // Load warehouses
-        const { data: warehouseData } = await supabase
+        let warehouseQuery = supabase
           .from('warehouses')
           .select('id, name, code')
           .eq('is_active', true)
           .order('name');
+        if (user?.cooperative_id) {
+          warehouseQuery = warehouseQuery.eq('cooperative_id', user.cooperative_id);
+        }
+        const { data: warehouseData } = await warehouseQuery;
         setWarehouses(warehouseData || []);
-      } catch (err) {
-        setError('Failed to load options');
+
+        const planteurResult = await planteursApi.list({
+          page: 1,
+          pageSize: 100,
+          is_active: true,
+          cooperative_id: user?.cooperative_id || undefined,
+        });
+        setDefaultPlanteurs(
+          planteurResult.data.map((p) => ({ id: p.id, name: p.name, code: p.code }))
+        );
+        setPlanteurChefMap(
+          new Map(planteurResult.data.map((p) => [p.id, p.chef_planteur_id ?? null]))
+        );
+      } catch {
+        setError('Impossible de charger les listes');
       } finally {
         setLoadingOptions(false);
       }
     };
 
     loadOptions();
-  }, []);
+  }, [user?.cooperative_id]);
+
+  const getPlanteursForEntry = (entry: BatchEntry): SelectOption[] => {
+    if (entry.chef_planteur_id && planteursByChef[entry.chef_planteur_id]) {
+      return planteursByChef[entry.chef_planteur_id];
+    }
+    return defaultPlanteurs;
+  };
 
   // Load planteurs for a chef_planteur
   const loadPlanteursForChef = async (chefId: string) => {
@@ -123,12 +150,20 @@ export default function BatchDeliveryPage() {
       if (entry.key !== key) return entry;
       
       const updated = { ...entry, [field]: value, error: undefined };
-      
-      // Reset planteur when chef changes
+
       if (field === 'chef_planteur_id') {
-        updated.planteur_id = '';
+        updated.planteur_id =
+          value && value !== entry.chef_planteur_id ? '' : entry.planteur_id;
         if (value) {
           loadPlanteursForChef(value as string);
+        }
+      }
+
+      if (field === 'planteur_id' && value) {
+        const linkedChef = planteurChefMap.get(value as string);
+        if (linkedChef) {
+          updated.chef_planteur_id = linkedChef;
+          loadPlanteursForChef(linkedChef);
         }
       }
       
@@ -174,7 +209,7 @@ export default function BatchDeliveryPage() {
 
       // Parse header
       const header = lines[0].split(',').map(h => h.trim().toLowerCase());
-      const requiredFields = ['planteur_code', 'warehouse_code', 'weight_kg', 'price_per_kg'];
+      const requiredFields = ['planteur_code', 'weight_kg', 'price_per_kg'];
       const missingFields = requiredFields.filter(f => !header.includes(f));
       
       if (missingFields.length > 0) {
@@ -219,7 +254,7 @@ export default function BatchDeliveryPage() {
 
         if (!planteur) {
           entry.error = `Planteur non trouvé: ${row.planteur_code}`;
-        } else if (!warehouse) {
+        } else if (row.warehouse_code && !warehouse) {
           entry.error = `Entrepôt non trouvé: ${row.warehouse_code}`;
         }
 
@@ -253,9 +288,8 @@ export default function BatchDeliveryPage() {
     }
 
     // Validate entries
-    const validEntries = entries.filter(e => 
-      e.planteur_id && e.chef_planteur_id && e.warehouse_id && 
-      e.weight_kg > 0 && e.price_per_kg > 0 && !e.error
+    const validEntries = entries.filter(
+      (e) => e.planteur_id && e.weight_kg > 0 && e.price_per_kg > 0 && !e.error
     );
 
     if (validEntries.length === 0) {
@@ -269,7 +303,11 @@ export default function BatchDeliveryPage() {
 
     try {
       const deliveries = await deliveriesApi.createBatch({
-        deliveries: validEntries.map(({ key, error, ...data }) => data),
+        deliveries: validEntries.map(({ key, error, ...data }) => ({
+          ...data,
+          chef_planteur_id: data.chef_planteur_id || undefined,
+          warehouse_id: data.warehouse_id || undefined,
+        })),
       });
       
       setSuccess(`${deliveries.length} livraisons créées avec succès`);
@@ -302,6 +340,7 @@ export default function BatchDeliveryPage() {
 
   return (
     <div className="space-y-6">
+      <DeliveriesSubNav />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -349,10 +388,10 @@ export default function BatchDeliveryPage() {
       <div className="rounded-md bg-blue-50 p-4">
         <h3 className="text-sm font-medium text-blue-800">Format CSV attendu</h3>
         <p className="mt-1 text-xs text-blue-700">
-          Colonnes requises: planteur_code, warehouse_code, weight_kg, price_per_kg
+          Colonnes requises: planteur_code, weight_kg, price_per_kg
         </p>
         <p className="text-xs text-blue-700">
-          Colonnes optionnelles: quality_grade (A/B/C), notes
+          Colonnes optionnelles: warehouse_code, quality_grade (A/B/C), notes
         </p>
       </div>
 
@@ -394,53 +433,63 @@ export default function BatchDeliveryPage() {
             )}
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-              {/* Chef Planteur */}
+              {/* Planteur */}
               <div>
-                <label className="block text-xs font-medium text-gray-700">Chef Planteur</label>
+                <label className="block text-xs font-medium text-gray-700">
+                  Planteur <span className="text-red-500">*</span>
+                </label>
                 <select
                   required
+                  value={entry.planteur_id}
+                  onChange={(e) => updateEntry(entry.key, 'planteur_id', e.target.value)}
+                  disabled={loadingOptions || getPlanteursForEntry(entry).length === 0}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100"
+                >
+                  <option value="">Sélectionner</option>
+                  {getPlanteursForEntry(entry).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Chef Planteur — optionnel */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700">
+                  Chef planteur <span className="text-gray-400">(opt.)</span>
+                </label>
+                <select
                   value={entry.chef_planteur_id}
                   onChange={(e) => updateEntry(entry.key, 'chef_planteur_id', e.target.value)}
                   disabled={loadingOptions}
                   className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100"
                 >
-                  <option value="">Sélectionner</option>
+                  <option value="">Aucun</option>
                   {chefPlanteurs.map((cp) => (
-                    <option key={cp.id} value={cp.id}>{cp.code}</option>
+                    <option key={cp.id} value={cp.id}>
+                      {cp.code}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              {/* Planteur */}
+              {/* Warehouse — optionnel */}
               <div>
-                <label className="block text-xs font-medium text-gray-700">Planteur</label>
+                <label className="block text-xs font-medium text-gray-700">
+                  Entrepôt <span className="text-gray-400">(opt.)</span>
+                </label>
                 <select
-                  required
-                  value={entry.planteur_id}
-                  onChange={(e) => updateEntry(entry.key, 'planteur_id', e.target.value)}
-                  disabled={!entry.chef_planteur_id}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100"
-                >
-                  <option value="">Sélectionner</option>
-                  {(planteursByChef[entry.chef_planteur_id] || []).map((p) => (
-                    <option key={p.id} value={p.id}>{p.code}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Warehouse */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Entrepôt</label>
-                <select
-                  required
                   value={entry.warehouse_id}
                   onChange={(e) => updateEntry(entry.key, 'warehouse_id', e.target.value)}
                   disabled={loadingOptions}
                   className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:bg-gray-100"
                 >
-                  <option value="">Sélectionner</option>
+                  <option value="">Aucun</option>
                   {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>{w.code}</option>
+                    <option key={w.id} value={w.id}>
+                      {w.code}
+                    </option>
                   ))}
                 </select>
               </div>

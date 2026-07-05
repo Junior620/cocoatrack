@@ -3,9 +3,9 @@
 // CocoaTrack V2 - Enhanced KPI Grid Component
 // Displays all dashboard KPIs with gradients and sparklines
 
-import { Package as PackageIcon, Scale, CircleDollarSign, TrendingUp, Users, UsersRound, CalendarCheck, Map, AlertTriangle, ShieldCheck, Leaf } from 'lucide-react';
+import { Package as PackageIcon, Scale, CircleDollarSign, TrendingUp, Users, UsersRound, CalendarCheck, Map, AlertTriangle, ShieldCheck, Leaf, FileText } from 'lucide-react';
 import { KPICard, formatCurrency, formatWeight } from './KPICard';
-import type { DashboardMetricsWithComparison, TimeSeriesPoint, EntityCounts, ESGMetrics } from '@/lib/api/dashboard';
+import type { DashboardMetricsWithComparison, TimeSeriesPoint, EntityCounts, ESGMetrics, UninvoicedReceiptsCount } from '@/lib/api/dashboard';
 
 interface KPIGridProps {
   metrics: DashboardMetricsWithComparison | null;
@@ -15,6 +15,8 @@ interface KPIGridProps {
   entityCountsLoading?: boolean;
   esgMetrics?: ESGMetrics | null;
   esgLoading?: boolean;
+  uninvoicedReceipts?: UninvoicedReceiptsCount | null;
+  uninvoicedReceiptsLoading?: boolean;
 }
 
 export function KPIGrid({ 
@@ -25,6 +27,8 @@ export function KPIGrid({
   entityCountsLoading = false,
   esgMetrics,
   esgLoading = false,
+  uninvoicedReceipts,
+  uninvoicedReceiptsLoading = false,
 }: KPIGridProps) {
   // Generate sparkline data from trend data
   const deliveriesSparkline = trendData?.slice(-7).map(d => ({ value: d.deliveries })) || [];
@@ -110,7 +114,7 @@ export function KPIGrid({
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KPICard
           title="Aujourd'hui"
           value={entityCounts?.livraisonsAujourdhui ?? 0}
@@ -147,6 +151,19 @@ export function KPIGrid({
           loading={entityCountsLoading}
           icon={<Map className="h-5 w-5" />}
           gradient="purple"
+          animateCounter={true}
+        />
+        <KPICard
+          title="Reçus à facturer"
+          value={uninvoicedReceipts?.total ?? 0}
+          subtitle={
+            (uninvoicedReceipts?.partiallyInvoiced ?? 0) > 0
+              ? `${uninvoicedReceipts?.notInvoiced ?? 0} non facturés · ${uninvoicedReceipts?.partiallyInvoiced ?? 0} partiels`
+              : 'reçus en attente de facturation'
+          }
+          loading={uninvoicedReceiptsLoading}
+          icon={<FileText className="h-5 w-5" />}
+          gradient="orange"
           animateCounter={true}
         />
       </div>

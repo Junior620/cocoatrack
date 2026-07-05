@@ -7,13 +7,19 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { Search, FileText, ExternalLink } from 'lucide-react';
+import { Search, FileText } from 'lucide-react';
 
 import { useAuth, hasPermission } from '@/lib/auth';
 import { receiptsApi } from '@/lib/api/receipts';
 import { ReceiptImportButton } from '@/components/receipts/ReceiptImportButton';
+import { ReceiptInvoiceStatusBadge } from '@/components/receipts/ReceiptInvoiceStatusBadge';
 import type { CollectionReceiptListItem, ReceiptFilters, ReceiptInvoiceStatus } from '@/lib/api/receipts';
 import type { PaginatedResult } from '@/types';
+import {
+  deriveReceiptInvoiceStatus,
+  extractLinkedDeliveries,
+  getReceiptInvoices,
+} from '@/lib/utils/receipt-invoice-status';
 
 export default function ReceiptsPage() {
   const router = useRouter();
@@ -37,6 +43,7 @@ export default function ReceiptsPage() {
   };
 
   const canImport = user && (user.role === 'manager' || user.role === 'admin');
+  const canInvoice = user && hasPermission(user.role, 'invoices:create');
 
   const fetchReceipts = useCallback(async () => {
     setLoading(true);
@@ -74,34 +81,16 @@ export default function ReceiptsPage() {
       year: 'numeric',
     });
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('fr-FR').format(amount) + ' XAF';
-
-  /** Derive the invoice status for a receipt from its linked deliveries */
-  const getReceiptInvoiceStatus = (receipt: CollectionReceiptListItem) => {
-    const deliveries = receipt.receipt_deliveries
-      .map((rd) => rd.delivery)
-      .filter(Boolean);
-    if (deliveries.length === 0) return 'not_invoiced';
-    return deliveries.every((d) => d?.invoice_status === 'invoiced') ? 'invoiced' : 'not_invoiced';
-  };
-
-  /** Get the invoice code for a receipt (if all deliveries share the same invoice) */
-  const getInvoiceCode = (receipt: CollectionReceiptListItem): string | null => {
-    const invoices = receipt.receipt_deliveries
-      .map((rd) => rd.delivery?.invoice)
-      .filter(Boolean);
-    if (invoices.length === 0) return null;
-    const codes = [...new Set(invoices.map((inv) => inv?.code))].filter(Boolean);
-    return codes.length === 1 ? (codes[0] ?? null) : null;
-  };
-
-  const getInvoiceId = (receipt: CollectionReceiptListItem): string | null => {
-    const ids = receipt.receipt_deliveries
-      .map((rd) => rd.delivery?.invoice_id)
-      .filter(Boolean);
-    const unique = [...new Set(ids)];
-    return unique.length === 1 ? (unique[0] ?? null) : null;
+  const handleInvoiceReceipt = (receipt: CollectionReceiptListItem) => {
+    const status = deriveReceiptInvoiceStatus(extractLinkedDeliveries(receipt.receipt_deliveries));
+    const billableIds = receiptsApi.getBillableDeliveryIds(receipt);
+    if (status === 'partially_invoiced' && billableIds.length > 0) {
+      router.push(
+        `/invoices/generate?receipt_id=${receipt.id}&delivery_ids=${billableIds.join(',')}`
+      );
+      return;
+    }
+    router.push(`/receipts/${receipt.id}`);
   };
 
   return (
@@ -142,7 +131,8 @@ export default function ReceiptsPage() {
           className="rounded-md border border-gray-300 py-2 pl-3 pr-8 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
         >
           <option value="all">Tous les statuts</option>
-          <option value="not_invoiced">Non facturés</option>
+          <option value="not_invoiced">À facturer</option>
+          <option value="partially_invoiced">Partiellement facturés</option>
           <option value="invoiced">Facturés</option>
         </select>
 
@@ -196,7 +186,7 @@ export default function ReceiptsPage() {
                     Planteur
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Collecteur
+                    Fournisseur
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Date
@@ -224,9 +214,9 @@ export default function ReceiptsPage() {
                   </tr>
                 ) : (
                   data.data.map((receipt) => {
-                    const invoiceStatus = getReceiptInvoiceStatus(receipt);
-                    const invoiceCode = getInvoiceCode(receipt);
-                    const invoiceId = getInvoiceId(receipt);
+                    const deliveries = extractLinkedDeliveries(receipt.receipt_deliveries);
+                    const invoiceStatus = deriveReceiptInvoiceStatus(deliveries);
+                    const invoices = getReceiptInvoices(deliveries);
                     const deliveryCount = receipt.receipt_deliveries.length;
 
                     return (
@@ -236,9 +226,12 @@ export default function ReceiptsPage() {
                           <div className="flex items-center gap-2">
                             <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
                             <div>
-                              <div className="font-medium text-gray-900">
+                              <Link
+                                href={`/receipts/${receipt.id}`}
+                                className="font-medium text-primary-600 hover:text-primary-800"
+                              >
                                 {receipt.receipt_number}
-                              </div>
+                              </Link>
                               <div className="text-xs text-gray-500">{receipt.contract_number}</div>
                             </div>
                           </div>
@@ -269,45 +262,46 @@ export default function ReceiptsPage() {
                           {deliveryCount} livraison{deliveryCount !== 1 ? 's' : ''}
                         </td>
 
-                        {/* Invoice status — Req 19.7 */}
+                        {/* Invoice status */}
                         <td className="whitespace-nowrap px-6 py-4">
-                          {invoiceStatus === 'invoiced' ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="inline-flex rounded-full px-2 py-1 text-xs font-semibold bg-green-100 text-green-800">
-                                Facturé
-                              </span>
-                              {invoiceCode && invoiceId && (
-                                <Link
-                                  href={`/invoices/${invoiceId}`}
-                                  className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800"
-                                >
-                                  {invoiceCode}
-                                  <ExternalLink className="h-3 w-3" />
-                                </Link>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="inline-flex rounded-full px-2 py-1 text-xs font-semibold bg-yellow-100 text-yellow-800">
-                              Non facturé
-                            </span>
-                          )}
+                          <ReceiptInvoiceStatusBadge
+                            status={invoiceStatus}
+                            invoices={invoices}
+                          />
                         </td>
 
                         {/* Actions */}
                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const res = await fetch(`/api/receipts/signed-url?path=${encodeURIComponent(receipt.pdf_url)}`);
-                              if (res.ok) {
-                                const { signedUrl } = await res.json();
-                                window.open(signedUrl, '_blank');
-                              }
-                            }}
-                            className="text-primary-600 hover:text-primary-900 font-medium"
-                          >
-                            PDF
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <Link
+                              href={`/receipts/${receipt.id}`}
+                              className="text-gray-600 hover:text-gray-900"
+                            >
+                              Voir
+                            </Link>
+                            {canInvoice && invoiceStatus !== 'invoiced' && deliveryCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleInvoiceReceipt(receipt)}
+                                className="text-primary-600 hover:text-primary-900 font-medium"
+                              >
+                                Facturer
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await fetch(`/api/receipts/signed-url?path=${encodeURIComponent(receipt.pdf_url)}`);
+                                if (res.ok) {
+                                  const { signedUrl } = await res.json();
+                                  window.open(signedUrl, '_blank');
+                                }
+                              }}
+                              className="text-primary-600 hover:text-primary-900 font-medium"
+                            >
+                              PDF
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

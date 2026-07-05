@@ -70,7 +70,34 @@ export type Permission =
   // Export
   | 'export:csv'
   | 'export:excel'
-  | 'export:pdf';
+  | 'export:pdf'
+  // Factory module
+  | 'factory:receipts:read'
+  | 'factory:receipts:create'
+  | 'factory:receipts:update'
+  | 'factory:quality:read'
+  | 'factory:quality:validate'
+  | 'factory:quality:reject'
+  | 'factory:stock:read'
+  | 'factory:stock:write'
+  | 'factory:orders:read'
+  | 'factory:orders:create'
+  | 'factory:orders:validate'
+  | 'factory:production:operate'
+  | 'factory:traceability:read'
+  | 'factory:reports:read'
+  | 'factory:settings:read'
+  | 'factory:settings:update';
+
+const FACTORY_MANAGER_PERMISSIONS: Permission[] = [
+  'factory:receipts:read', 'factory:receipts:create', 'factory:receipts:update',
+  'factory:quality:read', 'factory:quality:validate', 'factory:quality:reject',
+  'factory:stock:read', 'factory:stock:write',
+  'factory:orders:read', 'factory:orders:create', 'factory:orders:validate',
+  'factory:production:operate',
+  'factory:traceability:read', 'factory:reports:read',
+  'factory:settings:read',
+];
 
 const MANAGER_PERMISSIONS: Permission[] = [
   'users:read',
@@ -84,6 +111,7 @@ const MANAGER_PERMISSIONS: Permission[] = [
   'settings:read',
   'audit:read',
   'export:csv', 'export:excel', 'export:pdf',
+  ...FACTORY_MANAGER_PERMISSIONS,
 ];
 
 /**
@@ -103,6 +131,8 @@ export const ROLE_PERMISSIONS: Record<ExtendedUserRole, Permission[]> = {
     'settings:read', 'settings:update',
     'audit:read',
     'export:csv', 'export:excel', 'export:pdf',
+    ...FACTORY_MANAGER_PERMISSIONS,
+    'factory:settings:update',
   ],
   manager: MANAGER_PERMISSIONS,
   agent: MANAGER_PERMISSIONS, // Legacy role - same permissions as manager
@@ -118,6 +148,8 @@ export const ROLE_PERMISSIONS: Record<ExtendedUserRole, Permission[]> = {
     'regions:read',
     'audit:read',
     'export:csv', 'export:excel', 'export:pdf',
+    'factory:receipts:read', 'factory:quality:read', 'factory:stock:read',
+    'factory:orders:read', 'factory:traceability:read', 'factory:reports:read',
   ],
 };
 

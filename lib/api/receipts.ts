@@ -3,13 +3,23 @@
 // Requirements: 19.2, 19.3, 19.7
 
 import { createClient } from '@/lib/supabase/client';
+import {
+  deriveReceiptInvoiceStatus,
+  extractLinkedDeliveries,
+  getBillableDeliveryIds,
+  matchesReceiptInvoiceFilter,
+} from '@/lib/utils/receipt-invoice-status';
 import type { PaginatedResult } from '@/types';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export type ReceiptInvoiceStatus = 'not_invoiced' | 'invoiced' | 'all';
+export type ReceiptInvoiceStatus =
+  | 'not_invoiced'
+  | 'partially_invoiced'
+  | 'invoiced'
+  | 'all';
 
 export interface ReceiptFilters {
   page?: number;
@@ -131,10 +141,9 @@ export const receiptsApi = {
     // Filter by invoice_status client-side (derived from linked deliveries)
     if (invoice_status && invoice_status !== 'all') {
       items = items.filter((r) => {
-        const deliveries = r.receipt_deliveries.map((rd) => rd.delivery).filter(Boolean);
-        if (deliveries.length === 0) return invoice_status === 'not_invoiced';
-        const allInvoiced = deliveries.every((d) => d?.invoice_status === 'invoiced');
-        return invoice_status === 'invoiced' ? allInvoiced : !allInvoiced;
+        const deliveries = extractLinkedDeliveries(r.receipt_deliveries);
+        const status = deriveReceiptInvoiceStatus(deliveries);
+        return matchesReceiptInvoiceFilter(status, invoice_status);
       });
     }
 
@@ -180,5 +189,13 @@ export const receiptsApi = {
     }
 
     return data as unknown as CollectionReceiptListItem;
+  },
+
+  /** Delivery IDs from a receipt that are not yet invoiced */
+  getBillableDeliveryIds(receipt: CollectionReceiptListItem): string[] {
+    const deliveries = extractLinkedDeliveries(receipt.receipt_deliveries);
+    return getBillableDeliveryIds(
+      deliveries.map((d) => ({ id: d.id, invoice_status: d.invoice_status }))
+    );
   },
 };

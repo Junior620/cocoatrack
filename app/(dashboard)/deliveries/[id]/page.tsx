@@ -11,6 +11,7 @@ import { useAuth, hasPermission } from '@/lib/auth';
 import { deliveriesApi } from '@/lib/api/deliveries';
 import type { DeliveryWithRelations, UpdateDeliveryInput } from '@/lib/validations/delivery';
 import type { QualityGrade, PaymentStatus } from '@/types';
+import { useWaybillForDelivery } from '@/lib/hooks/useWaybills';
 
 export default function DeliveryDetailPage() {
   const params = useParams();
@@ -26,6 +27,8 @@ export default function DeliveryDetailPage() {
   const [updatingPayment, setUpdatingPayment] = useState(false);
 
   const canEdit = user && hasPermission(user.role, 'deliveries:update');
+
+  const { data: waybill, isLoading: waybillLoading } = useWaybillForDelivery(deliveryId);
 
   // Fetch delivery
   const fetchDelivery = useCallback(async () => {
@@ -188,6 +191,49 @@ export default function DeliveryDetailPage() {
           <p className="text-sm text-red-700">{error}</p>
         </div>
       )}
+
+      {/* Source receipt */}
+      {(() => {
+        const receipt = delivery.collection_receipt;
+        let notesReceiptNumber: string | null = null;
+        if (!receipt && delivery.notes) {
+          try {
+            const parsed = JSON.parse(delivery.notes);
+            notesReceiptNumber = parsed.receipt_number ?? null;
+          } catch {
+            // ignore
+          }
+        }
+        if (!receipt && !notesReceiptNumber) return null;
+        return (
+          <div className="rounded-lg border border-primary-100 bg-primary-50 p-4">
+            <h2 className="text-sm font-semibold text-primary-900">Reçu source</h2>
+            {receipt ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                <Link
+                  href={`/receipts/${receipt.id}`}
+                  className="font-medium text-primary-700 hover:text-primary-900"
+                >
+                  {receipt.receipt_number}
+                </Link>
+                <span className="text-primary-700">
+                  {new Date(receipt.transaction_date).toLocaleDateString('fr-FR')}
+                </span>
+                <Link
+                  href={`/receipts/${receipt.id}`}
+                  className="text-primary-600 hover:text-primary-800 underline"
+                >
+                  Voir le reçu
+                </Link>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-primary-800">
+                Reçu {notesReceiptNumber} (import — lien non disponible)
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Main content */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -396,6 +442,47 @@ export default function DeliveryDetailPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Lettre de voiture */}
+      <div className="rounded-lg bg-white p-6 shadow">
+        <h2 className="text-lg font-medium text-gray-900">Lettre de voiture</h2>
+        {waybillLoading ? (
+          <p className="mt-4 text-sm text-gray-500">Chargement…</p>
+        ) : waybill ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-gray-600">
+              Cette livraison est rattachée au transport{' '}
+              <Link
+                href={`/deliveries/waybills/${waybill.id}`}
+                className="font-medium text-primary-600 hover:text-primary-700"
+              >
+                {waybill.code}
+              </Link>
+            </p>
+            {(waybill.origin_location || waybill.destination_location) && (
+              <p className="text-sm text-gray-500">
+                {waybill.origin_location || '—'} → {waybill.destination_location || '—'}
+              </p>
+            )}
+            {waybill.loading_date && (
+              <p className="text-sm text-gray-500">
+                Chargement :{' '}
+                {new Date(waybill.loading_date).toLocaleDateString('fr-FR')}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4">
+            <p className="text-sm text-gray-500">Aucune lettre de voiture rattachée.</p>
+            <Link
+              href="/deliveries/waybills/new"
+              className="mt-2 inline-block text-sm font-medium text-primary-600 hover:text-primary-700"
+            >
+              Créer ou rattacher à un transport →
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Photos section */}

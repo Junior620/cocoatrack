@@ -39,7 +39,6 @@ function isAllowedCountry(request: NextRequest): boolean {
   
   // If no geo info available (localhost, development), allow access
   if (!country) {
-    console.log('[Geo] No country info available, allowing access');
     return true;
   }
   
@@ -76,13 +75,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder files (manifest.json, sw.js, icons, videos, etc.)
-     * - api routes that don't need auth
+     * Page navigations only — skip API routes, Next internals, and static assets.
+     * API routes authenticate themselves; excluding them avoids Auth 429 storms in dev.
      */
-    '/((?!_next/static|_next/image|favicon.ico|manifest\\.json|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp4|webm|ogg)$).*)',
+    '/((?!_next/|api/|favicon.ico|manifest\\.json|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp4|webm|ogg)$).*)',
   ],
 };

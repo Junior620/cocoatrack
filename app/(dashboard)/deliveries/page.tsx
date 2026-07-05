@@ -9,9 +9,12 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth, hasPermission } from '@/lib/auth';
 import { deliveriesApi } from '@/lib/api/deliveries';
+import { cooperativesApi } from '@/lib/api/cooperatives';
 import type { DeliveryWithRelations, DeliveryFilters } from '@/lib/validations/delivery';
 import type { PaginatedResult, QualityGrade, PaymentStatus } from '@/types';
 import { ReceiptImportButton } from '@/components/receipts/ReceiptImportButton';
+import { DeliveriesSubNav } from '@/components/deliveries/DeliveriesSubNav';
+import { waybillsApi } from '@/lib/api/waybills';
 import { showSuccessToast } from '@/lib/offline/offline-toast';
 
 export default function DeliveriesPage() {
@@ -23,6 +26,8 @@ export default function DeliveriesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingPayment, setUpdatingPayment] = useState<string | null>(null);
+  const [filterCoopName, setFilterCoopName] = useState<string | null>(null);
+  const [waybillDeliveryIds, setWaybillDeliveryIds] = useState<Set<string>>(new Set());
 
   // Parse filters from URL
   const filters: DeliveryFilters = {
@@ -31,6 +36,7 @@ export default function DeliveriesPage() {
     search: searchParams.get('search') || undefined,
     planteur_id: searchParams.get('planteur_id') || undefined,
     chef_planteur_id: searchParams.get('chef_planteur_id') || undefined,
+    cooperative_id: searchParams.get('cooperative_id') || undefined,
     warehouse_id: searchParams.get('warehouse_id') || undefined,
     quality_grade: (searchParams.get('quality_grade') as QualityGrade) || undefined,
     payment_status: (searchParams.get('payment_status') as PaymentStatus) || undefined,
@@ -59,6 +65,20 @@ export default function DeliveriesPage() {
   useEffect(() => {
     fetchDeliveries();
   }, [fetchDeliveries]);
+
+  useEffect(() => {
+    waybillsApi.getLinkedDeliveryIds().then(setWaybillDeliveryIds).catch(() => {});
+  }, [data?.total]);
+
+  useEffect(() => {
+    if (!filters.cooperative_id) {
+      setFilterCoopName(null);
+      return;
+    }
+    cooperativesApi.getDetail(filters.cooperative_id).then((detail) => {
+      setFilterCoopName(detail?.name ?? null);
+    });
+  }, [filters.cooperative_id]);
 
   // Update URL with new filters
   const updateFilters = (newFilters: Partial<DeliveryFilters>) => {
@@ -145,6 +165,7 @@ export default function DeliveriesPage() {
 
   return (
     <div className="space-y-6">
+      <DeliveriesSubNav />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -181,6 +202,28 @@ export default function DeliveriesPage() {
           </div>
         )}
       </div>
+
+      {filters.cooperative_id && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm text-primary-800">
+          <span>
+            Filtre coopérative
+            {filterCoopName ? ` : ${filterCoopName}` : ''}
+          </span>
+          <Link
+            href={`/cooperatives/${filters.cooperative_id}`}
+            className="font-medium underline hover:text-primary-900"
+          >
+            Voir la fiche
+          </Link>
+          <button
+            type="button"
+            onClick={() => updateFilters({ cooperative_id: undefined, page: 1 })}
+            className="ml-auto rounded px-2 py-0.5 text-primary-700 hover:bg-primary-100"
+          >
+            Retirer le filtre
+          </button>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:flex-wrap">
@@ -308,7 +351,14 @@ export default function DeliveriesPage() {
                   data.data.map((delivery) => (
                     <tr key={delivery.id} className="hover:bg-gray-50">
                       <td className="whitespace-nowrap px-6 py-4">
-                        <div className="font-medium text-gray-900">{delivery.code}</div>
+                        <div className="flex items-center gap-2 font-medium text-gray-900">
+                          {delivery.code}
+                          {waybillDeliveryIds.has(delivery.id) && (
+                            <span title="Lettre de voiture rattachée" className="text-primary-600">
+                              <TruckIcon className="h-4 w-4" />
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                         {formatDate(delivery.delivered_at)}
@@ -462,6 +512,25 @@ function CheckIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M5 13l4 4L19 7"
+      />
+    </svg>
+  );
+}
+
+function TruckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0h4l3-4V9a1 1 0 00-1-1h-4m-4 0V6"
       />
     </svg>
   );

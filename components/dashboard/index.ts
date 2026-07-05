@@ -11,3 +11,4 @@ export * from './EmptyState';
 export * from './AlertsWidget';
 export * from './ActivityCalendar';
 export * from './OrphanParcellesWidget';
+export * from './ReceiptPipelineWidget';

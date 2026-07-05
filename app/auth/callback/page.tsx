@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getModuleCookie, getDefaultRouteForModule } from '@/lib/utils/cocoatrack-module';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -59,8 +60,10 @@ export default function AuthCallbackPage() {
             console.log('Redirecting to reset-password (PKCE)');
             window.location.replace('/reset-password');
           } else {
-            console.log('Redirecting to dashboard (PKCE)');
-            window.location.replace('/dashboard');
+            const module = getModuleCookie();
+            const dest = getDefaultRouteForModule(module ?? 'traceability');
+            console.log('Redirecting to', dest, '(PKCE)');
+            window.location.replace(dest);
           }
           return;
         }
@@ -106,8 +109,10 @@ export default function AuthCallbackPage() {
               console.log('Redirecting to reset-password (implicit)');
               window.location.replace('/reset-password');
             } else {
-              console.log('Redirecting to dashboard (implicit)');
-              window.location.replace('/dashboard');
+              const module = getModuleCookie();
+              const dest = getDefaultRouteForModule(module ?? 'traceability');
+              console.log('Redirecting to', dest, '(implicit)');
+              window.location.replace(dest);
             }
             return;
           } catch (timeoutError) {
@@ -116,7 +121,8 @@ export default function AuthCallbackPage() {
             if (type === 'recovery') {
               window.location.replace('/reset-password');
             } else {
-              window.location.replace('/dashboard');
+              const module = getModuleCookie();
+              window.location.replace(getDefaultRouteForModule(module ?? 'traceability'));
             }
             return;
           }

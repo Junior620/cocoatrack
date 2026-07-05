@@ -18,14 +18,25 @@ export const paymentStatusSchema = z.enum(['pending', 'partial', 'paid']);
 // CREATE DELIVERY SCHEMA
 // ============================================================================
 
+const optionalUuidField = z.preprocess(
+  (val) => (val === '' || val === null || val === undefined ? undefined : val),
+  z.string().uuid().optional()
+);
+
 export const createDeliverySchema = z.object({
   planteur_id: z.string().uuid('Invalid planteur ID'),
-  chef_planteur_id: z.string().uuid('Invalid chef planteur ID'),
-  warehouse_id: z.string().uuid('Invalid warehouse ID'),
+  chef_planteur_id: optionalUuidField,
+  warehouse_id: optionalUuidField,
+  cooperative_id: optionalUuidField,
   weight_kg: z
     .number()
     .positive('Weight must be positive')
     .max(100000, 'Weight cannot exceed 100,000 kg'),
+  weight_loaded_kg: z
+    .number()
+    .positive('Loaded weight must be positive')
+    .max(100000, 'Loaded weight cannot exceed 100,000 kg')
+    .optional(),
   price_per_kg: z
     .number()
     .positive('Price must be positive')
@@ -129,6 +140,12 @@ export interface DeliveryWithRelations extends Delivery {
     full_name: string;
   };
   photos?: DeliveryPhoto[];
+  collection_receipt?: {
+    id: string;
+    receipt_number: string;
+    transaction_date: string;
+    pdf_url: string;
+  } | null;
 }
 
 // ============================================================================

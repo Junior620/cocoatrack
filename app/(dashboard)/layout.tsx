@@ -23,6 +23,7 @@ import {
   LogOut,
   Building2,
   Map,
+  Factory,
 } from 'lucide-react';
 
 import { ProtectedRoute } from '@/components/auth';
@@ -36,6 +37,7 @@ import { UndoProvider } from '@/components/ui/SwipeActions';
 import { OfflineToastContainer, DegradedModeBanner } from '@/components/offline';
 import { useDegradedMode } from '@/lib/offline/use-degraded-mode';
 import { useOffline } from '@/lib/offline/use-offline';
+import { setModuleCookie } from '@/lib/utils/cocoatrack-module';
 
 interface NavItem {
   name: string;
@@ -427,6 +429,20 @@ function Sidebar({ navigation, pathname, user, onClose, compact = false }: Sideb
 
       {/* User section at bottom */}
       <div className={`border-t border-gray-100 ${compact ? 'p-2 xl:p-4' : 'p-4'}`}>
+        <Link
+          href="/factory"
+          onClick={() => {
+            setModuleCookie('factory');
+            onClose?.();
+          }}
+          className={`mb-3 flex items-center rounded-xl border border-[#d4c4b0] bg-[#faf6f1] text-sm font-medium text-[#5C4033] transition hover:bg-[#f0e6dc] ${
+            compact ? 'justify-center gap-0 p-2.5 xl:justify-start xl:gap-2 xl:px-3 xl:py-2' : 'gap-2 px-3 py-2'
+          }`}
+          title="Module usine"
+        >
+          <Factory className="h-4 w-4 shrink-0" />
+          <span className={compact ? 'hidden xl:inline' : ''}>Module usine</span>
+        </Link>
         <div className={`flex items-center rounded-xl bg-gray-50 ${compact ? 'justify-center p-2 xl:justify-start xl:gap-3 xl:p-3' : 'gap-3 p-3'}`}>
           <Avatar name={user?.full_name || 'User'} email={user?.email} size="sm" />
           <div className={`flex-1 min-w-0 ${compact ? 'hidden xl:block' : ''}`}>

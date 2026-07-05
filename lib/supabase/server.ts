@@ -84,20 +84,20 @@ export async function getUser() {
 
 /**
  * Gets the current user's profile from the database.
- * Returns null if not authenticated or profile doesn't exist.
+ * Uses getSession() (cookie) to avoid redundant Auth API calls — middleware refreshes tokens.
  */
 export async function getUserProfile() {
   const supabase = await createServerSupabaseClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!user) return null;
+  if (!session?.user) return null;
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', user.id)
+    .eq('id', session.user.id)
     .single();
 
   return profile;

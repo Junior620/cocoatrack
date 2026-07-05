@@ -15,6 +15,7 @@ import {
   AlertsWidget,
   ActivityCalendar,
   OrphanParcellesWidget,
+  ReceiptPipelineWidget,
 } from '@/components/dashboard';
 import {
   useDashboardMetricsWithComparison,
@@ -25,6 +26,8 @@ import {
   useRefreshDashboard,
   useEntityCounts,
   useESGMetrics,
+  useUninvoicedReceiptsCount,
+  useReceiptPipelineStats,
 } from '@/lib/hooks';
 import { buildDashboardFilters } from '@/lib/api/dashboard';
 import { useAuth } from '@/lib/auth';
@@ -76,6 +79,10 @@ export default function DashboardPage() {
   // Fetch entity counts (planteurs, chef planteurs, today's deliveries)
   const { data: entityCounts, isLoading: entityCountsLoading } = useEntityCounts(cooperativeId);
   const { data: esgMetrics, isLoading: esgLoading } = useESGMetrics(filters);
+  const { data: uninvoicedReceipts, isLoading: uninvoicedReceiptsLoading } =
+    useUninvoicedReceiptsCount(cooperativeId);
+  const { data: receiptPipeline, isLoading: receiptPipelineLoading } =
+    useReceiptPipelineStats(cooperativeId);
 
   // Subscribe to realtime updates
   useDashboardRealtime(cooperativeId);
@@ -196,6 +203,13 @@ export default function DashboardPage() {
         entityCountsLoading={entityCountsLoading}
         esgMetrics={esgMetrics ?? null}
         esgLoading={esgLoading}
+        uninvoicedReceipts={uninvoicedReceipts ?? null}
+        uninvoicedReceiptsLoading={uninvoicedReceiptsLoading}
+      />
+
+      <ReceiptPipelineWidget
+        stats={receiptPipeline ?? null}
+        loading={receiptPipelineLoading}
       />
 
       {/* Orphan Parcelles Widget - only shows if orphan_count > 0 */}

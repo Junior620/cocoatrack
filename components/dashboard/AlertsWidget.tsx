@@ -16,6 +16,10 @@ import {
   Scale,
   Calendar
 } from 'lucide-react';
+import {
+  deriveReceiptInvoiceStatus,
+  extractLinkedDeliveries,
+} from '@/lib/utils/receipt-invoice-status';
 import { createClient } from '@/lib/supabase/client';
 
 interface Alert {
@@ -223,6 +227,46 @@ export function AlertsWidget({ loading: externalLoading = false, cooperativeId }
         } catch (viewError) {
           // Views might not exist yet, skip these alerts
           console.warn('Stats views not available for alerts');
+        }
+
+        // Reçus à facturer
+        let receiptsQuery = supabase
+          .from('collection_receipts')
+          .select(`
+            id,
+            receipt_deliveries(
+              delivery:deliveries!receipt_deliveries_delivery_id_fkey(invoice_status)
+            )
+          `);
+
+        if (cooperativeId) {
+          receiptsQuery = receiptsQuery.eq('cooperative_id', cooperativeId);
+        }
+
+        const { data: receiptRows } = await receiptsQuery;
+        if (receiptRows) {
+          let toInvoice = 0;
+          for (const row of receiptRows) {
+            const deliveries = extractLinkedDeliveries(
+              (row as { receipt_deliveries: Array<{ delivery: { invoice_status: string | null } | null }> })
+                .receipt_deliveries
+            );
+            const status = deriveReceiptInvoiceStatus(deliveries);
+            if (status === 'not_invoiced' || status === 'partially_invoiced') {
+              toInvoice += 1;
+            }
+          }
+          if (toInvoice > 0) {
+            newAlerts.push({
+              id: 'uninvoiced-receipts',
+              type: 'warning',
+              title: 'Reçus à facturer',
+              description: `${toInvoice} reçu${toInvoice > 1 ? 's' : ''} en attente de facturation`,
+              href: '/receipts?invoice_status=not_invoiced',
+              count: toInvoice,
+              icon: <FileWarning className="h-5 w-5" />,
+            });
+          }
         }
 
         // 4. Check for inactive planteurs

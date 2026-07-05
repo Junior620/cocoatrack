@@ -94,20 +94,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // chefPlanteurId OR chefPlanteurName is required
-    if (!body.chefPlanteurId && !body.chefPlanteurName) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'MISSING_REQUIRED_FIELD',
-            message: "Le nom de l'acheteur (collecteur) est obligatoire",
-            field: 'chefPlanteurId',
-          },
-        },
-        { status: 400 }
-      );
-    }
-
+    // Fournisseur optionnel — chef_planteur_id peut rester null
     const data = body as ReceiptData;
 
     // Validate product lines

@@ -1881,6 +1881,135 @@ export type Database = {
           },
         ]
       }
+      delivery_waybills: {
+        Row: {
+          id: string
+          code: string
+          cooperative_id: string | null
+          sender_name: string | null
+          recipient_name: string | null
+          carrier_name: string | null
+          vehicle_plate: string | null
+          driver_name: string | null
+          origin_location: string | null
+          destination_location: string | null
+          loading_date: string
+          sack_count: number | null
+          total_weight_kg: number | null
+          lot_number: string | null
+          quality_grade: Database["public"]["Enums"]["quality_grade"] | null
+          notes: string | null
+          document_storage_path: string | null
+          document_file_name: string | null
+          document_mime_type: string | null
+          document_file_size: number | null
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          code: string
+          cooperative_id?: string | null
+          sender_name?: string | null
+          recipient_name?: string | null
+          carrier_name?: string | null
+          vehicle_plate?: string | null
+          driver_name?: string | null
+          origin_location?: string | null
+          destination_location?: string | null
+          loading_date?: string
+          sack_count?: number | null
+          total_weight_kg?: number | null
+          lot_number?: string | null
+          quality_grade?: Database["public"]["Enums"]["quality_grade"] | null
+          notes?: string | null
+          document_storage_path?: string | null
+          document_file_name?: string | null
+          document_mime_type?: string | null
+          document_file_size?: number | null
+          created_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          code?: string
+          cooperative_id?: string | null
+          sender_name?: string | null
+          recipient_name?: string | null
+          carrier_name?: string | null
+          vehicle_plate?: string | null
+          driver_name?: string | null
+          origin_location?: string | null
+          destination_location?: string | null
+          loading_date?: string
+          sack_count?: number | null
+          total_weight_kg?: number | null
+          lot_number?: string | null
+          quality_grade?: Database["public"]["Enums"]["quality_grade"] | null
+          notes?: string | null
+          document_storage_path?: string | null
+          document_file_name?: string | null
+          document_mime_type?: string | null
+          document_file_size?: number | null
+          created_by?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_waybills_cooperative_id_fkey"
+            columns: ["cooperative_id"]
+            isOneToOne: false
+            referencedRelation: "cooperatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_waybills_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      waybill_deliveries: {
+        Row: {
+          id: string
+          waybill_id: string
+          delivery_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          waybill_id: string
+          delivery_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          waybill_id?: string
+          delivery_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waybill_deliveries_waybill_id_fkey"
+            columns: ["waybill_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_waybills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waybill_deliveries_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       satellite_imagery: {
         Row: {
           id: string

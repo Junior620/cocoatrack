@@ -661,9 +661,9 @@ CREATE POLICY "dashboard_aggregates_select_policy" ON public.dashboard_aggregate
 -- PART 8: SEED DATA - Default Region and Cooperative
 -- ============================================================================
 
--- Insert default region
+-- Insert default region (Centre, Cameroun)
 INSERT INTO public.regions (id, name, code)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Côte d''Ivoire', 'CI')
+VALUES ('00000000-0000-0000-0000-000000000001', 'Centre', 'CTR')
 ON CONFLICT (code) DO NOTHING;
 
 -- Insert default cooperative
@@ -673,7 +673,7 @@ VALUES (
   'Coopérative Principale', 
   'COOP-001', 
   '00000000-0000-0000-0000-000000000001',
-  'Abidjan, Côte d''Ivoire'
+  'Yaoundé, Centre, Cameroun'
 )
 ON CONFLICT (code) DO NOTHING;
 

@@ -1567,11 +1567,11 @@ CREATE POLICY "Users can view own cooperative dashboard aggregates" ON public.da
 -- ============================================================================
 -- SEED DATA - Default Region and Cooperative
 -- ============================================================================
-INSERT INTO public.regions (id, name, code) VALUES ('00000000-0000-0000-0000-000000000001', 'Côte d''Ivoire', 'CI') ON CONFLICT (code) DO NOTHING;
+INSERT INTO public.regions (id, name, code) VALUES ('00000000-0000-0000-0000-000000000001', 'Centre', 'CTR') ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO public.cooperatives (id, name, code, region_id, address) VALUES (
   '00000000-0000-0000-0000-000000000002', 'Coopérative Principale', 'COOP-001', 
-  '00000000-0000-0000-0000-000000000001', 'Abidjan, Côte d''Ivoire') ON CONFLICT (code) DO NOTHING;
+  '00000000-0000-0000-0000-000000000001', 'Yaoundé, Centre, Cameroun') ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO public.warehouses (id, name, code, cooperative_id, is_active) VALUES (
   '00000000-0000-0000-0000-000000000003', 'Entrepôt Principal', 'WH-001',

@@ -5,11 +5,11 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { 
-  Building2, 
-  Users, 
-  UsersRound, 
-  Package, 
+import {
+  Building2,
+  Users,
+  UsersRound,
+  Package,
   Search,
   AlertTriangle,
   Eye,
@@ -19,9 +19,17 @@ import {
   Plus,
   Edit,
   X,
+  FileText,
+  Receipt,
 } from 'lucide-react';
 
-import { cooperativesApi, type CooperativeStats, type CooperativeGlobalStats } from '@/lib/api/cooperatives';
+import { useAuth } from '@/lib/auth';
+import {
+  cooperativesApi,
+  type CooperativeStats,
+  type CooperativeGlobalStats,
+  type RegionOption,
+} from '@/lib/api/cooperatives';
 import { PageTransition, AnimatedSection } from '@/components/dashboard';
 
 // Format weight with locale
@@ -42,8 +50,13 @@ function getLossLevel(percentage: number): { color: string; bgColor: string; lab
 }
 
 export default function CooperativesPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const scopeCoopId = isAdmin ? undefined : user?.cooperative_id ?? undefined;
+
   const [cooperatives, setCooperatives] = useState<CooperativeStats[]>([]);
   const [globalStats, setGlobalStats] = useState<CooperativeGlobalStats | null>(null);
+  const [regions, setRegions] = useState<RegionOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,28 +71,29 @@ export default function CooperativesPage() {
   const [formData, setFormData] = useState({
     name: '',
     code: '',
-    region: '',
+    region_id: '',
     address: '',
     phone: '',
   });
 
-  // Fetch data
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [coops, stats] = await Promise.all([
-        cooperativesApi.listWithStats(),
-        cooperativesApi.getGlobalStats(),
+      const [coops, stats, regionList] = await Promise.all([
+        cooperativesApi.listWithStats(scopeCoopId),
+        cooperativesApi.getGlobalStats(scopeCoopId),
+        isAdmin ? cooperativesApi.listRegions() : Promise.resolve([] as RegionOption[]),
       ]);
       setCooperatives(coops);
       setGlobalStats(stats);
+      setRegions(regionList);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Échec du chargement des coopératives');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopeCoopId, isAdmin]);
 
   useEffect(() => {
     fetchData();
@@ -149,18 +163,20 @@ export default function CooperativesPage() {
   };
 
   // Open create modal
+  const defaultRegionId =
+    regions.find((r) => r.name === 'Centre')?.id ?? regions[0]?.id ?? '';
+
   const handleCreate = () => {
-    setFormData({ name: '', code: '', region: '', address: '', phone: '' });
+    setFormData({ name: '', code: '', region_id: defaultRegionId, address: '', phone: '' });
     setShowCreateModal(true);
   };
 
-  // Open edit modal
   const handleEdit = (coop: CooperativeStats) => {
     setEditingCoop(coop);
     setFormData({
       name: coop.name,
       code: coop.code || '',
-      region: coop.region || '',
+      region_id: coop.region_id || regions[0]?.id || '',
       address: coop.address || '',
       phone: coop.phone || '',
     });
@@ -177,18 +193,18 @@ export default function CooperativesPage() {
     setSaving(true);
     try {
       if (showEditModal && editingCoop) {
-        // Update existing cooperative
         await cooperativesApi.update(editingCoop.id, {
           name: formData.name,
           code: formData.code || undefined,
+          region_id: formData.region_id || undefined,
           address: formData.address || undefined,
           phone: formData.phone || undefined,
         });
       } else {
-        // Create new cooperative
         await cooperativesApi.create({
           name: formData.name,
           code: formData.code || undefined,
+          region_id: formData.region_id || undefined,
           address: formData.address || undefined,
           phone: formData.phone || undefined,
         });
@@ -217,7 +233,7 @@ export default function CooperativesPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {selectedIds.size > 0 && (
+          {isAdmin && selectedIds.size > 0 && (
             <button
               onClick={handleDeleteSelected}
               disabled={deleting}
@@ -227,13 +243,15 @@ export default function CooperativesPage() {
               Supprimer ({selectedIds.size})
             </button>
           )}
-          <button
-            onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Nouvelle Coopérative
-          </button>
+          {isAdmin && (
+            <button
+              onClick={handleCreate}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Nouvelle Coopérative
+            </button>
+          )}
         </div>
       </div>
 
@@ -326,16 +344,18 @@ export default function CooperativesPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left">
-                      <button
-                        onClick={toggleAll}
-                        className="text-gray-600 hover:text-gray-900 transition-colors"
-                      >
-                        {allSelected ? (
-                          <CheckSquare className="h-5 w-5" />
-                        ) : (
-                          <Square className="h-5 w-5" />
-                        )}
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={toggleAll}
+                          className="text-gray-600 hover:text-gray-900 transition-colors"
+                        >
+                          {allSelected ? (
+                            <CheckSquare className="h-5 w-5" />
+                          ) : (
+                            <Square className="h-5 w-5" />
+                          )}
+                        </button>
+                      )}
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
                       <div className="flex items-center gap-2">
@@ -399,16 +419,18 @@ export default function CooperativesPage() {
                           className={`hover:bg-gray-50 transition-colors ${hasHighLoss ? 'bg-red-50/30' : ''} ${isSelected ? 'bg-primary-50/30' : ''}`}
                         >
                           <td className="px-4 py-3">
-                            <button
-                              onClick={() => toggleSelection(coop.id)}
-                              className="text-gray-600 hover:text-gray-900 transition-colors"
-                            >
-                              {isSelected ? (
-                                <CheckSquare className="h-5 w-5 text-primary-600" />
-                              ) : (
-                                <Square className="h-5 w-5" />
-                              )}
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => toggleSelection(coop.id)}
+                                className="text-gray-600 hover:text-gray-900 transition-colors"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="h-5 w-5 text-primary-600" />
+                                ) : (
+                                  <Square className="h-5 w-5" />
+                                )}
+                              </button>
+                            )}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3">
                             <div className="flex items-center gap-3">
@@ -416,9 +438,22 @@ export default function CooperativesPage() {
                                 <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
                               )}
                               <div>
-                                <div className="font-medium text-gray-900">{coop.name}</div>
+                                <Link
+                                  href={`/cooperatives/${coop.id}`}
+                                  className="font-medium text-primary-600 hover:text-primary-800"
+                                >
+                                  {coop.name}
+                                </Link>
                                 {coop.code && (
                                   <div className="text-xs text-gray-500">{coop.code}</div>
+                                )}
+                                {coop.region && (
+                                  <div className="text-xs text-gray-400">{coop.region}</div>
+                                )}
+                                {coop.receipts_to_invoice > 0 && (
+                                  <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                    {coop.receipts_to_invoice} reçu(s) à facturer
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -445,25 +480,53 @@ export default function CooperativesPage() {
                             )}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleEdit(coop)}
-                                className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-900 font-medium"
+                            <div className="flex items-center justify-end gap-1">
+                              <Link
+                                href={`/receipts?cooperative_id=${coop.id}`}
+                                className="p-1.5 text-gray-500 hover:text-primary-600"
+                                title="Reçus"
                               >
-                                <Edit className="h-4 w-4" />
-                              </button>
+                                <FileText className="h-4 w-4" />
+                              </Link>
+                              <Link
+                                href={`/deliveries?cooperative_id=${coop.id}`}
+                                className="p-1.5 text-gray-500 hover:text-primary-600"
+                                title="Livraisons"
+                              >
+                                <Package className="h-4 w-4" />
+                              </Link>
+                              <Link
+                                href={`/invoices?cooperative_id=${coop.id}`}
+                                className="p-1.5 text-gray-500 hover:text-primary-600"
+                                title="Factures"
+                              >
+                                <Receipt className="h-4 w-4" />
+                              </Link>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleEdit(coop)}
+                                  className="p-1.5 text-primary-600 hover:text-primary-900"
+                                  title="Modifier"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                              )}
                               <Link
                                 href={`/cooperatives/${coop.id}`}
-                                className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-900 font-medium"
+                                className="p-1.5 text-gray-600 hover:text-gray-900"
+                                title="Détail"
                               >
                                 <Eye className="h-4 w-4" />
                               </Link>
-                              <button
-                                onClick={() => handleDeleteSingle(coop.id)}
-                                className="inline-flex items-center gap-1 text-red-600 hover:text-red-900 font-medium"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeleteSingle(coop.id)}
+                                  className="p-1.5 text-red-600 hover:text-red-900"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -587,15 +650,25 @@ export default function CooperativesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Région
+                  Région (Cameroun)
                 </label>
-                <input
-                  type="text"
-                  value={formData.region}
-                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                <select
+                  value={formData.region_id}
+                  onChange={(e) => setFormData({ ...formData, region_id: e.target.value })}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                  placeholder="Région"
-                />
+                >
+                  <option value="">Sélectionner une région</option>
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+                {regions.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Aucune région camerounaise en base. Exécutez la migration des régions.
+                  </p>
+                )}
               </div>
 
               <div>

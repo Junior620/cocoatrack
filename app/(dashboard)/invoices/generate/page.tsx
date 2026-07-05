@@ -5,11 +5,12 @@
 // Supports invoicing by: Cooperative, Fournisseur (Chef Planteur), or Planteur
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/lib/auth';
 import { invoicesApi } from '@/lib/api/invoices';
+import { receiptsApi } from '@/lib/api/receipts';
 import { createClient } from '@/lib/supabase/client';
 import PlanteurSearchSelect from '@/components/forms/PlanteurSearchSelect';
 import ChefPlanteurSearchSelect from '@/components/forms/ChefPlanteurSearchSelect';
@@ -34,7 +35,14 @@ interface AvailableDelivery {
 
 export default function GenerateInvoicePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
+  const receiptPrefillDone = useRef(false);
+  const preselectedDeliveryIds = useRef<Set<string> | null>(null);
+
+  const receiptIdParam = searchParams.get('receipt_id');
+  const deliveryIdsParam = searchParams.get('delivery_ids');
+  const cooperativeIdParam = searchParams.get('cooperative_id');
 
   const [step, setStep] = useState(1);
   
@@ -74,15 +82,59 @@ export default function GenerateInvoicePage() {
 
       if (!error && data) {
         setCooperatives(data);
-        // If user has a cooperative, pre-select it
-        if (user?.cooperative_id) {
+        if (cooperativeIdParam) {
+          setSelectedCooperative(cooperativeIdParam);
+          setTargetType('cooperative');
+        } else if (user?.cooperative_id) {
           setSelectedCooperative(user.cooperative_id);
         }
       }
     };
 
     fetchCooperatives();
-  }, [user?.cooperative_id]);
+  }, [user?.cooperative_id, cooperativeIdParam]);
+
+  // Prefill from receipt_id query param
+  useEffect(() => {
+    if (!receiptIdParam || receiptPrefillDone.current) return;
+
+    const prefillFromReceipt = async () => {
+      receiptPrefillDone.current = true;
+      try {
+        const receipt = await receiptsApi.get(receiptIdParam);
+        if (!receipt) return;
+
+        const txDate = receipt.transaction_date.split('T')[0];
+        setPeriodStart(txDate);
+        setPeriodEnd(txDate);
+
+        if (receipt.cooperative_id) {
+          setSelectedCooperative(receipt.cooperative_id);
+        }
+
+        if (receipt.chef_planteur_id) {
+          setTargetType('fournisseur');
+          setSelectedChefPlanteur(receipt.chef_planteur_id);
+        } else {
+          setTargetType('cooperative');
+        }
+
+        const preselectedIds = deliveryIdsParam
+          ? deliveryIdsParam.split(',').filter(Boolean)
+          : receiptsApi.getBillableDeliveryIds(receipt);
+
+        if (preselectedIds.length > 0) {
+          preselectedDeliveryIds.current = new Set(preselectedIds);
+          setStep(2);
+          setSelectedDeliveries(new Set(preselectedIds));
+        }
+      } catch {
+        receiptPrefillDone.current = false;
+      }
+    };
+
+    prefillFromReceipt();
+  }, [receiptIdParam, deliveryIdsParam]);
 
   // Fetch available deliveries when period changes
   const fetchAvailableDeliveries = useCallback(async () => {
@@ -109,8 +161,16 @@ export default function GenerateInvoicePage() {
         period_end: periodEnd,
       });
       setAvailableDeliveries(deliveries);
-      // Select all by default
-      setSelectedDeliveries(new Set(deliveries.map(d => d.id)));
+      const preselected = preselectedDeliveryIds.current;
+      if (preselected && preselected.size > 0) {
+        const validIds = new Set(
+          deliveries.filter((d) => preselected.has(d.id)).map((d) => d.id)
+        );
+        setSelectedDeliveries(validIds);
+        preselectedDeliveryIds.current = null;
+      } else {
+        setSelectedDeliveries(new Set(deliveries.map((d) => d.id)));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch deliveries');
     } finally {
@@ -217,6 +277,15 @@ export default function GenerateInvoicePage() {
           <h1 className="text-2xl font-bold text-gray-900">Générer une facture</h1>
           <p className="mt-1 text-sm text-gray-500">
             Étape {step} sur 2
+            {receiptIdParam && (
+              <>
+                {' '}
+                ·{' '}
+                <Link href={`/receipts/${receiptIdParam}`} className="text-primary-600 hover:text-primary-800">
+                  Depuis un reçu
+                </Link>
+              </>
+            )}
           </p>
         </div>
       </div>

@@ -12,6 +12,8 @@ import { ReceiptImportWizard } from './ReceiptImportWizard';
 export interface ReceiptImportButtonProps {
   /** Called after a successful import with the number of deliveries created */
   onImportComplete?: (deliveryCount: number) => void;
+  /** Override cooperative pre-selection (e.g. from cooperative detail page) */
+  cooperativeId?: string | null;
 }
 
 /**
@@ -22,7 +24,10 @@ export interface ReceiptImportButtonProps {
  * Opens the ReceiptImportWizard modal on click (Req 1.3).
  * Positioned in the page header area (Req 1.4).
  */
-export function ReceiptImportButton({ onImportComplete }: ReceiptImportButtonProps) {
+export function ReceiptImportButton({
+  onImportComplete,
+  cooperativeId: cooperativeIdProp,
+}: ReceiptImportButtonProps) {
   const { user } = useAuth();
   const [isWizardOpen, setIsWizardOpen] = useState(false);
 
@@ -31,8 +36,7 @@ export function ReceiptImportButton({ onImportComplete }: ReceiptImportButtonPro
     return null;
   }
 
-  // Cooperative ID from profile (optional - user can select in wizard if not set)
-  const cooperativeId = user.cooperative_id;
+  const cooperativeId = cooperativeIdProp ?? user.cooperative_id;
 
   const handleImportComplete = (deliveryCount: number) => {
     setIsWizardOpen(false);

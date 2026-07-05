@@ -3,6 +3,10 @@
 // Requirements: 6.1, 6.5, 6.8
 
 import { createClient } from '@/lib/supabase/client';
+import {
+  deriveReceiptInvoiceStatus,
+  extractLinkedDeliveries,
+} from '@/lib/utils/receipt-invoice-status';
 
 // Type definition for the RPC function (until types are regenerated)
 type GetDashboardMetricsAllParams = {
@@ -920,6 +924,105 @@ async function getESGMetrics(filters: DashboardFilters = {}): Promise<ESGMetrics
   };
 }
 
+export interface UninvoicedReceiptsCount {
+  total: number;
+  notInvoiced: number;
+  partiallyInvoiced: number;
+}
+
+export interface ReceiptPipelineStats {
+  totalReceipts: number;
+  uninvoicedDeliveries: number;
+  fullyInvoicedReceipts: number;
+  invoicedPct: number;
+}
+
+type ReceiptPipelineRow = {
+  id: string;
+  cooperative_id: string | null;
+  receipt_deliveries: Array<{
+    delivery: {
+      invoice_status: string | null;
+    } | null;
+  }>;
+};
+
+async function fetchReceiptPipelineRows(cooperativeId?: string): Promise<ReceiptPipelineRow[]> {
+  const supabase = createClient();
+
+  let query = supabase
+    .from('collection_receipts')
+    .select(`
+      id,
+      cooperative_id,
+      receipt_deliveries(
+        delivery:deliveries!receipt_deliveries_delivery_id_fkey(invoice_status)
+      )
+    `);
+
+  if (cooperativeId) {
+    query = query.eq('cooperative_id', cooperativeId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`Failed to fetch receipt pipeline stats: ${error.message}`);
+  }
+
+  return (data || []) as unknown as ReceiptPipelineRow[];
+}
+
+async function getUninvoicedReceiptsCount(
+  cooperativeId?: string
+): Promise<UninvoicedReceiptsCount> {
+  const rows = await fetchReceiptPipelineRows(cooperativeId);
+
+  let notInvoiced = 0;
+  let partiallyInvoiced = 0;
+
+  for (const row of rows) {
+    const deliveries = extractLinkedDeliveries(row.receipt_deliveries);
+    const status = deriveReceiptInvoiceStatus(deliveries);
+    if (status === 'not_invoiced') notInvoiced += 1;
+    if (status === 'partially_invoiced') partiallyInvoiced += 1;
+  }
+
+  return {
+    total: notInvoiced + partiallyInvoiced,
+    notInvoiced,
+    partiallyInvoiced,
+  };
+}
+
+async function getReceiptPipelineStats(
+  cooperativeId?: string
+): Promise<ReceiptPipelineStats> {
+  const rows = await fetchReceiptPipelineRows(cooperativeId);
+
+  let fullyInvoicedReceipts = 0;
+  let uninvoicedDeliveries = 0;
+
+  for (const row of rows) {
+    const deliveries = extractLinkedDeliveries(row.receipt_deliveries);
+    const status = deriveReceiptInvoiceStatus(deliveries);
+    if (status === 'invoiced') fullyInvoicedReceipts += 1;
+    uninvoicedDeliveries += deliveries.filter((d) => d.invoice_status !== 'invoiced').length;
+  }
+
+  const totalReceipts = rows.length;
+  const invoicedPct =
+    totalReceipts > 0
+      ? Math.round((fullyInvoicedReceipts / totalReceipts) * 1000) / 10
+      : 0;
+
+  return {
+    totalReceipts,
+    uninvoicedDeliveries,
+    fullyInvoicedReceipts,
+    invoicedPct,
+  };
+}
+
 // ============================================================================
 // EXPORT API OBJECT
 // ============================================================================
@@ -934,5 +1037,7 @@ export const dashboardApi = {
   getDeliveryLocations,
   getEntityCounts,
   getESGMetrics,
+  getUninvoicedReceiptsCount,
+  getReceiptPipelineStats,
   buildDashboardFilters,
 };

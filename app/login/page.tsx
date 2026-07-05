@@ -4,12 +4,17 @@
 // Design équilibré 50/50
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Shield, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 import { useAuth } from '@/lib/auth';
+import {
+  getDefaultRouteForModule,
+  parseModule,
+  setModuleCookie,
+} from '@/lib/utils/cocoatrack-module';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +30,14 @@ function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCapsLockOn, setIsCapsLockOn] = useState(false);
 
-  const redirectTo = searchParams.get('redirectTo') || '/dashboard';
+  const moduleParam = parseModule(searchParams.get('module'));
+  const redirectParam = searchParams.get('redirectTo');
+  const defaultRoute = getDefaultRouteForModule(moduleParam ?? 'traceability');
+  const redirectTo = redirectParam || defaultRoute;
+
+  useEffect(() => {
+    if (moduleParam) setModuleCookie(moduleParam);
+  }, [moduleParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +57,22 @@ function LoginForm() {
 
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
+      {moduleParam && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-center ${
+            moduleParam === 'factory'
+              ? 'border-[#c4a574]/50 bg-[#5C4033]/25'
+              : 'border-[#234D1E]/40 bg-[#234D1E]/20'
+          }`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/70">
+            Module sélectionné
+          </p>
+          <p className="mt-1 text-base font-bold text-white">
+            {moduleParam === 'factory' ? 'Transformation & rendement usine' : 'Traçabilité cacao'}
+          </p>
+        </div>
+      )}
       {error && (
         <div className="rounded-xl bg-red-500/20 border border-red-300/40 p-4 backdrop-blur-sm" role="alert" aria-live="polite">
           <p className="text-sm text-red-100">{error}</p>
