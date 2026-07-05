@@ -8,6 +8,7 @@ import HeroVideo from '@/components/HeroVideo';
 import { useAuth } from '@/lib/auth';
 import {
   getDefaultRouteForModule,
+  isFactoryHost,
   setModuleCookie,
   type CocoaTrackModule,
 } from '@/lib/utils/cocoatrack-module';
@@ -17,14 +18,23 @@ export default function HomePage() {
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash) {
+    if (typeof window === 'undefined') return;
+    if (isFactoryHost(window.location.hostname)) {
+      if (isAuthenticated) {
+        router.replace('/factory');
+      } else {
+        router.replace('/login?module=factory&redirectTo=/factory');
+      }
+      return;
+    }
+    if (window.location.hash) {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const accessToken = hashParams.get('access_token');
       if (accessToken) {
         router.push(`/auth/callback${window.location.hash}`);
       }
     }
-  }, [router]);
+  }, [router, isAuthenticated]);
 
   const moduleHref = (module: CocoaTrackModule) =>
     isAuthenticated ? getDefaultRouteForModule(module) : `/login?module=${module}`;

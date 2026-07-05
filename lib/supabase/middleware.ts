@@ -13,15 +13,10 @@ import {
 import {
   MODULE_COOKIE,
   getDefaultRouteForModule,
+  isFactoryHost,
   resolveModulePreference,
   type CocoaTrackModule,
 } from '@/lib/utils/cocoatrack-module';
-
-function isFactoryHost(hostname: string): boolean {
-  const factoryHost = process.env.NEXT_PUBLIC_FACTORY_HOST;
-  if (factoryHost && hostname === factoryHost) return true;
-  return hostname.startsWith('transformation.');
-}
 
 function getModuleFromRequest(request: NextRequest): CocoaTrackModule {
   return resolveModulePreference(
@@ -40,6 +35,17 @@ function redirectToLogin(request: NextRequest): NextResponse {
     url.searchParams.set('module', 'factory');
   }
   return NextResponse.redirect(url);
+}
+
+function redirectFactoryLogin(request: NextRequest): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = '/login';
+  url.search = '';
+  url.searchParams.set('module', 'factory');
+  url.searchParams.set('redirectTo', '/factory');
+  const response = NextResponse.redirect(url);
+  response.cookies.set(MODULE_COOKIE, 'factory', { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  return response;
 }
 
 function copySupabaseCookies(from: NextResponse, to: NextResponse) {
@@ -61,6 +67,11 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicRoute = isPublicAppRoute(pathname);
   const hasAuthCookie = hasSupabaseAuthCookie(request);
+
+  // Sous-domaine transformation : pas d'onboarding, login usine directement
+  if (isFactoryHost(request.nextUrl.hostname) && pathname === '/' && !hasAuthCookie) {
+    return redirectFactoryLogin(request);
+  }
 
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get('authorization');
