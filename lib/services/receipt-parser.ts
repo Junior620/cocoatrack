@@ -326,7 +326,7 @@ export class ReceiptParser {
     
     const lines = text.split('\n');
     
-    // Find table header — be tolerant: look for any line with TYPE + (POIDS or HUMIDITE or MONTANT)
+    // Find table header, be tolerant: look for any line with TYPE + (POIDS or HUMIDITE or MONTANT)
     let tableStartIndex = -1;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].toUpperCase();

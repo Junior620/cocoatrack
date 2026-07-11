@@ -206,26 +206,26 @@ export default function ReceiptDetailPage() {
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Coopérative</dt>
-              <dd className="font-medium text-gray-900">{receipt.cooperative?.name ?? '—'}</dd>
+              <dd className="font-medium text-gray-900">{receipt.cooperative?.name ?? '-'}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Planteur</dt>
-              <dd className="font-medium text-gray-900">{receipt.planteur?.name ?? '—'}</dd>
+              <dd className="font-medium text-gray-900">{receipt.planteur?.name ?? '-'}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Fournisseur</dt>
-              <dd className="font-medium text-gray-900">{receipt.chef_planteur?.name ?? '—'}</dd>
+              <dd className="font-medium text-gray-900">{receipt.chef_planteur?.name ?? '-'}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Montant versé</dt>
               <dd className="font-medium text-gray-900">
-                {receipt.amount_paid != null ? formatCurrency(Number(receipt.amount_paid)) : '—'}
+                {receipt.amount_paid != null ? formatCurrency(Number(receipt.amount_paid)) : '-'}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Solde</dt>
               <dd className="font-medium text-gray-900">
-                {receipt.balance != null ? formatCurrency(Number(receipt.balance)) : '—'}
+                {receipt.balance != null ? formatCurrency(Number(receipt.balance)) : '-'}
               </dd>
             </div>
             <div className="border-t pt-3">

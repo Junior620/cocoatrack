@@ -660,7 +660,7 @@ function ParcelleDetailContent() {
             Parcelles
           </Link>
           <ChevronRightIcon className="h-4 w-4" />
-          <span className="text-gray-400">—</span>
+          <span className="text-gray-400">-</span>
         </nav>
         
         <div className="rounded-md bg-red-50 p-4">
@@ -1073,7 +1073,7 @@ function ParcelleDetailContent() {
                 </dd>
               </div>
             ) : (
-              <DetailRow label="Label" value={parcelle.label || '—'} />
+              <DetailRow label="Label" value={parcelle.label || '-'} />
             )}
             {/* Editable Village Field */}
             {canEdit && parcelle.is_active ? (
@@ -1090,7 +1090,7 @@ function ParcelleDetailContent() {
                 </dd>
               </div>
             ) : (
-              <DetailRow label="Village" value={parcelle.village || '—'} />
+              <DetailRow label="Village" value={parcelle.village || '-'} />
             )}
           </dl>
         </div>
@@ -1558,7 +1558,7 @@ function ParcelleDetailContent() {
           </div>
           <div>
             <dt className="text-sm font-medium text-gray-500">Auteur</dt>
-            <dd className="mt-1 text-sm text-gray-900">{parcelle.created_by_name || '—'}</dd>
+            <dd className="mt-1 text-sm text-gray-900">{parcelle.created_by_name || '-'}</dd>
           </div>
           <div>
             <dt className="text-sm font-medium text-gray-500">Dernière modification</dt>
@@ -1782,7 +1782,7 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
     }
   }, [backfillResult, fetchTemporalData]); // Ajout de fetchTemporalData pour éviter les warnings
 
-  // Handle date range change (raccourcis rapides — charge depuis la DB)
+  // Handle date range change (raccourcis rapides, charge depuis la DB)
   const handleDateRangeChange = (newStartDate: Date, newEndDate: Date) => {
     setStartDate(newStartDate);
     setEndDate(newEndDate);
@@ -1920,7 +1920,7 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
             </div>
           </div>
           
-          {/* Quick date range buttons — déclenchent un backfill GEE sur la période */}
+          {/* Quick date range buttons, déclenchent un backfill GEE sur la période */}
           <div className="mt-3 flex flex-wrap gap-2">
             {[
               { label: '3 mois', months: 3 },

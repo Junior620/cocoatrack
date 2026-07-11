@@ -420,7 +420,7 @@ export const invoicesApi = {
     }
 
     if (!data) {
-      throw new Error("Mise à jour refusée — vérifiez vos permissions sur cette facture.");
+      throw new Error("Mise à jour refusée, vérifiez vos permissions sur cette facture.");
     }
 
     return data;

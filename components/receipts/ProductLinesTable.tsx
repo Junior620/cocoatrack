@@ -137,7 +137,7 @@ export function ProductLinesTable({ lines, onChange }: ProductLinesTableProps) {
       }
       line.amount = calculateLineAmount(line.netWeight, line.pricePerKg);
     } else if (field === 'netWeight') {
-      // Manual override — mark this line and recalculate amount only
+      // Manual override, mark this line and recalculate amount only
       setNetWeightOverrides((prev) => ({ ...prev, [index]: true }));
       line.amount = calculateLineAmount(line.netWeight, line.pricePerKg);
     } else if (field === 'pricePerKg') {

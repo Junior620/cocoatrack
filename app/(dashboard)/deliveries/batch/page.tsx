@@ -454,7 +454,7 @@ export default function BatchDeliveryPage() {
                 </select>
               </div>
 
-              {/* Chef Planteur — optionnel */}
+              {/* Chef Planteur, optionnel */}
               <div>
                 <label className="block text-xs font-medium text-gray-700">
                   Chef planteur <span className="text-gray-400">(opt.)</span>
@@ -474,7 +474,7 @@ export default function BatchDeliveryPage() {
                 </select>
               </div>
 
-              {/* Warehouse — optionnel */}
+              {/* Warehouse, optionnel */}
               <div>
                 <label className="block text-xs font-medium text-gray-700">
                   Entrepôt <span className="text-gray-400">(opt.)</span>

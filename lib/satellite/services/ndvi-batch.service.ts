@@ -32,6 +32,7 @@ const CLOUD_COVER_MAX = 80; // relaxed for tropical regions
 
 export interface BatchNDVIResult {
   date: string;           // YYYY-MM-DD (last day of month used as target)
+  acquisitionDate?: string; // YYYY-MM-DD real Sentinel-2 capture
   meanNDVI: number;
   healthStatus: string;
   source: 'batch-gee';
@@ -97,21 +98,23 @@ export async function batchCalculateNDVI(
     const oldest = targetDates[targetDates.length - 1];
     const { data: existing } = await (supabase as any)
       .from('ndvi_results')
-      .select('calculation_date')
+      .select('calculation_date, acquisition_date')
       .eq('parcelle_id', parcelleId)
       .gte('calculation_date', oldest.toISOString())
       .lte('calculation_date', new Date().toISOString());
 
-    const existingKeys = new Set<string>(
-      (existing ?? []).map((r: { calculation_date: string }) => {
-        const d = new Date(r.calculation_date);
-        return `${d.getFullYear()}-${d.getMonth()}`;
-      })
+    const existingComplete = new Set<string>(
+      (existing ?? [])
+        .filter((r: { acquisition_date: string | null }) => !!r.acquisition_date)
+        .map((r: { calculation_date: string }) => {
+          const d = new Date(r.calculation_date);
+          return `${d.getFullYear()}-${d.getMonth()}`;
+        })
     );
 
     for (const d of targetDates) {
       const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (existingKeys.has(key)) {
+      if (existingComplete.has(key)) {
         skipped.push(d.toISOString().split('T')[0]);
       } else {
         datesToProcess.push(d);
@@ -154,20 +157,23 @@ export async function batchCalculateNDVI(
         continue;
       }
 
-      const { red, nir } = result;
+      const { red, nir, acquisitionDate } = result;
       const sum = red + nir;
       const ndvi = sum < 1e-10 ? 0 : (nir - red) / sum;
       const healthStatus = getHealthStatus(ndvi);
 
-      console.log(`[BatchNDVI] ✅ ${dateLabel}: NDVI=${ndvi.toFixed(4)}, status=${healthStatus}`);
+      console.log(
+        `[BatchNDVI] ✅ ${dateLabel}: NDVI=${ndvi.toFixed(4)}, status=${healthStatus}, capture=${acquisitionDate}`
+      );
 
       // Store in DB
       const { error: dbError } = await (supabase as any).from('ndvi_results').upsert(
         {
           parcelle_id: parcelleId,
           calculation_date: date.toISOString(),
+          acquisition_date: new Date(`${acquisitionDate}T12:00:00.000Z`).toISOString(),
           mean_ndvi: ndvi,
-          min_ndvi: ndvi,   // single-pixel mean — min/max = mean
+          min_ndvi: ndvi,   // single-pixel mean, min/max = mean
           max_ndvi: ndvi,
           std_dev_ndvi: 0,
           health_status: healthStatus,
@@ -181,7 +187,13 @@ export async function batchCalculateNDVI(
         console.error(`[BatchNDVI] DB error for ${dateLabel}:`, dbError);
         failed.push({ date: dateLabel, reason: dbError.message });
       } else {
-        calculated.push({ date: dateLabel, meanNDVI: ndvi, healthStatus, source: 'batch-gee' });
+        calculated.push({
+          date: dateLabel,
+          acquisitionDate,
+          meanNDVI: ndvi,
+          healthStatus,
+          source: 'batch-gee',
+        });
       }
     }
   }
@@ -192,7 +204,7 @@ export async function batchCalculateNDVI(
       const { redisCacheService } = await import('./redis-cache.service');
       await redisCacheService.invalidateParcelleCache(parcelleId);
     } catch {
-      // Redis not configured — ignore
+      // Redis not configured, ignore
     }
   }
 
@@ -204,12 +216,14 @@ export async function batchCalculateNDVI(
 }
 
 // ============================================================================
-// Chunk processor — one GEE evaluate per chunk
+// Chunk processor, one GEE evaluate per chunk
 // ============================================================================
 
 interface MonthResult {
   date: Date;
-  result: { red: number; nir: number } | { error: string };
+  result:
+    | { red: number; nir: number; acquisitionDate: string; cloudCover: number | null }
+    | { error: string };
 }
 
 async function processChunk(
@@ -248,14 +262,28 @@ async function processChunk(
         };
       }
 
-      const image = collection.first().select(['B4', 'B8']);
+      const image = collection.first();
+
+      // Real satellite overpass timestamp + cloud metadata
+      const meta = await evaluateEE<{ time?: number; cloud?: number }>(
+        ee.Dictionary({
+          time: image.get('system:time_start'),
+          cloud: image.get('CLOUDY_PIXEL_PERCENTAGE'),
+        })
+      );
+      const acquisitionDate = meta?.time
+        ? new Date(meta.time).toISOString().split('T')[0]
+        : dateLabel;
+      const cloudCover = typeof meta?.cloud === 'number' ? meta.cloud : null;
+
+      const spectral = image.select(['B4', 'B8']);
 
       // Try sampleRectangle first, fall back to reduceRegion for small parcelles
       let red: number | null = null;
       let nir: number | null = null;
 
       try {
-        const sampled = image.sampleRectangle({ region: geeGeometry, defaultValue: 0 });
+        const sampled = spectral.sampleRectangle({ region: geeGeometry, defaultValue: 0 });
         const result = await evaluateEE<Record<string, number[][]>>(sampled);
         const redArr: number[][] = result?.['B4'] ?? [];
         const nirArr: number[][] = result?.['B8'] ?? [];
@@ -268,11 +296,11 @@ async function processChunk(
           nir = mean(flat(nirArr));
         }
       } catch {
-        // sampleRectangle failed — fall through to reduceRegion
+        // sampleRectangle failed, fall through to reduceRegion
       }
 
       if (red === null || nir === null) {
-        const stats = image.reduceRegion({
+        const stats = spectral.reduceRegion({
           reducer: ee.Reducer.mean(),
           geometry: geeGeometry,
           scale: SENTINEL2_RESOLUTION,
@@ -287,7 +315,7 @@ async function processChunk(
         return { date, result: { error: `No valid pixel data for ${dateLabel}` } };
       }
 
-      return { date, result: { red, nir } };
+      return { date, result: { red, nir, acquisitionDate, cloudCover } };
 
     } catch (err) {
       return { date, result: { error: (err as Error).message } };

@@ -12,7 +12,7 @@ import { receiptParser } from '@/lib/services/receipt-parser';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Auth check — manager or admin only
+    // Auth check, manager or admin only
     const supabase = await createServerSupabaseClient();
     const {
       data: { user },

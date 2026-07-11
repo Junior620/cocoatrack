@@ -10,7 +10,7 @@ import { OcrService, OcrResult, OcrServiceConfig } from './ocr-service';
 
 /**
  * Helper to download a PDF from Supabase Storage using a signed URL.
- * The public URL alone returns 400 for private buckets — we need to
+ * The public URL alone returns 400 for private buckets, we need to
  * exchange it for a short-lived signed URL via the service-role client.
  */
 async function downloadPdf(url: string): Promise<Buffer> {

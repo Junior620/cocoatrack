@@ -162,7 +162,7 @@ export function ReceiptForm({
       case 'chefPlanteurId':
         // Valid if either an ID is selected OR a name is manually entered
         if (!value || value.trim() === '') {
-          // Check chefPlanteurName via formData — handled separately
+          // Check chefPlanteurName via formData, handled separately
           return null; // Will be validated in validateForm
         }
         return null;
@@ -267,7 +267,7 @@ export function ReceiptForm({
       }
     });
 
-    // Fournisseur optionnel — pas de validation obligatoire
+    // Fournisseur optionnel, pas de validation obligatoire
 
     const amountError = validateField('amountPaid', formData.amountPaid);
     if (amountError) {

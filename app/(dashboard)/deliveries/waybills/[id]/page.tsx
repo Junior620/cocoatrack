@@ -119,34 +119,34 @@ export default function WaybillDetailPage() {
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Trajet</dt>
               <dd className="text-right font-medium">
-                {[waybill.origin_location, waybill.destination_location].filter(Boolean).join(' → ') || '—'}
+                {[waybill.origin_location, waybill.destination_location].filter(Boolean).join(' → ') || '-'}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Expéditeur</dt>
-              <dd>{waybill.sender_name || '—'}</dd>
+              <dd>{waybill.sender_name || '-'}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Destinataire</dt>
-              <dd>{waybill.recipient_name || '—'}</dd>
+              <dd>{waybill.recipient_name || '-'}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Transporteur</dt>
-              <dd>{waybill.carrier_name || '—'}</dd>
+              <dd>{waybill.carrier_name || '-'}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Camion / Chauffeur</dt>
               <dd>
-                {[waybill.vehicle_plate, waybill.driver_name].filter(Boolean).join(' · ') || '—'}
+                {[waybill.vehicle_plate, waybill.driver_name].filter(Boolean).join(' · ') || '-'}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Sacs / Poids LV</dt>
               <dd>
-                {waybill.sack_count ?? '—'} sacs ·{' '}
+                {waybill.sack_count ?? '-'} sacs ·{' '}
                 {waybill.total_weight_kg != null
                   ? `${Number(waybill.total_weight_kg).toLocaleString('fr-FR')} kg`
-                  : '—'}
+                  : '-'}
               </dd>
             </div>
           </dl>

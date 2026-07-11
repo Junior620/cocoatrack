@@ -245,7 +245,7 @@ export function PdfUploader({
               Glissez-déposez un fichier PDF ici
             </p>
             <p className="text-xs text-gray-500">
-              ou cliquez pour sélectionner — max {maxSizeMB}MB
+              ou cliquez pour sélectionner, max {maxSizeMB}MB
             </p>
           </>
         )}

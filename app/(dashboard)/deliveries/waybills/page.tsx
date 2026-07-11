@@ -104,7 +104,7 @@ export default function WaybillsListPage() {
                   {formatDate(w.loading_date)}
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {[w.origin_location, w.destination_location].filter(Boolean).join(' → ') || '—'}
+                  {[w.origin_location, w.destination_location].filter(Boolean).join(' → ') || '-'}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm">
                   <span className="inline-flex items-center gap-1">
@@ -115,16 +115,16 @@ export default function WaybillsListPage() {
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
                   {w.total_weight_kg != null
                     ? `${Number(w.total_weight_kg).toLocaleString('fr-FR')} kg`
-                    : '—'}
+                    : '-'}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                  {w.lot_number || '—'}
+                  {w.lot_number || '-'}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   {w.document_storage_path ? (
                     <FileText className="inline h-4 w-4 text-green-600" aria-label="Scan présent" />
                   ) : (
-                    <span className="text-xs text-gray-400">—</span>
+                    <span className="text-xs text-gray-400">-</span>
                   )}
                 </td>
               </tr>

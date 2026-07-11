@@ -28,7 +28,7 @@ import { TemporalDataChart } from './TemporalDataChart';
 import type { TemporalDataPoint } from '@/lib/satellite/types/index';
 
 // ============================================================================
-// Backfill helper — calls POST /api/satellite/ndvi/backfill
+// Backfill helper, calls POST /api/satellite/ndvi/backfill
 // ============================================================================
 
 interface BackfillResult {
@@ -162,7 +162,7 @@ export function TemporalAnalysisView({
       {/* Backfill result */}
       {backfillResult && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          ✅ Terminé — {backfillResult.calculated} mois calculés
+          ✅ Terminé, {backfillResult.calculated} mois calculés
           {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà présents`}
           {backfillResult.failed > 0 && (
             <span className="text-amber-700"> · {backfillResult.failed} mois sans image disponible</span>

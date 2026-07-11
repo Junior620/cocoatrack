@@ -50,7 +50,7 @@ export function ProtectedRoute({
   }, [isLoading, isAuthenticated, user, requiredRoles, requiredPermission, router, redirectTo]);
 
   // If we already have a user (from server-side initialProfile),
-  // render children immediately — avoids spinner and hydration mismatch.
+  // render children immediately, avoids spinner and hydration mismatch.
   if (user && isAuthenticated) {
     if (requiredRoles && requiredRoles.length > 0) {
       if (!requiredRoles.includes(user.role as ExtendedUserRole)) return null;
@@ -61,12 +61,12 @@ export function ProtectedRoute({
     return <>{children}</>;
   }
 
-  // Still loading with no user yet — only shown on very first load without server profile
+  // Still loading with no user yet, only shown on very first load without server profile
   if (isLoading) {
     return fallback || <LoadingSpinner />;
   }
 
-  // Not authenticated — redirect handled by useEffect
+  // Not authenticated, redirect handled by useEffect
   return fallback || <LoadingSpinner />;
 }
 

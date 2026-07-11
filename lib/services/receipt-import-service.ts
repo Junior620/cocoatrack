@@ -140,7 +140,7 @@ export class ReceiptImportService {
    */
   async extractText(pdfUrl: string): Promise<OcrResult> {
     const ocrService = createOcrService();
-    // OCR is limited to first page by default (maxPages: 1) — Requirement 18.5
+    // OCR is limited to first page by default (maxPages: 1), Requirement 18.5
 
     const available = await ocrService.isAvailable();
     if (!available) {

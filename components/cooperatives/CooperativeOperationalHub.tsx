@@ -123,7 +123,7 @@ export function CooperativeOperationalHub({
       {summary.recentReceipts.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Reçus récents — {cooperativeName}</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Reçus récents, {cooperativeName}</h3>
             <Link
               href={`/receipts?cooperative_id=${cooperativeId}`}
               className="text-xs font-medium text-primary-600 hover:text-primary-800"
@@ -148,7 +148,7 @@ export function CooperativeOperationalHub({
                       {receipt.receipt_number}
                     </Link>
                     <p className="text-xs text-gray-500">
-                      {receipt.planteur?.name ?? '—'} ·{' '}
+                      {receipt.planteur?.name ?? '-'} ·{' '}
                       {new Date(receipt.transaction_date).toLocaleDateString('fr-FR')}
                     </p>
                   </div>

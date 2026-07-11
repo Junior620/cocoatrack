@@ -100,7 +100,7 @@ export function useReceiptFormCache(cooperativeId: string): UseReceiptFormCacheR
     const cachedPlanteurs = getCached(planteurCache, cooperativeId);
     const cachedChefs = getCached(chefPlanteurCache, cooperativeId);
 
-    // Both already cached — no fetch needed
+    // Both already cached, no fetch needed
     if (cachedPlanteurs && cachedChefs) {
       setPlanteurs(cachedPlanteurs);
       setChefPlanteurs(cachedChefs);

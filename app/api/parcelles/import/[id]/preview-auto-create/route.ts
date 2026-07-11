@@ -204,7 +204,7 @@ export async function POST(
         coopPlanteurs = data || [];
       }
 
-      // Requête 2 : planteurs orphelins (sans coopérative) — issus d'imports CSV sans coop
+      // Requête 2 : planteurs orphelins (sans coopérative), issus d'imports CSV sans coop
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: orphanData } = await (supabase.from('planteurs') as any)
         .select('id, name, name_norm')

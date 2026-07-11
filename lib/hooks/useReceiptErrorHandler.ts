@@ -67,7 +67,7 @@ export interface UseReceiptErrorHandlerOptions {
 
 export interface UseReceiptErrorHandlerReturn {
   errorState: ErrorState;
-  /** Handle an error — maps it to a user-friendly message and decides retry/fallback */
+  /** Handle an error, maps it to a user-friendly message and decides retry/fallback */
   handleError: (err: unknown) => void;
   /** Clear the current error */
   clearError: () => void;
@@ -94,7 +94,7 @@ function logErrorDetails(
   error: ReceiptImportError,
   context?: UseReceiptErrorHandlerOptions['logContext']
 ): void {
-  // Requirements: 10.6 — log all errors with user, file, error details
+  // Requirements: 10.6, log all errors with user, file, error details
   console.error('[receipt-error-handler]', {
     code: error.code,
     message: error.message,
@@ -182,7 +182,7 @@ export function useReceiptErrorHandler(
 
           const result = await fn();
 
-          // Success — clear any previous error
+          // Success, clear any previous error
           if (attempt > 0) {
             clearError();
           }

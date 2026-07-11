@@ -47,6 +47,8 @@ export interface NDVIResult {
   parcelleId: string;
   imageryId: string | null;
   calculationDate: Date;
+  /** Real Sentinel-2 capture date when known */
+  acquisitionDate?: Date | null;
   meanNDVI: number; // -1 to 1
   minNDVI: number;
   maxNDVI: number;
@@ -89,6 +91,8 @@ export interface TemporalDataPoint {
   cloudCover: number;
   healthStatus: HealthStatus;
   hasSignificantChange: boolean; // NDVI change > 0.15 from previous
+  /** True when `date` is the satellite capture date, not a monthly grid day */
+  isAcquisitionDate?: boolean;
 }
 
 /**

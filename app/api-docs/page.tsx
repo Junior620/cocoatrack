@@ -82,7 +82,7 @@ export default function ApiDocsPage() {
                 <h1 className="text-lg font-semibold text-gray-900">
                   CocoaTrack API Docs
                 </h1>
-                <p className="text-sm text-gray-500">Satellite Imagery API — v1.0.0</p>
+                <p className="text-sm text-gray-500">Satellite Imagery API, v1.0.0</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -123,7 +123,7 @@ export default function ApiDocsPage() {
           <div className="mx-auto max-w-7xl">
             <p className="text-sm text-blue-800">
               <strong>Authentication:</strong> All endpoints require a valid Supabase session.
-              Log in to the app first, then use &quot;Try it out&quot; — session cookies are sent
+              Log in to the app first, then use &quot;Try it out&quot;, session cookies are sent
               automatically.
             </p>
           </div>

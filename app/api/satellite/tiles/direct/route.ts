@@ -5,7 +5,7 @@
  * The urlFormat template has {z}/{x}/{y} placeholders that Leaflet replaces,
  * but since the URL contains auth tokens we proxy it to avoid CORS.
  *
- * However, Leaflet replaces {z}/{x}/{y} in the URL before fetching — so we
+ * However, Leaflet replaces {z}/{x}/{y} in the URL before fetching, so we
  * receive the already-substituted URL and just need to proxy it.
  */
 

@@ -182,7 +182,7 @@ export class NDVIService {
       let isMeanValueOnly = false;
 
       if (bandData.red.length === 1 && bandData.red[0].length === 1) {
-        // Single mean value from reduceRegion — calculate NDVI directly
+        // Single mean value from reduceRegion, calculate NDVI directly
         isMeanValueOnly = true;
         const red = bandData.red[0][0];
         const nir = bandData.nir[0][0];
@@ -1289,13 +1289,20 @@ export class NDVIService {
         }
 
         if (ndviResult) {
-          // We have data for this date
+          // Prefer real Sentinel-2 capture date when available
+          const hasAcquisition = !!ndviResult.acquisitionDate;
+          const pointDate = hasAcquisition
+            ? new Date(ndviResult.acquisitionDate!)
+            : interval === 'monthly' && ndviResult.calculationDate
+              ? new Date(ndviResult.calculationDate)
+              : date;
           const dataPoint: import('../types').TemporalDataPoint = {
-            date,
+            date: pointDate,
             ndvi: ndviResult.meanNDVI,
             cloudCover: 0, // Will be populated from imagery data if available
             healthStatus: ndviResult.healthStatus,
             hasSignificantChange: this.hasSignificantChange(previousNDVI, ndviResult.meanNDVI),
+            isAcquisitionDate: hasAcquisition,
           };
           timeline.push(dataPoint);
           previousNDVI = ndviResult.meanNDVI;
@@ -1458,6 +1465,7 @@ export class NDVIService {
       parcelleId: row.parcelle_id,
       imageryId: row.imagery_id,
       calculationDate: new Date(row.calculation_date),
+      acquisitionDate: row.acquisition_date ? new Date(row.acquisition_date) : null,
       meanNDVI: Number(row.mean_ndvi),
       minNDVI: Number(row.min_ndvi),
       maxNDVI: Number(row.max_ndvi),

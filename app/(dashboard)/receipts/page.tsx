@@ -100,7 +100,7 @@ export default function ReceiptsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reçus de collecte</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Reçus importés — {data?.total ?? 0} au total
+            Reçus importés, {data?.total ?? 0} au total
           </p>
         </div>
         {canImport && (
@@ -239,12 +239,12 @@ export default function ReceiptsPage() {
 
                         {/* Planteur */}
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                          {receipt.planteur?.name ?? '—'}
+                          {receipt.planteur?.name ?? '-'}
                         </td>
 
                         {/* Chef planteur */}
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                          {receipt.chef_planteur?.name ?? '—'}
+                          {receipt.chef_planteur?.name ?? '-'}
                         </td>
 
                         {/* Date */}

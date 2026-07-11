@@ -188,7 +188,7 @@ export function TrendChart({
     <div className={fillHeight ? 'flex h-full flex-col' : undefined}>
       {hasLimitedPoints && (
         <p className="mb-2 text-xs text-amber-700">
-          Peu de jours avec livraisons — tendance indicative sur {formattedData.length} point
+          Peu de jours avec livraisons, tendance indicative sur {formattedData.length} point
           {formattedData.length > 1 ? 's' : ''}.
         </p>
       )}

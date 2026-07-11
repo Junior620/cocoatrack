@@ -9,8 +9,8 @@
  * retrieve up to ~130 months of historical data (as of May 2026).
  *
  * Two modes:
- * - batch (default): single GEE session, parallel month processing — ~10x faster
- * - sequential: one GEE request per month — slower but more resilient
+ * - batch (default): single GEE session, parallel month processing, ~10x faster
+ * - sequential: one GEE request per month, slower but more resilient
  *
  * Request Body:
  * {
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     const now = new Date();
 
     for (let i = 0; i < months; i++) {
-      // Last day of each month — gives the most complete monthly window
+      // Last day of each month, gives the most complete monthly window
       const d = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
       targetDates.push(d);
     }
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       const dateLabel = date.toISOString().split('T')[0];
 
       if (existingDates.has(monthKey)) {
-        console.log(`[Backfill] Skipping ${dateLabel} — already in database`);
+        console.log(`[Backfill] Skipping ${dateLabel}, already in database`);
         skipped++;
         continue;
       }
@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
 
       } catch (error) {
         const reason = (error as Error).message;
-        console.warn(`[Backfill] ⚠️ ${dateLabel}: Failed — ${reason}`);
+        console.warn(`[Backfill] ⚠️ ${dateLabel}: Failed, ${reason}`);
         errors.push({ date: dateLabel, reason });
         failed++;
       }

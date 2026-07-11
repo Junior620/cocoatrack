@@ -299,7 +299,7 @@ export async function GET(request: NextRequest) {
 }
 
 // ============================================================================
-// POST Handler — Trigger deforestation detection via GEE
+// POST Handler, Trigger deforestation detection via GEE
 // ============================================================================
 
 const DetectRequestSchema = z.object({
@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
 
     const { parcelleId, baselineDate, currentDate, forceRedetect } = validation.data;
 
-    // Step 2: Authenticate — session cookie or CRON_SECRET
+    // Step 2: Authenticate, session cookie or CRON_SECRET
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get('authorization');
     const isCronAuth = cronSecret && authHeader === `Bearer ${cronSecret}`;
@@ -428,7 +428,7 @@ export async function POST(request: NextRequest) {
         affectedAreaPercent: result.affectedAreaPercent,
         event: result.event ?? null,
         message: result.detected
-          ? `⚠️ Déforestation détectée — perte NDVI de ${Math.abs(result.ndviChange * 100).toFixed(1)}% sur ${result.affectedAreaHectares.toFixed(2)} ha`
+          ? `⚠️ Déforestation détectée, perte NDVI de ${Math.abs(result.ndviChange * 100).toFixed(1)}% sur ${result.affectedAreaHectares.toFixed(2)} ha`
           : `✅ Aucune déforestation détectée (variation NDVI: ${result.ndviChange.toFixed(4)})`,
       },
     });

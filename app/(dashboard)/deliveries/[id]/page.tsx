@@ -228,7 +228,7 @@ export default function DeliveryDetailPage() {
               </div>
             ) : (
               <p className="mt-2 text-sm text-primary-800">
-                Reçu {notesReceiptNumber} (import — lien non disponible)
+                Reçu {notesReceiptNumber} (import, lien non disponible)
               </p>
             )}
           </div>
@@ -462,7 +462,7 @@ export default function DeliveryDetailPage() {
             </p>
             {(waybill.origin_location || waybill.destination_location) && (
               <p className="text-sm text-gray-500">
-                {waybill.origin_location || '—'} → {waybill.destination_location || '—'}
+                {waybill.origin_location || '-'} → {waybill.destination_location || '-'}
               </p>
             )}
             {waybill.loading_date && (

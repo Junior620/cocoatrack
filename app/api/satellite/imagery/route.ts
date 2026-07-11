@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
       }>();
 
     // If we have cached imagery less than 24 hours old, return it
-    // But skip if the tileUrl is a direct GEE URL (CORS issue — must be proxied)
+    // But skip if the tileUrl is a direct GEE URL (CORS issue, must be proxied)
     if (cachedImagery && !cacheError) {
       const cacheAge = Date.now() - new Date(cachedImagery.created_at).getTime();
       const cacheMaxAge = 24 * 60 * 60 * 1000; // 24 hours

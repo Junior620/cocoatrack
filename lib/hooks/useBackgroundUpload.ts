@@ -69,7 +69,7 @@ const INITIAL_STATE: BackgroundUploadState = {
  *   onComplete: (result) => setState(prev => ({ ...prev, uploadResult: result })),
  * });
  *
- * // Start upload without awaiting — UI is not blocked
+ * // Start upload without awaiting, UI is not blocked
  * startUpload(file);
  * // Immediately advance to next wizard step
  * goToNextStep();

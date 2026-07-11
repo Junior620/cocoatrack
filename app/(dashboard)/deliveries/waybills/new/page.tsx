@@ -134,7 +134,7 @@ export default function NewWaybillPage() {
           <label className="mt-4 flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed border-gray-300 p-8 hover:border-primary-400">
             <Upload className="h-8 w-8 text-gray-400" />
             <span className="mt-2 text-sm text-gray-600">
-              {file ? file.name : 'PDF ou image (max 10 Mo) — optionnel'}
+              {file ? file.name : 'PDF ou image (max 10 Mo), optionnel'}
             </span>
             <input
               type="file"

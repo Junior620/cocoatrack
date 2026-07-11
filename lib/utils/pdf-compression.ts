@@ -35,7 +35,7 @@ export async function compressPdfIfNeeded(file: File): Promise<File> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const pdfDoc = await PDFDocument.load(arrayBuffer, {
-      // Ignore encryption errors — fall back to original
+      // Ignore encryption errors, fall back to original
       ignoreEncryption: true,
     });
 

@@ -479,7 +479,7 @@ export class ImageryService {
     if (memCached && Date.now() - memCached.cachedAt < this.IMAGERY_CACHE_TTL_MS) {
       // Invalidate cache if tileUrl is a direct GEE URL (CORS issue)
       if (!this.isTileUrlValid(memCached.imagery.tileUrl)) {
-        console.log(`[ImageryService] Invalidating in-memory cache for ${parcelleId} — tileUrl is not proxied`);
+        console.log(`[ImageryService] Invalidating in-memory cache for ${parcelleId}, tileUrl is not proxied`);
         this.imageryCache.delete(cacheKey);
       } else {
         console.log(`[ImageryService] Using in-memory cached imagery for parcelle ${parcelleId}`);
@@ -492,7 +492,7 @@ export class ImageryService {
     if (cachedImagery) {
       // Invalidate Redis cache if tileUrl is a direct GEE URL (CORS issue)
       if (!this.isTileUrlValid(cachedImagery.tileUrl)) {
-        console.log(`[ImageryService] Invalidating Redis cache for ${parcelleId} — tileUrl is not proxied`);
+        console.log(`[ImageryService] Invalidating Redis cache for ${parcelleId}, tileUrl is not proxied`);
         // Don't use this cache entry, fall through to fresh generation
       } else {
         console.log(`[ImageryService] Using cached imagery for parcelle ${parcelleId}, date ${dateKey}`);
@@ -501,7 +501,7 @@ export class ImageryService {
       }
     }
 
-    // Get available dates — try progressively wider windows and relaxed cloud cover
+    // Get available dates, try progressively wider windows and relaxed cloud cover
     // for tropical regions where 20% cloud-free images are rare
     let availableDates: ImageryDate[] = [];
     const searchWindows = [
@@ -604,7 +604,7 @@ export class ImageryService {
         .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', cloudCoverThreshold))
         .sort('system:time_start', true); // ascending by date
 
-      // Use aggregate_array to extract properties — avoids img.id() which is not
+      // Use aggregate_array to extract properties, avoids img.id() which is not
       // available when mapping over a List in the SDK
       const timeStarts = await evaluateEE<number[]>(
         collection.aggregate_array('system:time_start')
@@ -1016,7 +1016,7 @@ export class ImageryService {
     // If urlFormat is available, it contains the full tile URL template with auth embedded.
     // We return it as DIRECT so createTileUrlTemplate can extract the mapId and proxy it.
     if (urlFormat && !token) {
-      console.log(`[ImageryService] urlFormat available — will proxy via Next.js (avoids CORS)`);
+      console.log(`[ImageryService] urlFormat available, will proxy via Next.js (avoids CORS)`);
       return `DIRECT|||${urlFormat}`;
     }
 
@@ -1030,11 +1030,11 @@ export class ImageryService {
    *
    * All cases route through the Next.js proxy to avoid CORS issues in the browser.
    *
-   * Case 1: DIRECT — urlFormat from newer SDK (contains token embedded in URL).
+   * Case 1: DIRECT, urlFormat from newer SDK (contains token embedded in URL).
    *   Extract the GEE map path from the urlFormat and proxy without a token
    *   (the proxy generates its own OAuth token via service account).
    *
-   * Case 2: Legacy — mapId + token from older SDK.
+   * Case 2: Legacy, mapId + token from older SDK.
    *   Proxy through /api/satellite/tiles/[mapId]/{z}/{x}/{y}?token=...
    */
   private createTileUrlTemplate(mapId: string): string {
@@ -1051,8 +1051,8 @@ export class ImageryService {
         const geeMapPath = match[1];
         // Encode as base64url to avoid slash issues in Next.js dynamic routing
         const encodedMapId = Buffer.from(geeMapPath).toString('base64url');
-        console.log(`[ImageryService] Proxying via /api/satellite/tiles/${geeMapPath}/{z}/{x}/{y} (no token — proxy uses OAuth)`);
-        // No token needed — the proxy generates its own OAuth token
+        console.log(`[ImageryService] Proxying via /api/satellite/tiles/${geeMapPath}/{z}/{x}/{y} (no token, proxy uses OAuth)`);
+        // No token needed, the proxy generates its own OAuth token
         return `/api/satellite/tiles/${encodedMapId}/{z}/{x}/{y}`;
       }
 
@@ -1062,7 +1062,7 @@ export class ImageryService {
       return urlFormat;
     }
 
-    // Case 2: Legacy mapId + token — proxy through Next.js
+    // Case 2: Legacy mapId + token, proxy through Next.js
     const separatorIdx = mapId.indexOf('|||');
     const geeMapId = separatorIdx >= 0 ? mapId.substring(0, separatorIdx) : mapId;
     const token = separatorIdx >= 0 ? mapId.substring(separatorIdx + 3) : '';

@@ -75,7 +75,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Page navigations only — skip API routes, Next internals, and static assets.
+     * Page navigations only, skip API routes, Next internals, and static assets.
      * API routes authenticate themselves; excluding them avoids Auth 429 storms in dev.
      */
     '/((?!_next/|api/|favicon.ico|manifest\\.json|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp4|webm|ogg)$).*)',

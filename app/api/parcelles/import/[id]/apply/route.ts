@@ -304,7 +304,7 @@ export async function POST(
           coopPlanteurs = data || [];
         }
 
-        // Requête 2 : planteurs orphelins (sans coopérative) — issus d'imports CSV sans coop
+        // Requête 2 : planteurs orphelins (sans coopérative), issus d'imports CSV sans coop
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: orphanPlanteurs } = await (supabase.from('planteurs') as any)
           .select('id, name, name_norm')
@@ -322,7 +322,7 @@ export async function POST(
         }
       }
 
-      // Step 3: Create new planteurs for names that don't exist — en batch
+      // Step 3: Create new planteurs for names that don't exist, en batch
       const newPlanteursMap = new Map<string, string>(); // name_norm → planteur_id
 
       // Séparer les planteurs existants des nouveaux

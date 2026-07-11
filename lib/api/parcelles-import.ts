@@ -356,7 +356,7 @@ export const parcellesImportApi = {
       if (existingRecord) {
         const status = (existingRecord as { import_status: string }).import_status;
         if (status !== 'applied') {
-          // Import exists but not yet applied — return it so the caller can resume
+          // Import exists but not yet applied, return it so the caller can resume
           console.log(`[parcellesImportApi.upload] Resuming existing import ${existingImport.id} (status: ${status})`);
           return existingRecord as ParcelImportFile;
         }

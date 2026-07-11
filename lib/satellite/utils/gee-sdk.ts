@@ -14,7 +14,7 @@ let initPromise: Promise<void> | null = null;
 
 /**
  * Initialize the Earth Engine SDK with service account credentials.
- * Safe to call multiple times — only initializes once.
+ * Safe to call multiple times, only initializes once.
  */
 export async function initializeEE(): Promise<void> {
   if (initialized) return;

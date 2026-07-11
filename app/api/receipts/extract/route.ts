@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // Auth check — manager or admin only
+    // Auth check, manager or admin only
     const supabase = await createServerSupabaseClient();
     const {
       data: { user },

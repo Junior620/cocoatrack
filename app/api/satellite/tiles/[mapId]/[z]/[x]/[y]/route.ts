@@ -17,7 +17,7 @@ import { getAccessToken } from '@/lib/satellite/utils/gee-auth';
 
 const GEE_TILES_BASE = 'https://earthengine.googleapis.com/v1';
 
-// Cache the OAuth token in module scope — reused across tile requests
+// Cache the OAuth token in module scope, reused across tile requests
 let cachedOAuthToken: string | null = null;
 let tokenCachedAt = 0;
 const TOKEN_CACHE_MS = 50 * 60 * 1000; // 50 minutes (tokens last 60 min)
@@ -91,7 +91,7 @@ export async function GET(
     return NextResponse.json({ error: 'Missing tile parameters' }, { status: 400 });
   }
 
-  // Decode the mapId — encoded as base64url to avoid slash issues in Next.js routing
+  // Decode the mapId, encoded as base64url to avoid slash issues in Next.js routing
   // e.g. base64url("projects/earthengine-legacy/maps/abc123") → single URL segment
   let decodedMapId: string;
   try {
@@ -115,7 +115,7 @@ export async function GET(
   if (tokenParam && tokenParam.length > 0) {
     bearerToken = decodeURIComponent(tokenParam);
   } else {
-    // Token not provided — use cached OAuth token or generate a new one
+    // Token not provided, use cached OAuth token or generate a new one
     const now = Date.now();
     if (!cachedOAuthToken || now - tokenCachedAt > TOKEN_CACHE_MS) {
       try {

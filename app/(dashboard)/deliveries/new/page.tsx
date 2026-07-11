@@ -261,7 +261,7 @@ export default function NewDeliveryPage() {
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">Nouvelle livraison</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Saisie manuelle — mêmes données produit que l&apos;import de reçu
+            Saisie manuelle, mêmes données produit que l&apos;import de reçu
           </p>
         </div>
         <ReceiptImportButton
@@ -403,7 +403,7 @@ export default function NewDeliveryPage() {
           </div>
         </div>
 
-        {/* Produit — comme une ligne du reçu */}
+        {/* Produit, comme une ligne du reçu */}
         <div className="rounded-lg bg-white p-6 shadow">
           <h2 className="text-lg font-medium text-gray-900">Produit</h2>
           <p className="mt-1 text-xs text-gray-500">

@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
       if (existingRecord) {
         const status = (existingRecord as { import_status: string }).import_status;
         if (status !== 'applied') {
-          // Import exists but not yet applied — return it so the UI can resume
+          // Import exists but not yet applied, return it so the UI can resume
           console.log(`[upload] Resuming existing import ${(existingImport as { id: string }).id} (status: ${status})`);
           const response = NextResponse.json(existingRecord as unknown as ParcelImportFile, { status: 200 });
           addSecurityHeaders(response);

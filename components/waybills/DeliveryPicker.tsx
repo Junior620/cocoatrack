@@ -91,7 +91,7 @@ export function DeliveryPicker({
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-gray-900">{d.code}</div>
                 <div className="text-xs text-gray-500">
-                  {d.planteur?.name || '—'} · {Number(d.weight_kg).toLocaleString('fr-FR')} kg
+                  {d.planteur?.name || '-'} · {Number(d.weight_kg).toLocaleString('fr-FR')} kg
                 </div>
               </div>
             </label>

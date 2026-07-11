@@ -678,7 +678,7 @@ const OPENAPI_SPEC = {
         },
       },
       NDVINotFound: {
-        description: 'NDVI data not found — calculate NDVI first',
+        description: 'NDVI data not found, calculate NDVI first',
         content: {
           'application/json': {
             schema: { $ref: '#/components/schemas/Error' },

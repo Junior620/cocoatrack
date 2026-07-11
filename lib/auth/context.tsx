@@ -110,7 +110,7 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
     });
   }, [supabase]);
 
-  // Listen for auth state changes — skip initial refresh when SSR already provided profile
+  // Listen for auth state changes, skip initial refresh when SSR already provided profile
   useEffect(() => {
     let cancelled = false;
 

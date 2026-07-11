@@ -37,7 +37,7 @@ export function ExtractionMethodSelector({
       return;
     }
 
-    // OCR selected — trigger extraction
+    // OCR selected, trigger extraction
     setExtractionState('extracting');
     onMethodSelected('ocr');
 

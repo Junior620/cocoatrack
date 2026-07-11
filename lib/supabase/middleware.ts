@@ -126,7 +126,7 @@ export async function updateSession(request: NextRequest) {
     const { data: userData, error: userError } = await supabase.auth.getUser();
 
     if (userError && (userError as { status?: number }).status === 429) {
-      // Rate limited — use local session instead of failing open to login
+      // Rate limited, use local session instead of failing open to login
       const { data: sessionData } = await supabase.auth.getSession();
       user = sessionData.session?.user ?? null;
     } else {

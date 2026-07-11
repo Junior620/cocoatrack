@@ -174,10 +174,10 @@ function ConfirmationSummary({
           {/* Contract */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <p className="font-medium text-gray-700">Contrat</p>
-            <p className="text-gray-600">N° reçu : <span className="font-medium">{formData.receiptNumber || '—'}</span></p>
-            <p className="text-gray-600">Contrat : <span className="font-medium">{formData.contractNumber || '—'}</span></p>
-            <p className="text-gray-600">Campagne : <span className="font-medium">{formData.campaign || '—'}</span></p>
-            <p className="text-gray-600">Date : <span className="font-medium">{formData.transactionDate || '—'}</span></p>
+            <p className="text-gray-600">N° reçu : <span className="font-medium">{formData.receiptNumber || '-'}</span></p>
+            <p className="text-gray-600">Contrat : <span className="font-medium">{formData.contractNumber || '-'}</span></p>
+            <p className="text-gray-600">Campagne : <span className="font-medium">{formData.campaign || '-'}</span></p>
+            <p className="text-gray-600">Date : <span className="font-medium">{formData.transactionDate || '-'}</span></p>
           </div>
 
           {/* Products */}
@@ -341,7 +341,7 @@ export function ReceiptImportWizard({
 
   const handleCloseRequest = useCallback(() => {
     if (state.creationResult) {
-      // Import done — close directly
+      // Import done, close directly
       onClose();
       return;
     }
@@ -365,13 +365,13 @@ export function ReceiptImportWizard({
     }));
   }, []);
 
-  // Called immediately after file validation — advance to method step
+  // Called immediately after file validation, advance to method step
   // while upload continues in background (Req 18.1)
   const handleFileValidated = useCallback(() => {
     setState((prev) => ({ ...prev, step: 'method' }));
   }, []);
 
-  // Called when background upload finishes — store the result
+  // Called when background upload finishes, store the result
   const handleUploadComplete = useCallback((result: UploadCompleteResult) => {
     setState((prev) => ({ ...prev, uploadResult: result, uploadError: null }));
   }, []);
@@ -574,7 +574,7 @@ export function ReceiptImportWizard({
                   </div>
                 )}
 
-                {/* Upload failed — let user retry from step 1 */}
+                {/* Upload failed, let user retry from step 1 */}
                 {!state.uploadResult && state.uploadError && (
                   <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -585,7 +585,7 @@ export function ReceiptImportWizard({
                   </div>
                 )}
 
-                {/* Upload done — show extraction method selector */}
+                {/* Upload done, show extraction method selector */}
                 {state.uploadResult && (
                   <ExtractionMethodSelector
                     pdfUrl={state.uploadResult.pdfUrl}

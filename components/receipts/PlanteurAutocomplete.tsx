@@ -133,7 +133,7 @@ export function PlanteurAutocomplete({
 
       setLoading(true);
       try {
-        // Search all active planteurs — no cooperative filter to ensure all results are visible
+        // Search all active planteurs, no cooperative filter to ensure all results are visible
         const params = new URLSearchParams({ search: searchQuery, limit: '20' });
 
         const res = await fetch(`/api/planteurs?${params}`);

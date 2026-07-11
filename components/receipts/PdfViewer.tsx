@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download, AlertCircle } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set worker path for PDF.js — use the locally bundled worker to avoid CDN dependency
+// Set worker path for PDF.js, use the locally bundled worker to avoid CDN dependency
 if (typeof window !== 'undefined') {
   // Use the worker bundled with pdfjs-dist via Next.js
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -107,7 +107,7 @@ export function PdfViewer({ pdfUrl, className = '' }: PdfViewerProps) {
         await task.promise;
         renderTaskRef.current = null;
       } catch (err: unknown) {
-        // Ignore cancellation errors — they're expected when renders are cancelled
+        // Ignore cancellation errors, they're expected when renders are cancelled
         if (err instanceof Error && err.name === 'RenderingCancelledException') return;
         console.error('Error rendering page:', err);
         setError('Erreur lors du rendu de la page');

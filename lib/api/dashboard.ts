@@ -172,7 +172,7 @@ function getDateRange(
 
   switch (period) {
     case 'all':
-      // No date filter — return a very early date to cover everything
+      // No date filter, return a very early date to cover everything
       from = new Date('2000-01-01');
       break;
     case 'today':

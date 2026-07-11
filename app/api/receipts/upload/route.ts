@@ -13,7 +13,7 @@ import { logReceiptUpload } from '@/lib/services/audit-log-service';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Authorization check — manager or admin only (Requirement 8.1)
+    // Authorization check, manager or admin only (Requirement 8.1)
     const supabase = await createServerSupabaseClient();
     const {
       data: { user },

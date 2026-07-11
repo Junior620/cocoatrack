@@ -55,7 +55,7 @@ export async function createServerSupabaseClient(): Promise<SupabaseServerClient
 
 /**
  * Creates a Supabase client with the service role key.
- * Bypasses RLS — use only in trusted server-side contexts (cron jobs, admin routes).
+ * Bypasses RLS, use only in trusted server-side contexts (cron jobs, admin routes).
  */
 export function createServiceRoleSupabaseClient(): SupabaseServerClient {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -86,7 +86,7 @@ export async function getUser() {
 
 /**
  * Gets the current user's profile from the database.
- * Uses getSession() (cookie) to avoid redundant Auth API calls — middleware refreshes tokens.
+ * Uses getSession() (cookie) to avoid redundant Auth API calls, middleware refreshes tokens.
  * Profile rows are cached ~5 min to avoid hitting Supabase on every soft navigation.
  */
 export const getUserProfile = cache(async (): Promise<Profile | null> => {

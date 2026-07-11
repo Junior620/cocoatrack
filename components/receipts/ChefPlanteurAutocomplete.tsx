@@ -135,7 +135,7 @@ export function ChefPlanteurAutocomplete({
 
       setLoading(true);
       try {
-        // Search all active chef planteurs — no cooperative filter to ensure all results are visible
+        // Search all active chef planteurs, no cooperative filter to ensure all results are visible
         const params = new URLSearchParams({ search: searchQuery, limit: '20' });
 
         const res = await fetch(`/api/chef-planteurs?${params}`);

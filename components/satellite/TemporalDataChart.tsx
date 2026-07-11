@@ -27,7 +27,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Dot,
+  ReferenceArea,
   Legend,
 } from 'recharts';
 import { AlertCircle, TrendingUp, TrendingDown, Minus, Download } from 'lucide-react';
@@ -105,15 +105,31 @@ function CustomTooltip({
 }: {
   active?: boolean;
   payload?: Array<{
-    payload: TemporalDataPoint & { dateLabel: string };
+    payload: TemporalDataPoint & { dateLabel: string; ndvi: number | null };
   }>;
 }) {
   if (!active || !payload || payload.length === 0) return null;
 
   const data = payload[0].payload;
+  if (data.ndvi == null || isNaN(Number(data.ndvi))) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+        <p className="text-sm font-semibold text-gray-900">
+          {new Date(data.date).toLocaleDateString('fr-FR', {
+            month: 'long',
+            year: 'numeric',
+          })}
+        </p>
+        <p className="mt-1 text-xs text-gray-500">Pas d&apos;image exploitable ce mois-ci</p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-lg">
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+        {data.isAcquisitionDate ? 'Capture Sentinel-2' : 'Référence mensuelle'}
+      </p>
       <p className="mb-2 text-sm font-semibold text-gray-900">
         {new Date(data.date).toLocaleDateString('fr-FR', {
           weekday: 'long',
@@ -141,12 +157,14 @@ function CustomTooltip({
             {formatHealthStatus(data.healthStatus)}
           </span>
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <span className="text-xs text-gray-600">Nuages:</span>
-          <span className="text-sm font-medium text-gray-700">
-            {data.cloudCover.toFixed(0)}%
-          </span>
-        </div>
+        {data.cloudCover > 0 && (
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-xs text-gray-600">Nuages:</span>
+            <span className="text-sm font-medium text-gray-700">
+              {data.cloudCover.toFixed(0)}%
+            </span>
+          </div>
+        )}
         {data.hasSignificantChange && (
           <div className="mt-2 flex items-center gap-1.5 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700">
             <AlertCircle className="h-3 w-3" />
@@ -159,46 +177,37 @@ function CustomTooltip({
 }
 
 /**
- * Custom dot component for significant changes
- */
-function CustomDot(props: any) {
-  const { cx, cy, payload, showChangeMarkers } = props;
-
-  if (!showChangeMarkers || !payload.hasSignificantChange) {
-    return null;
-  }
-
-  return (
-    <g>
-      {/* Outer ring for emphasis */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={8}
-        fill="none"
-        stroke="#E68A1F"
-        strokeWidth={2}
-        opacity={0.6}
-      />
-      {/* Inner dot */}
-      <circle cx={cx} cy={cy} r={5} fill="#E68A1F" />
-      {/* Alert icon */}
-      <circle cx={cx} cy={cy} r={3} fill="white" />
-    </g>
-  );
-}
-
-/**
  * Skeleton loader for chart
  */
 function ChartSkeleton() {
   return (
-    <div className="h-80 animate-pulse">
-      <div className="flex h-full items-center justify-center rounded-lg bg-gray-100">
+    <div className="h-[28rem] animate-pulse">
+      <div className="flex h-full items-center justify-center rounded-xl bg-gray-100">
         <div className="text-gray-400">Chargement du graphique...</div>
       </div>
     </div>
   );
+}
+
+function interpretAvgNdvi(avg: number): { label: string; tone: string } {
+  if (avg >= 0.7) return { label: 'Végétation excellente', tone: 'text-emerald-800 bg-emerald-50 border-emerald-200' };
+  if (avg >= 0.5) return { label: 'Végétation bonne', tone: 'text-green-800 bg-green-50 border-green-200' };
+  if (avg >= 0.3) return { label: 'Végétation faible', tone: 'text-amber-800 bg-amber-50 border-amber-200' };
+  return { label: 'Végétation critique', tone: 'text-red-800 bg-red-50 border-red-200' };
+}
+
+function formatShortDate(date: Date | string, monthly = false): string {
+  if (monthly) {
+    return new Date(date).toLocaleDateString('fr-FR', {
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+  return new Date(date).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 /**
@@ -206,7 +215,7 @@ function ChartSkeleton() {
  */
 function EmptyChart() {
   return (
-    <div className="flex h-80 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50">
+    <div className="flex h-[28rem] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50">
       <div className="text-center">
         <svg
           className="mx-auto h-12 w-12 text-gray-400"
@@ -223,7 +232,7 @@ function EmptyChart() {
         </svg>
         <p className="mt-2 text-sm text-gray-500">Aucune donnée temporelle disponible</p>
         <p className="mt-1 text-xs text-gray-400">
-          Sélectionnez une parcelle pour voir l'évolution NDVI
+          Lancez « Historique GEE » pour calculer le NDVI de la période
         </p>
       </div>
     </div>
@@ -318,29 +327,43 @@ export function TemporalDataChart({
   };
 
   // Format data for recharts
-  // For long periods (>24 months), show only year-month format
-  // For medium periods (12-24 months), show abbreviated format
-  // For short periods (<12 months), show day-month format
+  // Monthly series: show month + year only (day is often a synthetic grid day)
   const timeRangeMonths = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
   const isLongPeriod = timeRangeMonths > 24;
   const isMediumPeriod = timeRangeMonths > 12 && timeRangeMonths <= 24;
-  
+  const looksMonthly =
+    timeline.length >= 2 &&
+    (() => {
+      const gaps = [];
+      for (let i = 1; i < Math.min(timeline.length, 6); i++) {
+        const a = new Date(timeline[i - 1].date).getTime();
+        const b = new Date(timeline[i].date).getTime();
+        gaps.push(Math.abs(b - a) / (1000 * 60 * 60 * 24));
+      }
+      const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+      return avgGap >= 20; // ~monthly spacing
+    })();
+  const hasAcquisitionDates = timeline.some((p) => p.isAcquisitionDate);
+
   const formattedData = timeline.map((point) => ({
     ...point,
-    dateLabel: isLongPeriod
-      ? new Date(point.date).toLocaleDateString('fr-FR', {
-          year: 'numeric',
-          month: 'short',
-        })
-      : isMediumPeriod
-      ? new Date(point.date).toLocaleDateString('fr-FR', {
-          month: 'short',
-          year: '2-digit',
-        })
-      : new Date(point.date).toLocaleDateString('fr-FR', {
-          day: '2-digit',
-          month: 'short',
-        }),
+    ndvi: isNaN(point.ndvi) ? null : point.ndvi,
+    dateLabel:
+      hasAcquisitionDates
+        ? new Date(point.date).toLocaleDateString('fr-FR', {
+            day: 'numeric',
+            month: 'short',
+            year: isLongPeriod ? 'numeric' : '2-digit',
+          })
+        : looksMonthly || isLongPeriod || isMediumPeriod
+          ? new Date(point.date).toLocaleDateString('fr-FR', {
+              month: 'short',
+              year: isLongPeriod ? 'numeric' : '2-digit',
+            })
+          : new Date(point.date).toLocaleDateString('fr-FR', {
+              day: '2-digit',
+              month: 'short',
+            }),
     dateTimestamp: new Date(point.date).getTime(),
   }));
 
@@ -369,6 +392,38 @@ export function TemporalDataChart({
     : 0;
   const significantChanges = timeline.filter((p) => p.hasSignificantChange).length;
 
+  const significantChangePoints = timeline.filter(
+    (p) => p.hasSignificantChange && !isNaN(p.ndvi)
+  );
+  const missingPoints = timeline.filter((p) => isNaN(p.ndvi)).length;
+  const avgInterpretation = interpretAvgNdvi(avgNDVI);
+
+  const trendConfig =
+    trend === 'improving'
+      ? {
+          icon: TrendingUp,
+          label: 'En amélioration',
+          hint: 'Le NDVI a progressé sur la période',
+          className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+          iconClass: 'text-emerald-600',
+        }
+      : trend === 'declining'
+        ? {
+            icon: TrendingDown,
+            label: 'En déclin',
+            hint: 'Le NDVI a baissé sur la période, à surveiller',
+            className: 'border-red-200 bg-red-50 text-red-800',
+            iconClass: 'text-red-600',
+          }
+        : {
+            icon: Minus,
+            label: 'Stable',
+            hint: 'Peu de variation nette sur la période',
+            className: 'border-gray-200 bg-gray-50 text-gray-800',
+            iconClass: 'text-gray-600',
+          };
+  const TrendIcon = trendConfig.icon;
+
   // Handle chart click
   const handleChartClick = (data: any) => {
     if (data && data.activePayload && data.activePayload[0]) {
@@ -380,253 +435,244 @@ export function TemporalDataChart({
   };
 
   return (
-    <div className={`rounded-lg bg-white p-4 shadow-lg ${className}`}>
-      {/* Header with statistics */}
-      <div className="mb-4 flex flex-col gap-3 border-b border-gray-200 pb-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Évolution NDVI</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Analyse temporelle de la santé de la végétation
+    <div className={`rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-6 ${className}`}>
+      {/* Header */}
+      <div className="mb-5 flex flex-col gap-4 border-b border-gray-100 pb-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-xl font-semibold tracking-tight text-gray-900">Évolution NDVI</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Santé de la végétation du {formatShortDate(startDate)} au {formatShortDate(endDate)}
           </p>
         </div>
 
-        {/* Actions and Trend indicator */}
-        <div className="flex items-center gap-3">
-          {/* CSV Export Button */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={`flex min-w-[11rem] flex-col rounded-xl border px-3.5 py-2.5 ${trendConfig.className}`}
+            title={trendConfig.hint}
+          >
+            <div className="flex items-center gap-2">
+              <TrendIcon className={`h-4 w-4 ${trendConfig.iconClass}`} />
+              <span className="text-sm font-semibold">{trendConfig.label}</span>
+              <span className="text-xs opacity-70">
+                ({change >= 0 ? '+' : ''}
+                {change.toFixed(3)})
+              </span>
+            </div>
+            <p className="mt-0.5 text-[11px] leading-snug opacity-80">{trendConfig.hint}</p>
+          </div>
+
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
             title="Exporter les données en CSV"
           >
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Exporter CSV</span>
           </button>
-
-          {/* Trend indicator */}
-          <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-            {trend === 'improving' && (
-              <>
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                <span className="text-sm font-medium text-green-700">
-                  En amélioration
-                </span>
-              </>
-            )}
-            {trend === 'declining' && (
-              <>
-                <TrendingDown className="h-5 w-5 text-red-600" />
-                <span className="text-sm font-medium text-red-700">En déclin</span>
-              </>
-            )}
-            {trend === 'stable' && (
-              <>
-                <Minus className="h-5 w-5 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">Stable</span>
-              </>
-            )}
-            <span className="text-xs text-gray-500">
-              ({change >= 0 ? '+' : ''}
-              {change.toFixed(3)})
-            </span>
-          </div>
         </div>
       </div>
 
-      {/* Statistics summary */}
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="rounded-lg bg-gray-50 p-3">
-          <p className="text-xs text-gray-600">NDVI Moyen</p>
-          <p className="mt-1 text-lg font-bold text-gray-900">
-            {avgNDVI.toFixed(3)}
-          </p>
+      {/* KPI row */}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className={`rounded-xl border p-3.5 ${avgInterpretation.tone}`}>
+          <p className="text-[11px] font-medium uppercase tracking-wide opacity-70">NDVI moyen</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{avgNDVI.toFixed(3)}</p>
+          <p className="mt-1 text-xs font-medium">{avgInterpretation.label}</p>
         </div>
-        <div className="rounded-lg bg-gray-50 p-3">
-          <p className="text-xs text-gray-600">NDVI Min</p>
-          <p className="mt-1 text-lg font-bold text-gray-900">
-            {minNDVI.toFixed(3)}
-          </p>
+        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">NDVI min</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">{minNDVI.toFixed(3)}</p>
+          <p className="mt-1 text-xs text-gray-500">Point le plus bas</p>
         </div>
-        <div className="rounded-lg bg-gray-50 p-3">
-          <p className="text-xs text-gray-600">NDVI Max</p>
-          <p className="mt-1 text-lg font-bold text-gray-900">
-            {maxNDVI.toFixed(3)}
-          </p>
+        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">NDVI max</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">{maxNDVI.toFixed(3)}</p>
+          <p className="mt-1 text-xs text-gray-500">Point le plus haut</p>
         </div>
-        <div className="rounded-lg bg-gray-50 p-3">
-          <p className="text-xs text-gray-600">Changements</p>
-          <p className="mt-1 text-lg font-bold text-orange-600">
+        <div className="rounded-xl border border-orange-100 bg-orange-50 p-3.5">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-orange-700/70">
+            Changements
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-orange-700">
             {significantChanges}
           </p>
+          <p className="mt-1 text-xs text-orange-700/80">Variation &gt; 0,15</p>
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="h-80">
+      {/* Health bands legend (outside chart to avoid cut-off labels) */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
+        <span className="font-medium text-gray-600">Zones :</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800">
+          <span className="h-2 w-2 rounded-full bg-emerald-700" /> Excellent ≥ 0,7
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-lime-50 px-2.5 py-1 text-lime-800">
+          <span className="h-2 w-2 rounded-full bg-lime-500" /> Bon 0,5–0,7
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">
+          <span className="h-2 w-2 rounded-full bg-amber-400" /> Faible 0,3–0,5
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-red-800">
+          <span className="h-2 w-2 rounded-full bg-red-500" /> Critique &lt; 0,3
+        </span>
+        {missingPoints > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
+            {missingPoints} mois sans image
+          </span>
+        )}
+      </div>
+
+      {/* Chart, larger for readability */}
+      <div className="h-[26rem] w-full sm:h-[28rem] lg:h-[32rem]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={formattedData}
-            margin={{ top: 10, right: 30, left: 0, bottom: 5 }}
+            margin={{ top: 16, right: 16, left: 4, bottom: 8 }}
             onClick={handleChartClick}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            
-            {/* X-Axis: Dates */}
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+
+            {/* Soft health zones */}
+            <ReferenceArea y1={0.7} y2={1.0} fill="#2d5016" fillOpacity={0.06} ifOverflow="extendDomain" />
+            <ReferenceArea y1={0.5} y2={0.7} fill="#84cc16" fillOpacity={0.05} ifOverflow="extendDomain" />
+            <ReferenceArea y1={0.3} y2={0.5} fill="#fbbf24" fillOpacity={0.06} ifOverflow="extendDomain" />
+            <ReferenceArea y1={0} y2={0.3} fill="#ef4444" fillOpacity={0.05} ifOverflow="extendDomain" />
+
             <XAxis
               dataKey="dateLabel"
               tick={{ fontSize: 12, fill: '#6b7280' }}
-              tickLine={{ stroke: '#e5e7eb' }}
+              tickLine={false}
               axisLine={{ stroke: '#e5e7eb' }}
-              angle={isLongPeriod ? -60 : -45}
+              angle={isLongPeriod ? -45 : -35}
               textAnchor="end"
-              height={isLongPeriod ? 80 : 60}
+              height={isLongPeriod ? 72 : 56}
               interval={tickInterval}
             />
-            
-            {/* Y-Axis: NDVI values */}
+
             <YAxis
-              domain={[-0.1, 1.0]}
-              ticks={[-0.1, 0, 0.2, 0.4, 0.6, 0.8, 1.0]}
+              domain={[0, 1]}
+              ticks={[0, 0.3, 0.5, 0.7, 1.0]}
               tick={{ fontSize: 12, fill: '#6b7280' }}
-              tickLine={{ stroke: '#e5e7eb' }}
-              axisLine={{ stroke: '#e5e7eb' }}
+              tickLine={false}
+              axisLine={false}
+              width={40}
               label={{
                 value: 'NDVI',
                 angle: -90,
                 position: 'insideLeft',
-                style: { fontSize: 12, fill: '#6b7280' },
+                offset: 8,
+                style: { fontSize: 11, fill: '#9ca3af' },
               }}
             />
-            
-            {/* Tooltip */}
+
             <Tooltip content={<CustomTooltip />} />
-            
-            {/* Legend */}
             <Legend
-              wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+              verticalAlign="top"
+              align="right"
+              height={28}
+              wrapperStyle={{ fontSize: '12px', paddingBottom: 4 }}
               iconType="line"
             />
-            
-            {/* Reference lines for NDVI thresholds */}
-            <ReferenceLine
-              y={0.7}
-              stroke="#2d5016"
-              strokeDasharray="3 3"
-              strokeOpacity={0.3}
-              label={{
-                value: 'Excellent',
-                position: 'right',
-                fontSize: 10,
-                fill: '#2d5016',
-              }}
-            />
-            <ReferenceLine
-              y={0.5}
-              stroke="#fbbf24"
-              strokeDasharray="3 3"
-              strokeOpacity={0.3}
-              label={{
-                value: 'Moyen',
-                position: 'right',
-                fontSize: 10,
-                fill: '#fbbf24',
-              }}
-            />
-            <ReferenceLine
-              y={0.3}
-              stroke="#E68A1F"
-              strokeDasharray="3 3"
-              strokeOpacity={0.3}
-              label={{
-                value: 'Faible',
-                position: 'right',
-                fontSize: 10,
-                fill: '#E68A1F',
-              }}
-            />
-            
-            {/* Vertical line for selected date */}
+
+            <ReferenceLine y={0.7} stroke="#2d5016" strokeDasharray="4 4" strokeOpacity={0.35} />
+            <ReferenceLine y={0.5} stroke="#ca8a04" strokeDasharray="4 4" strokeOpacity={0.35} />
+            <ReferenceLine y={0.3} stroke="#E68A1F" strokeDasharray="4 4" strokeOpacity={0.35} />
+
             {selectedDataPoint && (
               <ReferenceLine
                 x={selectedDataPoint.dateLabel}
                 stroke="#6FAF3D"
                 strokeWidth={2}
-                label={{
-                  value: 'Sélectionné',
-                  position: 'top',
-                  fontSize: 10,
-                  fill: '#6FAF3D',
-                  fontWeight: 'bold',
-                }}
+                strokeOpacity={0.85}
               />
             )}
-            
-            {/* NDVI line */}
+
             <Line
               type="monotone"
               dataKey="ndvi"
               name="NDVI"
               stroke="#6FAF3D"
               strokeWidth={3}
+              connectNulls={false}
               dot={(props: any) => {
-                const { cx, cy, payload } = props;
+                const { cx, cy, payload, index } = props;
+                if (payload == null || isNaN(payload.ndvi) || cx == null || cy == null) {
+                  return <g key={`dot-empty-${index}`} />;
+                }
+                const isChange = showChangeMarkers && payload.hasSignificantChange;
                 return (
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={4}
-                    fill={getNDVIColor(payload.ndvi)}
-                    stroke="white"
-                    strokeWidth={2}
-                  />
+                  <g key={`dot-${index}`}>
+                    {isChange && (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={10}
+                        fill="none"
+                        stroke="#E68A1F"
+                        strokeWidth={2}
+                        opacity={0.7}
+                      />
+                    )}
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={isChange ? 6 : 4}
+                      fill={isChange ? '#E68A1F' : getNDVIColor(payload.ndvi)}
+                      stroke="white"
+                      strokeWidth={2}
+                    />
+                  </g>
                 );
               }}
               activeDot={{
-                r: 6,
+                r: 7,
                 strokeWidth: 2,
                 stroke: 'white',
                 fill: '#6FAF3D',
               }}
             />
-            
-            {/* Significant change markers */}
-            {showChangeMarkers && (
-              <Line
-                type="monotone"
-                dataKey="ndvi"
-                stroke="transparent"
-                dot={(props) => (
-                  <CustomDot {...props} showChangeMarkers={showChangeMarkers} />
-                )}
-                activeDot={false}
-                legendType="none"
-              />
-            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Legend for significant changes */}
-      {showChangeMarkers && significantChanges > 0 && (
-        <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-orange-50 px-3 py-2 text-xs">
-          <div className="flex items-center gap-1.5">
-            <div className="h-3 w-3 rounded-full border-2 border-orange-500 bg-orange-400" />
-            <span className="font-medium text-orange-700">
-              Changement significatif (NDVI &gt; 0.15)
-            </span>
+      {/* Significant changes list, dates visibles sans hover */}
+      {showChangeMarkers && significantChangePoints.length > 0 && (
+        <div className="mt-4 rounded-xl border border-orange-100 bg-orange-50/70 px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-orange-800">
+            <AlertCircle className="h-4 w-4" />
+            Changements significatifs ({significantChangePoints.length})
+            {hasAcquisitionDates ? ' · dates de capture' : ''}
           </div>
+          <div className="flex flex-wrap gap-2">
+            {significantChangePoints.map((point) => (
+              <button
+                key={String(point.date)}
+                type="button"
+                onClick={() => onDateSelect?.(new Date(point.date))}
+                className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-white px-2.5 py-1.5 text-xs text-orange-900 transition hover:border-orange-300 hover:bg-orange-50"
+              >
+                <span className="h-2 w-2 rounded-full bg-orange-500" />
+                <span className="font-medium">
+                  {formatShortDate(point.date, looksMonthly && !hasAcquisitionDates)}
+                </span>
+                <span className="tabular-nums text-orange-700/80">NDVI {point.ndvi.toFixed(3)}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-orange-800/70">
+            {hasAcquisitionDates
+              ? 'Dates = jour de passage Sentinel-2. Variation absolue > 0,15 entre deux mesures.'
+              : 'Dates de référence mensuelles. Relancez « Historique GEE » pour afficher les vraies dates de capture.'}
+          </p>
         </div>
       )}
 
-      {/* Help text */}
-      <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
-        <p className="font-medium text-gray-700">Guide de lecture:</p>
-        <div className="mt-1 grid grid-cols-1 gap-1 md:grid-cols-2">
-          <span>• NDVI &gt; 0.7: Végétation excellente</span>
-          <span>• NDVI 0.5-0.7: Végétation bonne à moyenne</span>
-          <span>• NDVI 0.3-0.5: Végétation faible</span>
-          <span>• NDVI &lt; 0.3: Végétation critique</span>
-        </div>
-      </div>
+      {missingPoints > 0 && (
+        <p className="mt-3 text-xs text-gray-500">
+          Les trous dans la courbe correspondent à des mois sans image Sentinel-2 exploitable
+          (nuages, couverture insuffisante). Ce n&apos;est pas une baisse de NDVI.
+        </p>
+      )}
     </div>
   );
 }

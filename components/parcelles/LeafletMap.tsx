@@ -496,7 +496,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           });
           layer.on('click', async (e) => {
             // If the mouse moved more than 5px between mousedown and click,
-            // it was likely a drag/zoom gesture — ignore it
+            // it was likely a drag/zoom gesture, ignore it
             if (mouseDownPos && mapRef.current) {
               const clickPos = mapRef.current.latLngToContainerPoint(e.latlng);
               const dist = mouseDownPos.distanceTo(clickPos);
@@ -565,7 +565,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
       });
     }
 
-    // Zoom to fit if requested — but only on first load, not on every bbox refetch
+    // Zoom to fit if requested, but only on first load, not on every bbox refetch
     // We use a ref to track if we've already done the initial fit
     if (zoomToFit || parcelles.length === 1) {
       if (!hasInitialFitRef.current) {
@@ -641,7 +641,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     
     let newTileLayer: L.TileLayer;
     if (newStyle === 'satellite' || newStyle === 'hybrid') {
-      // Google Satellite — meilleure couverture mondiale, y compris Afrique
+      // Google Satellite, meilleure couverture mondiale, y compris Afrique
       newTileLayer = L.tileLayer(
         'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         {

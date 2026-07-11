@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   let requestData: Partial<ReceiptData> | undefined;
 
   try {
-    // Auth check — manager or admin only (Requirement 8.1)
+    // Auth check, manager or admin only (Requirement 8.1)
     const supabase = await createServerSupabaseClient();
     const {
       data: { user },
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fournisseur optionnel — chef_planteur_id peut rester null
+    // Fournisseur optionnel, chef_planteur_id peut rester null
     const data = body as ReceiptData;
 
     // Validate product lines
