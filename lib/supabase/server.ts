@@ -4,8 +4,10 @@
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { unstable_cache } from 'next/cache';
+import { cache } from 'react';
 
-import type { Database } from '@/types/database.gen';
+import type { Database, Profile } from '@/types/database.gen';
 
 /**
  * Common typed Supabase client type used across server-side code.
@@ -85,8 +87,9 @@ export async function getUser() {
 /**
  * Gets the current user's profile from the database.
  * Uses getSession() (cookie) to avoid redundant Auth API calls — middleware refreshes tokens.
+ * Profile rows are cached ~5 min to avoid hitting Supabase on every soft navigation.
  */
-export async function getUserProfile() {
+export const getUserProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createServerSupabaseClient();
   const {
     data: { session },
@@ -94,11 +97,33 @@ export async function getUserProfile() {
 
   if (!session?.user) return null;
 
+  const userId = session.user.id;
+
+  if (process.env.SUPABASE_SERVICE_KEY) {
+    try {
+      return await unstable_cache(
+        async (id: string) => {
+          const admin = createServiceRoleSupabaseClient();
+          const { data: profile } = await admin
+            .from('profiles')
+            .select('*')
+            .eq('id', id)
+            .single();
+          return profile;
+        },
+        ['user-profile'],
+        { revalidate: 300 }
+      )(userId);
+    } catch {
+      // Fall through to uncached path
+    }
+  }
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('id', session.user.id)
+    .eq('id', userId)
     .single();
 
   return profile;
-}
+});

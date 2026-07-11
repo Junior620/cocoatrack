@@ -9,13 +9,13 @@ importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox
 // SERVICE WORKER VERSION
 // REQ-SW-002: Track SW version for diagnostics
 // ============================================================================
-const SW_VERSION = '2.0.0';
+const SW_VERSION = '2.0.1';
 
 // ============================================================================
 // CACHE NAMES (Versioned)
 // REQ-CACHE-002: Cache versioning for cleanup
 // ============================================================================
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v2.1';
 const CACHE_NAMES = {
   PRECACHE: `cocoatrack-precache-${CACHE_VERSION}`,
   STATIC: `cocoatrack-static-${CACHE_VERSION}`,
@@ -34,9 +34,9 @@ const CURRENT_CACHES = Object.values(CACHE_NAMES);
 // REQ-CACHE-001: Cache Strategy Per Resource Type
 // ============================================================================
 const CACHE_CONFIG = {
-  // HTML documents: NetworkFirst with 10s timeout
+  // HTML documents: NetworkFirst with short timeout (avoid 10s stalls)
   html: {
-    networkTimeoutSeconds: 10,
+    networkTimeoutSeconds: 3,
     maxAgeSeconds: 24 * 60 * 60, // 24 hours
   },
   // CSS/JS with hashed filenames: StaleWhileRevalidate
@@ -49,9 +49,9 @@ const CACHE_CONFIG = {
     maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
     maxEntries: 60,
   },
-  // API transactional: NetworkFirst with 10s timeout
+  // API transactional: NetworkFirst with shorter timeout
   api: {
-    networkTimeoutSeconds: 10,
+    networkTimeoutSeconds: 4,
     maxAgeSeconds: 5 * 60, // 5 minutes
     maxEntries: 100,
   },

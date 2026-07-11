@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { factoryApi } from '@/lib/api/factory';
 import { useFactoryOrder, useFactoryProductTypes, useInvalidateFactory } from '@/lib/hooks/useFactory';
@@ -15,7 +15,6 @@ export default function FactoryOrderDetailPage() {
   const id = params.id as string;
   const { data: order, isLoading, error } = useFactoryOrder(id);
   const invalidate = useInvalidateFactory();
-  const router = useRouter();
   const [validating, setValidating] = useState(false);
 
   const handleValidate = async () => {
@@ -23,7 +22,6 @@ export default function FactoryOrderDetailPage() {
     try {
       await factoryApi.validateOrder(id);
       invalidate();
-      router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

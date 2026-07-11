@@ -112,11 +112,18 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
 
   // Listen for auth state changes — skip initial refresh when SSR already provided profile
   useEffect(() => {
+    let cancelled = false;
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Ignore INITIAL_SESSION / TOKEN_REFRESHED when we already have SSR profile
+      if (event === 'TOKEN_REFRESHED') return;
+      if (event === 'INITIAL_SESSION' && initialProfile) return;
+
       if (event === 'SIGNED_IN' && session?.user) {
         const profile = await fetchProfile(session.user.id);
+        if (cancelled) return;
         setState({
           user: profile ? profileToAuthUser(profile) : null,
           profile,
@@ -124,6 +131,7 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
           isAuthenticated: !!profile,
         });
       } else if (event === 'SIGNED_OUT') {
+        if (cancelled) return;
         setState({
           user: null,
           profile: null,
@@ -140,6 +148,7 @@ export function AuthProvider({ children, initialProfile = null }: AuthProviderPr
     }
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
     };
   }, [supabase, fetchProfile, refreshProfile, initialProfile]);

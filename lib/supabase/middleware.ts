@@ -18,6 +18,10 @@ import {
   type CocoaTrackModule,
 } from '@/lib/utils/cocoatrack-module';
 
+/** Skip full Auth getUser() for a few minutes after a successful check. */
+const SESSION_CHECK_COOKIE = 'ct_session_checked';
+const SESSION_CHECK_MAX_AGE = 5 * 60; // 5 minutes
+
 function getModuleFromRequest(request: NextRequest): CocoaTrackModule {
   return resolveModulePreference(
     request.nextUrl.searchParams.get('module'),
@@ -111,14 +115,33 @@ export async function updateSession(request: NextRequest) {
 
   let user = null;
 
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const recentlyChecked = request.cookies.get(SESSION_CHECK_COOKIE)?.value === '1';
+  const canUseLocalSession = recentlyChecked && hasAuthCookie;
 
-  if (userError && (userError as { status?: number }).status === 429) {
-    // Rate limited — use local session instead of failing open to login
+  if (canUseLocalSession) {
+    // Fast path: avoid Auth API round-trip on every soft navigation
     const { data: sessionData } = await supabase.auth.getSession();
     user = sessionData.session?.user ?? null;
   } else {
-    user = userData.user;
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError && (userError as { status?: number }).status === 429) {
+      // Rate limited — use local session instead of failing open to login
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData.session?.user ?? null;
+    } else {
+      user = userData.user;
+    }
+
+    if (user) {
+      supabaseResponse.cookies.set(SESSION_CHECK_COOKIE, '1', {
+        path: '/',
+        maxAge: SESSION_CHECK_MAX_AGE,
+        sameSite: 'lax',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+      });
+    }
   }
 
   if (!user && !isPublicRoute && !isCronAuthenticated && !isTileProxy) {

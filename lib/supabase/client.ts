@@ -5,9 +5,13 @@ import { createBrowserClient } from '@supabase/ssr';
 
 import type { Database } from '@/types/database.gen';
 
+type BrowserClient = ReturnType<typeof createBrowserClient<Database>>;
+
+let browserClient: BrowserClient | null = null;
+
 /**
  * Creates a Supabase client for use in browser/client components.
- * This client handles authentication state automatically.
+ * Singleton in the browser to avoid re-creating clients on every hook call.
  */
 export function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -30,5 +34,12 @@ export function createClient() {
     );
   }
 
-  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+  if (typeof window === 'undefined') {
+    return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+  }
+
+  if (!browserClient) {
+    browserClient = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+  }
+  return browserClient;
 }

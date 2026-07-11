@@ -26,9 +26,9 @@ export function useFactoryDashboard() {
   return useQuery({
     queryKey: factoryKeys.dashboard(),
     queryFn: () => factoryApi.dashboard(),
-    staleTime: 15_000,
-    refetchInterval: 30_000,
-    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -118,6 +118,7 @@ const FACTORY_REALTIME_TABLES = [
 
 /**
  * Invalide le cache usine à chaque changement Supabase (réceptions, ordres, stock, QC).
+ * Debounced pour éviter une rafale de refetch lors d'écritures multiples.
  */
 export function useFactoryRealtime() {
   const queryClient = useQueryClient();
@@ -125,10 +126,14 @@ export function useFactoryRealtime() {
 
   useEffect(() => {
     const supabase = createClient();
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const invalidate = () => {
-      setLastSyncAt(new Date());
-      queryClient.invalidateQueries({ queryKey: factoryKeys.all });
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        setLastSyncAt(new Date());
+        queryClient.invalidateQueries({ queryKey: factoryKeys.all });
+      }, 800);
     };
 
     const channel = supabase.channel('factory-realtime');
@@ -142,6 +147,7 @@ export function useFactoryRealtime() {
     channel.subscribe();
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
   }, [queryClient]);
