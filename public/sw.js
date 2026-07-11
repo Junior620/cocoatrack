@@ -9,7 +9,7 @@ importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox
 // SERVICE WORKER VERSION
 // REQ-SW-002: Track SW version for diagnostics
 // ============================================================================
-const SW_VERSION = '2.0.1';
+const SW_VERSION = '2.0.2';
 
 // ============================================================================
 // CACHE NAMES (Versioned)

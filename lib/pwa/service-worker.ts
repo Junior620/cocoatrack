@@ -29,11 +29,12 @@ export async function registerServiceWorker(): Promise<Workbox | null> {
     // Initialize SWUpdateManager with the Workbox instance
     const updateManager = getSWUpdateManager();
     await updateManager.initialize(wb);
+    // Long-lived PWA sessions: poll for updates every 30 minutes
+    updateManager.startAutoCheck(30 * 60 * 1000);
 
     // Handle waiting service worker
     wb.addEventListener('waiting', () => {
       console.log('New service worker waiting to activate');
-      // Dispatch custom event for UI to handle
       window.dispatchEvent(
         new CustomEvent('sw-update-available', {
           detail: { wb, updateManager },

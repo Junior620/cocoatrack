@@ -123,7 +123,7 @@ export function useServiceWorker(): UseServiceWorkerReturn {
   const dismissUpdate = useCallback((days: number = 1) => {
     const updateManager = getSWUpdateManager();
     updateManager.dismissUpdate(days);
-    setState((prev) => ({ ...prev, isUpdateAvailable: false }));
+    // Keep isUpdateAvailable true so the banner can reappear after the dismiss window
   }, []);
 
   const checkForUpdate = useCallback(async (): Promise<boolean> => {

@@ -63,7 +63,10 @@ export class SWUpdateManager {
   private currentVersion: string | null = null;
   private config: SWUpdateManagerConfig;
   private checkIntervalId: NodeJS.Timeout | null = null;
+  private reloadFallbackId: ReturnType<typeof setTimeout> | null = null;
   private updateDismissedUntil: number | null = null;
+  private onVisibilityChange: (() => void) | null = null;
+  private onWindowFocus: (() => void) | null = null;
 
   constructor(config: SWUpdateManagerConfig = {}) {
     this.config = config;
@@ -88,6 +91,8 @@ export class SWUpdateManager {
     // Listen for controlling service worker
     wb.addEventListener('controlling', () => {
       console.log('[SWUpdateManager] Service worker now controlling');
+      this.clearReloadFallback();
+      this.clearDismissal();
       this.setState('idle');
       this.config.onUpdateApplied?.();
     });
@@ -105,6 +110,26 @@ export class SWUpdateManager {
     if (this.config.autoCheckInterval && this.config.autoCheckInterval > 0) {
       this.startAutoCheck(this.config.autoCheckInterval);
     }
+
+    // Recheck when the app becomes visible again (long-lived PWA sessions)
+    let lastFocusCheckAt = 0;
+    const FOCUS_CHECK_MIN_GAP_MS = 2 * 60 * 1000;
+    const maybeCheckOnFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusCheckAt < FOCUS_CHECK_MIN_GAP_MS) return;
+      lastFocusCheckAt = now;
+      void this.checkForUpdate();
+    };
+    this.onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        maybeCheckOnFocus();
+      }
+    };
+    this.onWindowFocus = () => {
+      maybeCheckOnFocus();
+    };
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    window.addEventListener('focus', this.onWindowFocus);
 
     // Check for dismissed state in localStorage
     const dismissedUntil = localStorage.getItem('sw_update_dismissed_until');
@@ -144,6 +169,7 @@ export class SWUpdateManager {
       return false;
     }
 
+    const previousState = this.state;
     this.setState('checking');
 
     try {
@@ -154,14 +180,19 @@ export class SWUpdateManager {
       const registration = await navigator.serviceWorker.getRegistration();
       if (registration?.waiting) {
         this.setState('update_available');
+        this.config.onUpdateAvailable?.();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sw-update-available'));
+        }
         return true;
       }
 
-      this.setState('idle');
-      return false;
+      // Preserve update_available if we already knew about a waiting SW
+      this.setState(previousState === 'update_available' ? 'update_available' : 'idle');
+      return previousState === 'update_available';
     } catch (error) {
       console.error('[SWUpdateManager] Update check failed:', error);
-      this.setState('idle');
+      this.setState(previousState === 'update_available' ? 'update_available' : 'idle');
       return false;
     }
   }
@@ -184,9 +215,11 @@ export class SWUpdateManager {
     }
 
     this.setState('activating');
+    this.clearDismissal();
 
     // Tell the waiting service worker to skip waiting
     this.wb.messageSkipWaiting();
+    this.scheduleReloadFallback();
 
     // The page will reload when the new SW takes control
     // (handled by the 'controlling' event listener)
@@ -201,6 +234,14 @@ export class SWUpdateManager {
     this.updateDismissedUntil = dismissUntil;
     localStorage.setItem('sw_update_dismissed_until', dismissUntil.toString());
     console.log(`[SWUpdateManager] Update dismissed until ${new Date(dismissUntil).toISOString()}`);
+  }
+
+  /**
+   * Clears a previous "Plus tard" dismissal (e.g. after a successful update)
+   */
+  clearDismissal(): void {
+    this.updateDismissedUntil = null;
+    localStorage.removeItem('sw_update_dismissed_until');
   }
 
   /**
@@ -266,7 +307,9 @@ export class SWUpdateManager {
 
     console.warn('[SWUpdateManager] Force updating despite safety checks');
     this.setState('activating');
+    this.clearDismissal();
     this.wb.messageSkipWaiting();
+    this.scheduleReloadFallback();
   }
 
   /**
@@ -275,7 +318,7 @@ export class SWUpdateManager {
   startAutoCheck(intervalMs: number): void {
     this.stopAutoCheck();
     this.checkIntervalId = setInterval(() => {
-      this.checkForUpdate();
+      void this.checkForUpdate();
     }, intervalMs);
   }
 
@@ -294,12 +337,37 @@ export class SWUpdateManager {
    */
   destroy(): void {
     this.stopAutoCheck();
+    this.clearReloadFallback();
+    if (this.onVisibilityChange) {
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
+      this.onVisibilityChange = null;
+    }
+    if (this.onWindowFocus) {
+      window.removeEventListener('focus', this.onWindowFocus);
+      this.onWindowFocus = null;
+    }
     this.wb = null;
   }
 
   // ============================================================================
   // PRIVATE METHODS
   // ============================================================================
+
+  private scheduleReloadFallback(): void {
+    this.clearReloadFallback();
+    // If `controlling` never fires, still reload so the user is not stuck
+    this.reloadFallbackId = setTimeout(() => {
+      console.warn('[SWUpdateManager] Reload fallback after skipWaiting');
+      window.location.reload();
+    }, 2500);
+  }
+
+  private clearReloadFallback(): void {
+    if (this.reloadFallbackId) {
+      clearTimeout(this.reloadFallbackId);
+      this.reloadFallbackId = null;
+    }
+  }
 
   private setState(newState: SWUpdateState): void {
     if (this.state !== newState) {
