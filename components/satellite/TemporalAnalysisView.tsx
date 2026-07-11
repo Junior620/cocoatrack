@@ -23,6 +23,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { TemporalSlider } from './TemporalSlider';
 import { TemporalDataChart } from './TemporalDataChart';
 import type { TemporalDataPoint } from '@/lib/satellite/types/index';
@@ -161,19 +162,23 @@ export function TemporalAnalysisView({
 
       {/* Backfill result */}
       {backfillResult && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          ✅ Terminé, {backfillResult.calculated} mois calculés
-          {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà présents`}
-          {backfillResult.failed > 0 && (
-            <span className="text-amber-700"> · {backfillResult.failed} mois sans image disponible</span>
-          )}
+        <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+          <p>
+            Terminé, {backfillResult.calculated} mois calculés
+            {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà présents`}
+            {backfillResult.failed > 0 && (
+              <span className="text-amber-700"> · {backfillResult.failed} mois sans image disponible</span>
+            )}
+          </p>
         </div>
       )}
 
       {/* Backfill error */}
       {backfillError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          ❌ Erreur : {backfillError}
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden />
+          <p>Erreur : {backfillError}</p>
         </div>
       )}
 

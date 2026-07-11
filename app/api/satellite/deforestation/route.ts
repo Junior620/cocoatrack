@@ -428,8 +428,8 @@ export async function POST(request: NextRequest) {
         affectedAreaPercent: result.affectedAreaPercent,
         event: result.event ?? null,
         message: result.detected
-          ? `⚠️ Déforestation détectée, perte NDVI de ${Math.abs(result.ndviChange * 100).toFixed(1)}% sur ${result.affectedAreaHectares.toFixed(2)} ha`
-          : `✅ Aucune déforestation détectée (variation NDVI: ${result.ndviChange.toFixed(4)})`,
+          ? `Déforestation détectée, perte NDVI de ${Math.abs(result.ndviChange * 100).toFixed(1)}% sur ${result.affectedAreaHectares.toFixed(2)} ha`
+          : `Aucune déforestation détectée (variation NDVI: ${result.ndviChange.toFixed(4)})`,
       },
     });
 

@@ -6,7 +6,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mountain as MountainIcon, RefreshCw } from 'lucide-react';
+import { Mountain as MountainIcon, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 import { ProtectedRoute } from '@/components/auth';
 import { useAuth, hasPermission } from '@/lib/auth';
@@ -1000,8 +1000,8 @@ function ParcelleDetailContent() {
                       : 'text-green-600'
                   }`}>
                     {parcelle.elevation_meters} m
-                    {parcelle.elevation_meters < 200 && ' ⚠️ Trop bas'}
-                    {parcelle.elevation_meters > 800 && ' ⚠️ Trop haut'}
+                    {parcelle.elevation_meters < 200 && ' (trop bas)'}
+                    {parcelle.elevation_meters > 800 && ' (trop haut)'}
                     {parcelle.elevation_meters >= 200 && parcelle.elevation_meters <= 800 && ' ✓ Optimal'}
                   </dd>
                 </div>
@@ -1016,8 +1016,8 @@ function ParcelleDetailContent() {
                         : 'text-green-600'
                     }`}>
                       {parcelle.slope_percent}%
-                      {parcelle.slope_percent > 30 && ' ⚠️ Très forte'}
-                      {parcelle.slope_percent > 15 && parcelle.slope_percent <= 30 && ' ⚠️ Forte'}
+                      {parcelle.slope_percent > 30 && ' (très forte)'}
+                      {parcelle.slope_percent > 15 && parcelle.slope_percent <= 30 && ' (forte)'}
                       {parcelle.slope_percent <= 15 && ' ✓ Modérée'}
                     </dd>
                   </div>
@@ -1302,12 +1302,17 @@ function ParcelleDetailContent() {
 
           {/* Detection result banner */}
           {detectionResult && (
-            <div className={`mb-4 rounded-lg border p-3 text-sm ${
+            <div className={`mb-4 flex items-start gap-3 rounded-lg border p-3 text-sm ${
               detectionResult.detected
-                ? 'border-amber-200 bg-amber-50 text-amber-800'
-                : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-900'
             }`}>
-              {detectionResult.message}
+              {detectionResult.detected ? (
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+              ) : (
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+              )}
+              <p className="leading-snug">{detectionResult.message}</p>
             </div>
           )}
 
@@ -1841,17 +1846,21 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
 
       {/* Backfill result / error */}
       {backfillResult && (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          ✅ {backfillResult.calculated} mois calculés depuis GEE
-          {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà présents`}
-          {backfillResult.failed > 0 && (
-            <span className="text-amber-700"> · {backfillResult.failed} mois sans image disponible</span>
-          )}
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+          <p>
+            {backfillResult.calculated} mois calculés depuis GEE
+            {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà présents`}
+            {backfillResult.failed > 0 && (
+              <span className="text-amber-700"> · {backfillResult.failed} mois sans image disponible</span>
+            )}
+          </p>
         </div>
       )}
       {backfillError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          ❌ Erreur GEE : {backfillError}
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden />
+          <p>Erreur GEE : {backfillError}</p>
         </div>
       )}
 
