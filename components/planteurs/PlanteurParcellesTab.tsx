@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 
 import { parcellesApi } from '@/lib/api/parcelles';
 import type { Parcelle, ParcelleWithPlanteur } from '@/types/parcelles';
@@ -70,6 +71,7 @@ export function PlanteurParcellesTab({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedParcelleId, setSelectedParcelleId] = useState<string | undefined>();
+  const [mapExpanded, setMapExpanded] = useState(false);
 
   // Calculate stats from parcelles
   const stats: ParcelleStats = {
@@ -103,6 +105,23 @@ export function PlanteurParcellesTab({
   useEffect(() => {
     fetchParcelles();
   }, [fetchParcelles]);
+
+  useEffect(() => {
+    if (!mapExpanded) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMapExpanded(false);
+      }
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mapExpanded]);
 
   // Handle parcelle selection from map
   const handleParcelleSelect = useCallback((parcelle: Parcelle) => {
@@ -146,17 +165,30 @@ export function PlanteurParcellesTab({
   return (
     <div className="space-y-6">
       {/* Header with action button */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h3 className="text-lg font-semibold text-gray-900">Parcelles</h3>
-        {canCreate && (
-          <Link
-            href={`/parcelles/new?planteur_id=${planteurId}`}
-            className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Ajouter parcelle
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {parcelles.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMapExpanded(true)}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              title="Agrandir la carte des parcelles"
+            >
+              <Maximize2 className="h-4 w-4" />
+              Agrandir la carte
+            </button>
+          )}
+          {canCreate && (
+            <Link
+              href={`/parcelles/new?planteur_id=${planteurId}`}
+              className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Ajouter parcelle
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -177,14 +209,14 @@ export function PlanteurParcellesTab({
 
       {/* Mini-map */}
       {parcelles.length > 0 ? (
-        <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <div className="relative rounded-lg border border-gray-200 overflow-hidden">
           <ParcelleMap
             parcelles={parcelles}
             selectedId={selectedParcelleId}
             onSelect={handleParcelleSelect}
-            height="250px"
+            height="320px"
             zoomToFit={true}
-            enableFullscreen={false}
+            enableFullscreen={true}
             showCentroids={false}
           />
         </div>
@@ -201,6 +233,46 @@ export function PlanteurParcellesTab({
               Ajouter une parcelle
             </Link>
           )}
+        </div>
+      )}
+
+      {mapExpanded && parcelles.length > 0 && (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-black/50 p-3 sm:p-6">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Carte des parcelles
+                  {planteurName ? ` · ${planteurName}` : ''}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {stats.total} parcelle{stats.total > 1 ? 's' : ''} · {stats.totalHectares.toFixed(2)} ha
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMapExpanded(false)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                title="Réduire (Échap)"
+              >
+                <Minimize2 className="h-4 w-4" />
+                Réduire
+                <X className="ml-1 h-4 w-4 text-gray-400" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <ParcelleMap
+                parcelles={parcelles}
+                selectedId={selectedParcelleId}
+                onSelect={handleParcelleSelect}
+                height="100%"
+                zoomToFit={true}
+                enableFullscreen={true}
+                showCentroids={false}
+                className="h-full min-h-[60vh]"
+              />
+            </div>
+          </div>
         </div>
       )}
 

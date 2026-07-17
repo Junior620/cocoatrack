@@ -488,6 +488,10 @@ export const parcelleFiltersSchema = z.object({
   source: parcelleSourceSchema.optional(),
   
   import_file_id: z.string().uuid('Invalid import file ID').optional(),
+
+  recent_import_hours: z
+    .union([z.literal(24), z.literal(48)])
+    .optional(),
   
   search: z.string().max(200, 'Search query must be at most 200 characters').optional(),
   

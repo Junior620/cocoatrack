@@ -170,6 +170,9 @@ export const parcellesApi = {
       page: filters.page ? Number(filters.page) : undefined,
       pageSize: filters.pageSize ? Number(filters.pageSize) : undefined,
       zoom: filters.zoom !== undefined ? Number(filters.zoom) : undefined,
+      recent_import_hours: filters.recent_import_hours
+        ? (Number(filters.recent_import_hours) as 24 | 48)
+        : undefined,
     }) as ParcelleFiltersOutput;
     
     const {
@@ -182,6 +185,7 @@ export const parcellesApi = {
       region,
       source,
       import_file_id,
+      recent_import_hours,
       search,
       bbox,
       is_active,
@@ -226,6 +230,9 @@ export const parcellesApi = {
     }
     if (import_file_id) {
       rpcParams.p_import_file_id = import_file_id;
+    }
+    if (recent_import_hours) {
+      rpcParams.p_recent_import_hours = recent_import_hours;
     }
     if (search) {
       rpcParams.p_search = search;

@@ -555,6 +555,12 @@ export interface ParcelleFilters {
   
   /** Filter by import file ID (show parcelles from specific import) */
   import_file_id?: string;
+
+  /**
+   * Show only parcelles from recent imports (last 24h or 48h).
+   * Based on the import applied_at / created_at timestamp.
+   */
+  recent_import_hours?: 24 | 48;
   
   /** Search by parcelle code or planteur name/code */
   search?: string;

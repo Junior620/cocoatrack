@@ -75,6 +75,12 @@ function ParcellesContent() {
   const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
 
   // Parse filters from URL
+  const recentImportParam = searchParams.get('recent_import_hours');
+  const recentImportHours =
+    recentImportParam === '24' || recentImportParam === '48'
+      ? (Number(recentImportParam) as 24 | 48)
+      : undefined;
+
   const filters: ParcelleFilters = {
     page: parseInt(searchParams.get('page') || '1'),
     pageSize: parseInt(searchParams.get('pageSize') || '25'),
@@ -84,6 +90,7 @@ function ParcellesContent() {
     village: searchParams.get('village') || undefined,
     source: (searchParams.get('source') as ParcelleSource) || undefined,
     import_file_id: searchParams.get('import_file_id') || undefined,
+    recent_import_hours: recentImportHours,
     health_status: (searchParams.get('health_status') as HealthStatus) || undefined,
     is_active: searchParams.get('is_active') === 'false' ? false : true,
   };
@@ -113,7 +120,7 @@ function ParcellesContent() {
     } finally {
       setLoading(false);
     }
-  }, [filters.page, filters.pageSize, filters.search, filters.conformity_status, filters.certification, filters.village, filters.source, filters.import_file_id, filters.health_status, filters.is_active, sortConfig.column, sortConfig.direction]);
+  }, [filters.page, filters.pageSize, filters.search, filters.conformity_status, filters.certification, filters.village, filters.source, filters.import_file_id, filters.recent_import_hours, filters.health_status, filters.is_active, sortConfig.column, sortConfig.direction]);
 
   // Fetch KPIs
   const fetchKPIs = useCallback(async () => {
@@ -467,6 +474,27 @@ function ParcellesContent() {
                 ))}
               </select>
             )}
+
+            {/* Recent imports filter */}
+            <select
+              value={filters.recent_import_hours?.toString() || ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                updateFilters({
+                  recent_import_hours:
+                    value === '24' || value === '48'
+                      ? (Number(value) as 24 | 48)
+                      : undefined,
+                  page: 1,
+                });
+              }}
+              className="rounded-lg border border-gray-200 py-2.5 pl-3 pr-8 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              title="Afficher les parcelles issues d'imports récents"
+            >
+              <option value="">Période d&apos;import</option>
+              <option value="24">Imports des dernières 24 h</option>
+              <option value="48">Imports des dernières 48 h</option>
+            </select>
 
             {/* Export Buttons */}
             <div className="flex items-center gap-2">

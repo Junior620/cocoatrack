@@ -139,6 +139,12 @@ export async function GET(request: NextRequest) {
     if (searchParams.has('import_file_id')) {
       rawFilters.import_file_id = searchParams.get('import_file_id');
     }
+    if (searchParams.has('recent_import_hours')) {
+      const hours = Number(searchParams.get('recent_import_hours'));
+      if (hours === 24 || hours === 48) {
+        rawFilters.recent_import_hours = hours;
+      }
+    }
     if (searchParams.has('search')) {
       rawFilters.search = searchParams.get('search');
     }
@@ -180,6 +186,7 @@ export async function GET(request: NextRequest) {
       village,
       source,
       import_file_id,
+      recent_import_hours,
       search,
       bbox,
       is_active,
@@ -216,6 +223,9 @@ export async function GET(request: NextRequest) {
     }
     if (import_file_id) {
       rpcParams.p_import_file_id = import_file_id;
+    }
+    if (recent_import_hours) {
+      rpcParams.p_recent_import_hours = recent_import_hours;
     }
     if (search) {
       rpcParams.p_search = search;
