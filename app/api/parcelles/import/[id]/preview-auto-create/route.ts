@@ -24,6 +24,7 @@ import {
 } from '@/lib/errors/parcelle-errors';
 import { parseShapefile } from '@/lib/services/shapefile-parser';
 import { parseKML, parseKMZ, parseGeoJSON, parseGPX } from '@/lib/services/geo-parser';
+import { ensureDOMParser } from '@/lib/utils/ensure-dom-parser';
 import {
   computeFeatureHash,
   calculateAreaHa,
@@ -296,24 +297,29 @@ async function parseImportFile(
   try {
     const buffer = await fileData.arrayBuffer();
 
+    if (
+      importFile.file_type === 'kml' ||
+      importFile.file_type === 'kmz' ||
+      importFile.file_type === 'gpx'
+    ) {
+      await ensureDOMParser();
+    }
+
     switch (importFile.file_type) {
       case 'shapefile_zip':
         parseResult = await parseShapefile(buffer);
         break;
       case 'kml':
-        const kmlText = await fileData.text();
-        parseResult = parseKML(kmlText);
+        parseResult = await parseKML(new TextDecoder('utf-8').decode(buffer));
         break;
       case 'kmz':
         parseResult = await parseKMZ(buffer);
         break;
       case 'geojson':
-        const geojsonText = await fileData.text();
-        parseResult = parseGeoJSON(geojsonText);
+        parseResult = parseGeoJSON(new TextDecoder('utf-8').decode(buffer));
         break;
       case 'gpx':
-        const gpxText = await fileData.text();
-        parseResult = parseGPX(gpxText);
+        parseResult = await parseGPX(new TextDecoder('utf-8').decode(buffer));
         break;
       default:
         throw createParcelleError(

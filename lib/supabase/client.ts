@@ -10,8 +10,28 @@ type BrowserClient = ReturnType<typeof createBrowserClient<Database>>;
 
 let browserClient: BrowserClient | null = null;
 
-const supabaseFetch: typeof fetch = (input, init) =>
-  fetchWithTimeout(input, init, 15_000);
+function getRequestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+/**
+ * Timeout court pour auth/API, long pour Storage (import shapefile, téléchargements).
+ * Un timeout unique de 15s coupait le parse des gros fichiers.
+ */
+const supabaseFetch: typeof fetch = (input, init) => {
+  const url = getRequestUrl(input);
+  let timeoutMs = 15_000;
+
+  if (url.includes('/storage/v1/')) {
+    timeoutMs = 5 * 60_000; // uploads / downloads jusqu'à 50 Mo
+  } else if (url.includes('/auth/v1/')) {
+    timeoutMs = 20_000;
+  }
+
+  return fetchWithTimeout(input, init, timeoutMs);
+};
 
 /**
  * Creates a Supabase client for use in browser/client components.

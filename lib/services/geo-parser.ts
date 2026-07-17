@@ -7,6 +7,7 @@ import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson'
 import { normalizeToMultiPolygon, normalizeGeometryRings } from './geometry-service';
 import type { ParseError, ParseWarning } from '@/types/parcelles';
 import { PARCELLE_ERROR_CODES } from '@/types/parcelles';
+import { createDOMParser } from '@/lib/utils/dom-parser';
 
 /**
  * Result of parsing a geo file
@@ -74,15 +75,15 @@ async function extractKmlFromKmz(buffer: ArrayBuffer): Promise<string> {
  * @param kmlContent - KML content as string
  * @returns Parsed features with normalized geometry
  */
-function parseKmlContent(kmlContent: string): GeoParseResult {
+async function parseKmlContent(kmlContent: string): Promise<GeoParseResult> {
   const errors: ParseError[] = [];
   const warnings: ParseWarning[] = [];
   const features: Feature<MultiPolygon>[] = [];
   const fieldSet = new Set<string>();
   
   try {
-    // Parse KML to DOM
-    const parser = new DOMParser();
+    // Parse KML to DOM (native in browser; polyfilled via ensureDOMParser on server)
+    const parser = createDOMParser();
     const kmlDoc = parser.parseFromString(kmlContent, 'text/xml');
     
     // Check for parse errors
@@ -167,7 +168,7 @@ function parseKmlContent(kmlContent: string): GeoParseResult {
  * @param content - KML file content as string
  * @returns Parsed features with normalized geometry
  */
-export function parseKML(content: string): GeoParseResult {
+export async function parseKML(content: string): Promise<GeoParseResult> {
   return parseKmlContent(content);
 }
 
@@ -191,15 +192,15 @@ export async function parseKMZ(buffer: ArrayBuffer): Promise<GeoParseResult> {
  * @param gpxContent - GPX content as string
  * @returns Parsed features with normalized geometry
  */
-function parseGpxContent(gpxContent: string): GeoParseResult {
+async function parseGpxContent(gpxContent: string): Promise<GeoParseResult> {
   const errors: ParseError[] = [];
   const warnings: ParseWarning[] = [];
   const features: Feature<MultiPolygon>[] = [];
   const fieldSet = new Set<string>();
   
   try {
-    // Parse GPX to DOM
-    const parser = new DOMParser();
+    // Parse GPX to DOM (native in browser; polyfilled via ensureDOMParser on server)
+    const parser = createDOMParser();
     const gpxDoc = parser.parseFromString(gpxContent, 'text/xml');
     
     // Check for parse errors
@@ -336,7 +337,7 @@ function parseGpxContent(gpxContent: string): GeoParseResult {
  * @param content - GPX file content as string
  * @returns Parsed features with normalized geometry
  */
-export function parseGPX(content: string): GeoParseResult {
+export async function parseGPX(content: string): Promise<GeoParseResult> {
   return parseGpxContent(content);
 }
 

@@ -31,6 +31,7 @@ import {
 } from '@/lib/errors/parcelle-errors';
 import { parseShapefile } from '@/lib/services/shapefile-parser';
 import { parseKML, parseKMZ, parseGeoJSON, parseGPX } from '@/lib/services/geo-parser';
+import { ensureDOMParser } from '@/lib/utils/ensure-dom-parser';
 import {
   computeFeatureHash,
   calculateAreaHa,
@@ -227,6 +228,13 @@ export async function POST(
 
     // Re-parse to get the features (parse is idempotent)
     const parsedFeatures = await parseImportFile(supabase, typedImportFile);
+
+    if (parsedFeatures.length === 0) {
+      return validationErrorResponse(
+        'features',
+        'Aucune parcelle exploitable n\'a pu être relue depuis le fichier. Réessayez l\'import ou convertissez le fichier en GeoJSON.'
+      );
+    }
 
     // Check feature limit
     if (parsedFeatures.length > PARCELLE_LIMITS.MAX_FEATURES_PER_IMPORT) {
@@ -561,14 +569,19 @@ export async function POST(
     }
 
     // Update import file record with results
+    // Never mark as applied when nothing was created — keeps the file re-importable.
+    const didApply = createdIds.length > 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: updateError } = await (supabase.from('parcel_import_files') as any)
       .update({
-        import_status: 'applied',
+        import_status: didApply ? 'applied' : 'parsed',
         nb_applied: createdIds.length,
         nb_skipped_duplicates: nbSkipped,
-        applied_by: user.id,
-        applied_at: new Date().toISOString(),
+        applied_by: didApply ? user.id : null,
+        applied_at: didApply ? new Date().toISOString() : null,
+        failed_reason: didApply
+          ? null
+          : 'Aucune parcelle créée lors de l\'application. Vous pouvez réessayer.',
       })
       .eq('id', importId);
 
@@ -624,24 +637,30 @@ async function parseImportFile(
   try {
     const buffer = await fileData.arrayBuffer();
 
+    // KML / KMZ / GPX need a DOMParser on the Node runtime
+    if (
+      importFile.file_type === 'kml' ||
+      importFile.file_type === 'kmz' ||
+      importFile.file_type === 'gpx'
+    ) {
+      await ensureDOMParser();
+    }
+
     switch (importFile.file_type) {
       case 'shapefile_zip':
         parseResult = await parseShapefile(buffer);
         break;
       case 'kml':
-        const kmlText = await fileData.text();
-        parseResult = parseKML(kmlText);
+        parseResult = await parseKML(new TextDecoder('utf-8').decode(buffer));
         break;
       case 'kmz':
         parseResult = await parseKMZ(buffer);
         break;
       case 'geojson':
-        const geojsonText = await fileData.text();
-        parseResult = parseGeoJSON(geojsonText);
+        parseResult = parseGeoJSON(new TextDecoder('utf-8').decode(buffer));
         break;
       case 'gpx':
-        const gpxText = await fileData.text();
-        parseResult = parseGPX(gpxText);
+        parseResult = await parseGPX(new TextDecoder('utf-8').decode(buffer));
         break;
       default:
         throw createParcelleError(

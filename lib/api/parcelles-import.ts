@@ -347,28 +347,101 @@ export const parcellesImportApi = {
 
     if (existingImport) {
       // Fetch the full import record to check if it's resumable
-      const { data: existingRecord } = await supabase
+      const { data: existingRecord, error: existingError } = await supabase
         .from('parcel_import_files')
         .select('*')
         .eq('id', existingImport.id)
         .single();
 
-      if (existingRecord) {
-        const status = (existingRecord as { import_status: string }).import_status;
-        if (status !== 'applied') {
-          // Import exists but not yet applied, return it so the caller can resume
-          console.log(`[parcellesImportApi.upload] Resuming existing import ${existingImport.id} (status: ${status})`);
-          return existingRecord as ParcelImportFile;
-        }
+      if (existingError) {
+        console.error('[parcellesImportApi.upload] Failed to load existing import:', existingError);
       }
 
-      throw {
-        error_code: PARCELLE_ERROR_CODES.DUPLICATE_FILE,
-        message: 'This file has already been uploaded',
-        details: {
-          existing_import_id: existingImport.id,
-        },
-      };
+      if (existingRecord) {
+        const record = existingRecord as ParcelImportFile & {
+          import_status: string;
+          nb_applied?: number | null;
+          file_sha256?: string;
+        };
+        const status = record.import_status;
+        const nbApplied = Number(record.nb_applied ?? 0);
+
+        // Successfully applied imports stay blocked.
+        if (status === 'applied' && nbApplied > 0) {
+          throw {
+            error_code: PARCELLE_ERROR_CODES.DUPLICATE_FILE,
+            message:
+              'Ce fichier a déjà été importé avec succès. Choisissez un autre fichier ou consultez les parcelles existantes.',
+            details: {
+              existing_import_id: existingImport.id,
+              nb_applied: nbApplied,
+            },
+          };
+        }
+
+        // Empty / failed / unfinished imports: free the unique (cooperative_id, file_sha256)
+        // index so a fresh upload can proceed. DELETE is blocked by RLS (audit trail),
+        // so we rename the hash instead of deleting the row.
+        console.log(
+          `[parcellesImportApi.upload] Freeing stuck import ${existingImport.id} (status=${status}, nb_applied=${nbApplied})`
+        );
+
+        const { error: freeError } = await supabase
+          .from('parcel_import_files')
+          .update({
+            file_sha256: `${record.file_sha256 || fileSha256}_superseded_${Date.now()}`,
+            import_status: status === 'applied' ? 'failed' : status,
+            failed_reason:
+              status === 'applied'
+                ? 'Import annulé automatiquement (0 parcelle créée) pour permettre un nouvel essai.'
+                : record.failed_reason || null,
+          })
+          .eq('id', existingImport.id);
+
+        if (freeError) {
+          console.error('[parcellesImportApi.upload] Failed to free stuck import:', freeError);
+          // Last resort: try to resume the existing row after resetting status
+          const { data: resetRecord, error: resetError } = await supabase
+            .from('parcel_import_files')
+            .update({
+              import_status: 'uploaded',
+              nb_applied: 0,
+              nb_skipped_duplicates: 0,
+              failed_reason: null,
+              applied_at: null,
+              applied_by: null,
+              parse_report: {},
+            })
+            .eq('id', existingImport.id)
+            .select('*')
+            .single();
+
+          if (!resetError && resetRecord) {
+            return resetRecord as ParcelImportFile;
+          }
+
+          throw {
+            error_code: PARCELLE_ERROR_CODES.DUPLICATE_FILE,
+            message:
+              'Ce fichier est bloqué en base (doublon SHA256). Exécutez la migration de déblocage ou contactez un administrateur.',
+            details: {
+              existing_import_id: existingImport.id,
+              reason: freeError.message,
+            },
+          };
+        }
+
+        // Hash freed — continue with a brand new upload below
+      } else {
+        throw {
+          error_code: PARCELLE_ERROR_CODES.DUPLICATE_FILE,
+          message:
+            'Ce fichier a déjà été téléversé, mais l\'enregistrement est inaccessible (RLS). Réessayez ou contactez un administrateur.',
+          details: {
+            existing_import_id: existingImport.id,
+          },
+        };
+      }
     }
 
     // Generate unique storage path: {cooperative_id or user_id}/{timestamp}_{filename}
@@ -503,18 +576,72 @@ export const parcellesImportApi = {
       .single();
 
     if (insertError) {
-      // Cleanup: delete uploaded file if record creation fails
-      await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
-      
-      // Check for unique constraint violation (duplicate SHA256)
-      if (insertError.message.includes('uniq_import_file_sha256')) {
+      // Unique constraint still pointing at a stuck row — free it and retry once.
+      const isDuplicateSha =
+        insertError.message.includes('uniq_import_file_sha256') ||
+        insertError.code === '23505';
+
+      if (isDuplicateSha) {
+        console.warn(
+          '[parcellesImportApi.upload] Insert hit unique SHA constraint, freeing stuck row(s)'
+        );
+
+        let stuckQuery = supabase
+          .from('parcel_import_files')
+          .select('id, file_sha256, import_status, nb_applied')
+          .eq('file_sha256', fileSha256);
+
+        stuckQuery = cooperativeId
+          ? stuckQuery.eq('cooperative_id', cooperativeId)
+          : stuckQuery.is('cooperative_id', null).eq('created_by', user.id);
+
+        const { data: stuckRows } = await stuckQuery;
+
+        for (const stuck of stuckRows || []) {
+          const nbApplied = Number((stuck as { nb_applied?: number }).nb_applied ?? 0);
+          const status = (stuck as { import_status: string }).import_status;
+          if (status === 'applied' && nbApplied > 0) {
+            await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
+            throw {
+              error_code: PARCELLE_ERROR_CODES.DUPLICATE_FILE,
+              message:
+                'Ce fichier a déjà été importé avec succès. Choisissez un autre fichier ou consultez les parcelles existantes.',
+              details: { existing_import_id: (stuck as { id: string }).id },
+            };
+          }
+
+          await supabase
+            .from('parcel_import_files')
+            .update({
+              file_sha256: `${(stuck as { file_sha256: string }).file_sha256}_superseded_${Date.now()}`,
+              import_status: status === 'applied' ? 'failed' : status,
+              failed_reason:
+                'Import remplacé pour permettre un nouvel essai (aucune parcelle créée).',
+            })
+            .eq('id', (stuck as { id: string }).id);
+        }
+
+        const { data: retryRecord, error: retryError } = await supabase
+          .from('parcel_import_files')
+          .insert(insertData)
+          .select()
+          .single();
+
+        if (!retryError && retryRecord) {
+          return retryRecord as ParcelImportFile;
+        }
+
+        await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
         throw {
           error_code: PARCELLE_ERROR_CODES.DUPLICATE_FILE,
-          message: 'This file has already been uploaded (concurrent upload detected)',
-          details: {},
+          message:
+            'Impossible de débloquer ce fichier en base. Appliquez la migration 20260717140000 ou exécutez le SQL de déblocage dans Supabase.',
+          details: { reason: retryError?.message || insertError.message },
         };
       }
-      
+
+      // Cleanup: delete uploaded file if record creation fails
+      await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
       throw new Error(`Failed to create import record: ${insertError.message}`);
     }
 
@@ -664,15 +791,22 @@ export const parcellesImportApi = {
 
     if (downloadError || !fileData) {
       // Update status to failed
+      const downloadMessage =
+        downloadError?.message ||
+        'Impossible de télécharger le fichier depuis le stockage';
       await supabase
         .from('parcel_import_files')
         .update({
           import_status: 'failed',
-          failed_reason: `Failed to download file: ${downloadError?.message || 'Unknown error'}`,
+          failed_reason: `Failed to download file: ${downloadMessage}`,
         })
         .eq('id', importId);
 
-      throw new Error(`Failed to download file: ${downloadError?.message || 'Unknown error'}`);
+      throw new Error(
+        downloadMessage.includes('Délai dépassé')
+          ? 'Le téléchargement du fichier a expiré. Réessayez avec une meilleure connexion.'
+          : `Échec du téléchargement du fichier: ${downloadMessage}`
+      );
     }
 
     console.log('[parcellesImportApi.parse] File downloaded, size:', fileData.size, 'bytes');
@@ -697,19 +831,16 @@ export const parcellesImportApi = {
           parseResult = await parseShapefile(buffer);
           break;
         case 'kml':
-          const kmlText = await fileData.text();
-          parseResult = parseKML(kmlText);
+          parseResult = await parseKML(new TextDecoder('utf-8').decode(buffer));
           break;
         case 'kmz':
           parseResult = await parseKMZ(buffer);
           break;
         case 'geojson':
-          const geojsonText = await fileData.text();
-          parseResult = parseGeoJSON(geojsonText);
+          parseResult = parseGeoJSON(new TextDecoder('utf-8').decode(buffer));
           break;
         case 'gpx':
-          const gpxText = await fileData.text();
-          parseResult = parseGPX(gpxText);
+          parseResult = await parseGPX(new TextDecoder('utf-8').decode(buffer));
           break;
         default:
           throw {

@@ -8,6 +8,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { applyRateLimit, addSecurityHeaders } from '@/lib/security/middleware';
 import { parseShapefile } from '@/lib/services/shapefile-parser';
 import { parseKML, parseKMZ, parseGeoJSON, parseGPX } from '@/lib/services/geo-parser';
+import { ensureDOMParser } from '@/lib/utils/ensure-dom-parser';
 import {
   computeFeatureHash,
   calculateAreaHa,
@@ -131,24 +132,29 @@ export async function POST(
     try {
       const buffer = await fileData.arrayBuffer();
 
+      if (
+        typedImportFile.file_type === 'kml' ||
+        typedImportFile.file_type === 'kmz' ||
+        typedImportFile.file_type === 'gpx'
+      ) {
+        await ensureDOMParser();
+      }
+
       switch (typedImportFile.file_type) {
         case 'shapefile_zip':
           parseResult = await parseShapefile(buffer);
           break;
         case 'kml':
-          const kmlText = await fileData.text();
-          parseResult = parseKML(kmlText);
+          parseResult = await parseKML(new TextDecoder('utf-8').decode(buffer));
           break;
         case 'kmz':
           parseResult = await parseKMZ(buffer);
           break;
         case 'geojson':
-          const geojsonText = await fileData.text();
-          parseResult = parseGeoJSON(geojsonText);
+          parseResult = parseGeoJSON(new TextDecoder('utf-8').decode(buffer));
           break;
         case 'gpx':
-          const gpxText = await fileData.text();
-          parseResult = parseGPX(gpxText);
+          parseResult = await parseGPX(new TextDecoder('utf-8').decode(buffer));
           break;
         default:
           return validationErrorResponse('file_type', `Unsupported file type: ${typedImportFile.file_type}`);

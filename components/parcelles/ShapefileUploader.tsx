@@ -436,20 +436,37 @@ export function ShapefileUploader({
       setState('success');
     } catch (err: unknown) {
       setState('error');
-      
-      // Debug: log raw error with all enumerable and non-enumerable properties
-      console.error('[ShapefileUploader] Raw error:', err);
-      console.error('[ShapefileUploader] Error type:', typeof err);
-      console.error('[ShapefileUploader] Error constructor:', err?.constructor?.name);
-      if (err && typeof err === 'object') {
-        console.error('[ShapefileUploader] Error keys:', Object.keys(err));
-        console.error('[ShapefileUploader] Error JSON:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
-      }
-      
+
+      const formatUnknownError = (value: unknown): string => {
+        if (typeof value === 'string' && value.trim()) return value;
+        if (value instanceof Error && value.message) return value.message;
+        if (value && typeof value === 'object') {
+          const record = value as Record<string, unknown>;
+          if (typeof record.message === 'string' && record.message.trim()) {
+            return record.message;
+          }
+          if (typeof record.error_code === 'string') {
+            return `Erreur ${record.error_code}`;
+          }
+          try {
+            const serialized = JSON.stringify(value, Object.getOwnPropertyNames(value));
+            if (serialized && serialized !== '{}') return serialized;
+          } catch {
+            // ignore serialization failures
+          }
+        }
+        return 'Une erreur inconnue est survenue lors de l\'import';
+      };
+
+      console.error(
+        '[ShapefileUploader] Import failed:',
+        formatUnknownError(err),
+        err
+      );
+
       // Handle API errors - check for error_code property (ParcelleApiError format)
       if (err && typeof err === 'object' && 'error_code' in err) {
         const apiError = err as ParcelleApiError;
-        console.error('[ShapefileUploader] API Error detected:', apiError.error_code, apiError.message);
         setError({
           code: apiError.error_code,
           message: apiError.message || 'Erreur API',
@@ -457,19 +474,17 @@ export function ShapefileUploader({
         });
         onError?.(apiError);
       } else if (err instanceof Error) {
-        // Standard Error object
-        console.error('[ShapefileUploader] Standard Error:', err.message);
+        const isTimeout =
+          err.message.includes('Délai dépassé') || err.name === 'AbortError';
         setError({
-          code: 'UNKNOWN_ERROR',
-          message: err.message || 'Une erreur est survenue',
+          code: isTimeout ? 'TIMEOUT' : 'UNKNOWN_ERROR',
+          message: isTimeout
+            ? 'Le transfert a pris trop de temps. Vérifiez votre connexion et réessayez.'
+            : err.message || 'Une erreur est survenue',
         });
         onError?.(err);
       } else {
-        // Unknown error type
-        const errorMessage = typeof err === 'string' ? err : 
-          (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) :
-          'Une erreur inconnue est survenue';
-        console.error('[ShapefileUploader] Unknown error:', errorMessage);
+        const errorMessage = formatUnknownError(err);
         setError({
           code: 'UNKNOWN_ERROR',
           message: errorMessage,

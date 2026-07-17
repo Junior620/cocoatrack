@@ -231,7 +231,9 @@ function NewParcelleContent() {
         const redirected = await checkAndRedirect();
         if (!redirected) {
           setApplyError(
-            `Aucune parcelle créée. ${result.nb_skipped} doublon(s) ignoré(s). Les parcelles existent peut-être déjà.`
+            result.nb_skipped > 0
+              ? `Aucune parcelle créée. ${result.nb_skipped} élément(s) ignoré(s) (doublons ou erreurs).`
+              : 'Aucune parcelle créée. Le fichier a été lu à l\'aperçu, mais aucune géométrie n\'a pu être appliquée. Réessayez l\'import.'
           );
           setIsApplying(false);
         }
