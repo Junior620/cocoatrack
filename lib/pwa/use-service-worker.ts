@@ -69,23 +69,28 @@ export function useServiceWorker(): UseServiceWorkerReturn {
     // Get update manager instance
     const updateManager = getSWUpdateManager();
 
-    // Register service worker
-    registerServiceWorker()
-      .then((wb) => {
-        setState((prev) => ({
-          ...prev,
-          isRegistered: wb !== null,
-          isLoading: false,
-          currentVersion: updateManager.getCurrentVersion(),
-        }));
-      })
-      .catch((error) => {
-        setState((prev) => ({
-          ...prev,
-          error: error as Error,
-          isLoading: false,
-        }));
-      });
+    // Leave the initial render/network free for the page's critical data.
+    let cancelled = false;
+    const registrationTimer = window.setTimeout(() => {
+      registerServiceWorker()
+        .then((wb) => {
+          if (cancelled) return;
+          setState((prev) => ({
+            ...prev,
+            isRegistered: wb !== null,
+            isLoading: false,
+            currentVersion: updateManager.getCurrentVersion(),
+          }));
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setState((prev) => ({
+            ...prev,
+            error: error as Error,
+            isLoading: false,
+          }));
+        });
+    }, 1_000);
 
     // Listen for update available event
     const handleUpdateAvailable = () => {
@@ -99,6 +104,8 @@ export function useServiceWorker(): UseServiceWorkerReturn {
     window.addEventListener('sw-update-available', handleUpdateAvailable);
 
     return () => {
+      cancelled = true;
+      window.clearTimeout(registrationTimer);
       window.removeEventListener('sw-update-available', handleUpdateAvailable);
     };
   }, []);

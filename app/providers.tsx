@@ -21,13 +21,21 @@ export function Providers({ children, initialProfile }: ProvidersProps) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Keep data fresh enough without refetching on every navigation
-            staleTime: 2 * 60 * 1000, // 2 minutes
-            gcTime: 10 * 60 * 1000, // 10 minutes
+            // Favor cached data immediately when the connection is unstable.
+            staleTime: 5 * 60 * 1000, // 5 minutes
+            gcTime: 30 * 60 * 1000, // 30 minutes
             refetchOnWindowFocus: false,
             refetchOnMount: false,
             refetchOnReconnect: true,
-            retry: 1,
+            networkMode: 'offlineFirst',
+            retry: 2,
+            retryDelay: (attemptIndex) =>
+              Math.min(1_000 * 2 ** attemptIndex, 10_000),
+          },
+          mutations: {
+            // Do not retry writes automatically: it could create duplicates.
+            networkMode: 'offlineFirst',
+            retry: 0,
           },
         },
       })

@@ -1,63 +1,71 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+
+interface NetworkInformation {
+  saveData?: boolean;
+  effectiveType?: string;
+}
 
 export default function HeroVideo() {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const connection = (
+      navigator as Navigator & { connection?: NetworkInformation }
+    ).connection;
+    const slowConnection =
+      connection?.saveData ||
+      connection?.effectiveType === 'slow-2g' ||
+      connection?.effectiveType === '2g';
 
-    const handleLoadedData = () => {
-      console.log('Video loaded successfully');
-      setIsLoaded(true);
-      video.play().catch((error) => {
-        console.error('Autoplay failed:', error);
-      });
+    if (slowConnection) return;
+
+    const windowWithIdle = window as typeof window & {
+      requestIdleCallback?: (callback: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
     };
-
-    const handleError = (e: Event) => {
-      console.error('Video error:', e);
-      const target = e.target as HTMLVideoElement;
-      if (target.error) {
-        console.error('Error code:', target.error.code);
-        console.error('Error message:', target.error.message);
-      }
-    };
-
-    video.addEventListener('loadeddata', handleLoadedData);
-    video.addEventListener('error', handleError);
-
-    // Force load
-    video.load();
+    const idleId = windowWithIdle.requestIdleCallback?.(
+      () => setShouldLoad(true)
+    );
+    const timeoutId =
+      idleId === undefined
+        ? window.setTimeout(() => setShouldLoad(true), 1_500)
+        : undefined;
 
     return () => {
-      video.removeEventListener('loadeddata', handleLoadedData);
-      video.removeEventListener('error', handleError);
+      if (idleId !== undefined) {
+        windowWithIdle.cancelIdleCallback?.(idleId);
+      }
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, []);
 
   return (
     <>
-      <video
-        ref={videoRef}
-        loop
-        muted
-        playsInline
-        preload="auto"
-        className="absolute inset-0 h-full w-full object-cover"
-        style={{ opacity: isLoaded ? 1 : 0, transition: 'opacity 0.5s' }}
-      >
-        <source src="/hero.mp4" type="video/mp4" />
-      </video>
+      {shouldLoad && (
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="none"
+          onCanPlay={() => setIsLoaded(true)}
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ opacity: isLoaded ? 1 : 0, transition: 'opacity 0.5s' }}
+        >
+          <source src="/hero.mp4" type="video/mp4" />
+        </video>
+      )}
       
-      {/* Loading indicator */}
       {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-green-900 via-green-800 to-green-950">
-          <div className="text-white text-xl">Chargement...</div>
-        </div>
+        <div
+          className="absolute inset-0 bg-gradient-to-br from-green-900 via-green-800 to-green-950"
+          aria-hidden="true"
+        />
       )}
     </>
   );

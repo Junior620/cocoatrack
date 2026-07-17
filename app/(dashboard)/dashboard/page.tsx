@@ -6,9 +6,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { 
-  KPIGrid, 
-  TrendChart, 
-  TopPerformers, 
+  KPIGrid,
   PageTransition, 
   AnimatedSection,
   EmptyState,
@@ -17,6 +15,10 @@ import {
   OrphanParcellesWidget,
   ReceiptPipelineWidget,
 } from '@/components/dashboard';
+import {
+  LazyTopPerformers as TopPerformers,
+  LazyTrendChart as TrendChart,
+} from '@/components/lazy';
 import {
   useDashboardMetricsWithComparison,
   useDailyTrend,

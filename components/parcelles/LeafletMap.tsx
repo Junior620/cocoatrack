@@ -300,8 +300,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
 
     centroidLayerRef.current = L.layerGroup().addTo(map);
 
-    // Handle map move/zoom for bbox callback
-    // Using both moveend and zoomend ensures bbox is updated on pan and zoom
+    // moveend already fires after both a pan and a zoom.
     const handleBoundsChange = () => {
       if (onBboxChangeRef.current) {
         const bounds = map.getBounds();
@@ -316,7 +315,6 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     };
     
     map.on('moveend', handleBoundsChange);
-    map.on('zoomend', handleBoundsChange);
 
     mapRef.current = map;
 
@@ -325,7 +323,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
       map.remove();
       mapRef.current = null;
     };
-  }, [enableFullscreen, tileLayer]);
+  }, [enableFullscreen]);
 
   // Update tile layer when tileLayer prop changes
   useEffect(() => {

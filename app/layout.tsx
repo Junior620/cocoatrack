@@ -12,7 +12,7 @@ const inter = Inter({
   variable: '--font-inter',
   display: 'swap',
   preload: true,
-  adjustFontFallback: false,
+  adjustFontFallback: true,
 });
 
 export const metadata: Metadata = {

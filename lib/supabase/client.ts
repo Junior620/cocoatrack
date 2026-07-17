@@ -4,10 +4,14 @@
 import { createBrowserClient } from '@supabase/ssr';
 
 import type { Database } from '@/types/database.gen';
+import { fetchWithTimeout } from '@/lib/utils/fetch-with-timeout';
 
 type BrowserClient = ReturnType<typeof createBrowserClient<Database>>;
 
 let browserClient: BrowserClient | null = null;
+
+const supabaseFetch: typeof fetch = (input, init) =>
+  fetchWithTimeout(input, init, 15_000);
 
 /**
  * Creates a Supabase client for use in browser/client components.
@@ -39,7 +43,11 @@ export function createClient() {
   }
 
   if (!browserClient) {
-    browserClient = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+    browserClient = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey, {
+      global: {
+        fetch: supabaseFetch,
+      },
+    });
   }
   return browserClient;
 }

@@ -290,9 +290,6 @@ export async function POST(request: NextRequest) {
             generateRaster: true, // Generate raster for visualization
           }
         );
-        
-        // Cache the result - don't pass supabase client so it uses service role key
-        await ndviService.cacheNDVI(ndviResult);
         cached = false;
       }
     } catch (error) {

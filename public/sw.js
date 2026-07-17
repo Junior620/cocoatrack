@@ -9,16 +9,17 @@ importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox
 // SERVICE WORKER VERSION
 // REQ-SW-002: Track SW version for diagnostics
 // ============================================================================
-const SW_VERSION = '2.0.2';
+const SW_VERSION = '2.0.3';
 
 // ============================================================================
 // CACHE NAMES (Versioned)
 // REQ-CACHE-002: Cache versioning for cleanup
 // ============================================================================
-const CACHE_VERSION = 'v2.1';
+const CACHE_VERSION = 'v2.2';
 const CACHE_NAMES = {
   PRECACHE: `cocoatrack-precache-${CACHE_VERSION}`,
   STATIC: `cocoatrack-static-${CACHE_VERSION}`,
+  TILES: `cocoatrack-tiles-${CACHE_VERSION}`,
   IMAGES: `cocoatrack-images-${CACHE_VERSION}`,
   API: `cocoatrack-api-${CACHE_VERSION}`,
   REFERENTIAL: `cocoatrack-referential-${CACHE_VERSION}`,
@@ -93,6 +94,13 @@ if (workbox) {
     })
   );
 
+  workbox.routing.setCatchHandler(async ({ event }) => {
+    if (event.request.destination === 'document') {
+      return (await caches.match('/offline.html')) || Response.error();
+    }
+    return Response.error();
+  });
+
   // ============================================================================
   // CSS/JS WITH HASHED FILENAMES
   // Strategy: StaleWhileRevalidate
@@ -135,6 +143,34 @@ if (workbox) {
         new workbox.expiration.ExpirationPlugin({
           maxEntries: 30,
           maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
+        }),
+      ],
+    })
+  );
+
+  // ============================================================================
+  // MAP TILES
+  // Keep recently visited zones available on unstable connections.
+  // ============================================================================
+  workbox.routing.registerRoute(
+    ({ request, url }) =>
+      request.destination === 'image' &&
+      (
+        url.hostname.includes('tile.openstreetmap.org') ||
+        url.hostname.includes('arcgisonline.com') ||
+        url.hostname.includes('basemaps.cartocdn.com') ||
+        url.pathname.includes('/api/satellite/tiles/')
+      ),
+    new workbox.strategies.CacheFirst({
+      cacheName: CACHE_NAMES.TILES,
+      plugins: [
+        new workbox.cacheableResponse.CacheableResponsePlugin({
+          statuses: [0, 200],
+        }),
+        new workbox.expiration.ExpirationPlugin({
+          maxEntries: 500,
+          maxAgeSeconds: 14 * 24 * 60 * 60,
+          purgeOnQuotaError: true,
         }),
       ],
     })
@@ -274,23 +310,6 @@ self.addEventListener('activate', (event) => {
       self.clients.claim(),
     ])
   );
-});
-
-// ============================================================================
-// FETCH EVENT - OFFLINE FALLBACK
-// REQ-PERF-004: Offline Fallback Pages
-// ============================================================================
-self.addEventListener('fetch', (event) => {
-  // Only handle navigation requests for offline fallback
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          // Network failed, try to serve offline page
-          return caches.match('/offline.html');
-        })
-    );
-  }
 });
 
 // ============================================================================

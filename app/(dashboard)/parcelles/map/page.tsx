@@ -38,7 +38,7 @@ import type { PaginatedResult } from '@/types';
 import { MapViewSwitcher } from '@/components/parcelles/MapViewSwitcher';
 
 // Debounce delay for bbox changes (ms)
-const BBOX_DEBOUNCE_DELAY = 300;
+const BBOX_DEBOUNCE_DELAY = 600;
 
 // Bounding boxes des 10 régions du Cameroun [minLng, minLat, maxLng, maxLat]
 const CAMEROON_REGION_BBOX: Record<string, [number, number, number, number]> = {
@@ -231,7 +231,13 @@ function ParcellesMapContent() {
 
   // Handle bbox change from map (with zoom level)
   const handleBboxChange = useCallback((bbox: [number, number, number, number], zoom?: number) => {
-    setCurrentBbox(bbox);
+    // Stabilise la bbox afin d'éviter des requêtes pour des déplacements infimes.
+    setCurrentBbox(bbox.map((value) => Number(value.toFixed(5))) as [
+      number,
+      number,
+      number,
+      number,
+    ]);
     if (zoom !== undefined) {
       setMapZoom(Math.round(zoom)); // Round to integer for API validation
     }
