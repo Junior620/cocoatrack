@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth, hasPermission } from '@/lib/auth';
 import { planteursApi } from '@/lib/api/planteurs';
 import { PlanteurParcellesTab } from '@/components/planteurs/PlanteurParcellesTab';
+import { PlanteurTraceabilityTab } from '@/components/planteurs/PlanteurTraceabilityTab';
 import type { PlanteurWithRelations, PlanteurStats } from '@/lib/validations/planteur';
 import type { PaginatedResult } from '@/types';
 import type { Database } from '@/types/database.gen';
@@ -17,7 +18,7 @@ import type { Database } from '@/types/database.gen';
 type Delivery = Database['public']['Tables']['deliveries']['Row'];
 
 // Tab types
-type TabId = 'info' | 'parcelles';
+type TabId = 'info' | 'parcelles' | 'traceabilite';
 
 export default function PlanteurDetailPage() {
   const params = useParams();
@@ -35,7 +36,9 @@ export default function PlanteurDetailPage() {
   // Tab state - default to 'info', or use URL param
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     const tabParam = searchParams.get('tab');
-    return tabParam === 'parcelles' ? 'parcelles' : 'info';
+    if (tabParam === 'parcelles') return 'parcelles';
+    if (tabParam === 'traceabilite') return 'traceabilite';
+    return 'info';
   });
 
   const canEdit = user && hasPermission(user.role, 'planteurs:update');
@@ -232,6 +235,19 @@ export default function PlanteurDetailPage() {
               Parcelles
             </span>
           </button>
+          <button
+            onClick={() => handleTabChange('traceabilite')}
+            className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors ${
+              activeTab === 'traceabilite'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <TimelineIcon className="h-4 w-4" />
+              Traçabilité
+            </span>
+          </button>
         </nav>
       </div>
 
@@ -322,7 +338,15 @@ export default function PlanteurDetailPage() {
             planteurId={planteurId}
             planteurName={planteur.name}
             canCreate={canCreateParcelle ?? false}
+            canEdit={canEdit ?? false}
           />
+        </div>
+      )}
+
+      {/* Traçabilité (Planteur 360) */}
+      {activeTab === 'traceabilite' && (
+        <div className="rounded-lg bg-white p-6 shadow">
+          <PlanteurTraceabilityTab planteurId={planteurId} planteurName={planteur.name} />
         </div>
       )}
     </div>
@@ -415,6 +439,15 @@ function MapIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+    </svg>
+  );
+}
+
+function TimelineIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h8M8 12h8M8 17h8" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 4h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z" />
     </svg>
   );
 }

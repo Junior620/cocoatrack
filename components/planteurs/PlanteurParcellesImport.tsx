@@ -40,6 +40,8 @@ import type {
   ImportDefaults,
   ParcelleApiError,
 } from '@/types/parcelles';
+import { suggestPlanteurPrefillFromImport } from '@/lib/planteurs/import-prefill';
+import type { CreatePlanteurInput } from '@/lib/validations/planteur';
 
 // Dynamically import ParsedFeaturesMiniMap to avoid SSR issues with Leaflet
 // This component displays ALL parsed polygons on a single map
@@ -60,6 +62,8 @@ export interface PlanteurParcellesImportProps {
   defaultExpanded?: boolean;
   /** Callback when import data changes (for parent form to track) */
   onImportDataChange?: (data: ImportData | null) => void;
+  /** Callback when import suggests planteur field values (name, village, code…) */
+  onPlanteurPrefill?: (values: Partial<CreatePlanteurInput>) => void;
   /** Additional CSS classes */
   className?: string;
   /** Whether the component is disabled */
@@ -111,6 +115,7 @@ export interface ImportData {
 export function PlanteurParcellesImport({
   defaultExpanded = false,
   onImportDataChange,
+  onPlanteurPrefill,
   className,
   disabled = false,
 }: PlanteurParcellesImportProps) {
@@ -169,6 +174,12 @@ export function PlanteurParcellesImport({
       const fields = Object.keys(parsedFeatures[0].dbf_attributes || {});
       setDbfFields(fields);
     }
+
+    // Suggest planteur prefill from import attributes (name, village, code…)
+    const prefill = suggestPlanteurPrefillFromImport(parsedFeatures);
+    if (prefill && onPlanteurPrefill) {
+      onPlanteurPrefill(prefill.values);
+    }
     
     // Notify parent with initial import data
     if (importFile) {
@@ -183,7 +194,7 @@ export function PlanteurParcellesImport({
           : [],
       });
     }
-  }, [importFile, mapping, defaults, notifyParent]);
+  }, [importFile, mapping, defaults, notifyParent, onPlanteurPrefill]);
 
   // Handle upload/parse error
   const handleError = useCallback((err: ParcelleApiError | Error) => {

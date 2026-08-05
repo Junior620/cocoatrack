@@ -11,10 +11,11 @@ import dynamic from 'next/dynamic';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 
 import { parcellesApi } from '@/lib/api/parcelles';
-import type { Parcelle, ParcelleWithPlanteur } from '@/types/parcelles';
+import type { Parcelle, ParcelleWithPlanteur, ConformityStatus } from '@/types/parcelles';
 import {
   CONFORMITY_STATUS_LABELS,
   CONFORMITY_STATUS_COLORS,
+  CONFORMITY_STATUS_VALUES,
 } from '@/types/parcelles';
 
 // Dynamically import ParcelleMap to avoid SSR issues with Leaflet
@@ -40,6 +41,8 @@ export interface PlanteurParcellesTabProps {
   planteurName?: string;
   /** Whether the user can create new parcelles */
   canCreate?: boolean;
+  /** Whether the user can bulk-edit parcelles */
+  canEdit?: boolean;
 }
 
 interface ParcelleStats {
@@ -65,6 +68,7 @@ export function PlanteurParcellesTab({
   planteurId,
   planteurName,
   canCreate = false,
+  canEdit = false,
 }: PlanteurParcellesTabProps) {
   const router = useRouter();
   const [parcelles, setParcelles] = useState<ParcelleWithPlanteur[]>([]);
@@ -72,6 +76,9 @@ export function PlanteurParcellesTab({
   const [error, setError] = useState<string | null>(null);
   const [selectedParcelleId, setSelectedParcelleId] = useState<string | undefined>();
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<ConformityStatus>('conforme');
 
   // Calculate stats from parcelles
   const stats: ParcelleStats = {
@@ -133,6 +140,45 @@ export function PlanteurParcellesTab({
     router.push(`/parcelles/${parcelleId}`);
   }, [router]);
 
+  const toggleBulkSelect = useCallback((id: string, checked: boolean) => {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setBulkSelectedIds((prev) => {
+      if (prev.size === parcelles.length) return new Set();
+      return new Set(parcelles.map((p) => p.id));
+    });
+  }, [parcelles]);
+
+  const handleBulkStatusUpdate = useCallback(async () => {
+    if (bulkSelectedIds.size === 0) return;
+    setBulkUpdating(true);
+    try {
+      const res = await fetch('/api/parcelles/bulk-update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          parcelle_ids: Array.from(bulkSelectedIds),
+          conformity_status: bulkStatus,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setBulkSelectedIds(new Set());
+      await fetchParcelles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Échec de la mise à jour en lot');
+    } finally {
+      setBulkUpdating(false);
+    }
+  }, [bulkSelectedIds, bulkStatus, fetchParcelles]);
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -190,6 +236,40 @@ export function PlanteurParcellesTab({
           )}
         </div>
       </div>
+
+      {canEdit && bulkSelectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
+          <span className="text-sm font-medium text-primary-900">
+            {bulkSelectedIds.size} parcelle{bulkSelectedIds.size > 1 ? 's' : ''} sélectionnée{bulkSelectedIds.size > 1 ? 's' : ''}
+          </span>
+          <select
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value as ConformityStatus)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {CONFORMITY_STATUS_VALUES.map((s) => (
+              <option key={s} value={s}>
+                {CONFORMITY_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleBulkStatusUpdate}
+            disabled={bulkUpdating}
+            className="rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+          >
+            {bulkUpdating ? 'Mise à jour…' : 'Modifier le statut'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setBulkSelectedIds(new Set())}
+            className="text-sm text-primary-700 hover:underline"
+          >
+            Annuler
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-4">
@@ -282,6 +362,17 @@ export function PlanteurParcellesTab({
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                {canEdit && (
+                  <th className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={bulkSelectedIds.size === parcelles.length && parcelles.length > 0}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 rounded border-gray-300"
+                      aria-label="Tout sélectionner"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Code
                 </th>
@@ -303,8 +394,19 @@ export function PlanteurParcellesTab({
                   onClick={() => handleRowClick(parcelle.id)}
                   className={`cursor-pointer hover:bg-gray-50 transition-colors ${
                     selectedParcelleId === parcelle.id ? 'bg-primary-50' : ''
-                  }`}
+                  } ${bulkSelectedIds.has(parcelle.id) ? 'bg-blue-50' : ''}`}
                 >
+                  {canEdit && (
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedIds.has(parcelle.id)}
+                        onChange={(e) => toggleBulkSelect(parcelle.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                        aria-label={`Sélectionner ${parcelle.code}`}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{parcelle.code}</div>
                     {parcelle.label && (

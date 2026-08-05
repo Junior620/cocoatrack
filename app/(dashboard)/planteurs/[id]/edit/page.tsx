@@ -6,7 +6,7 @@
 
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 import { useAuth, hasPermission } from '@/lib/auth';
 import { planteursApi } from '@/lib/api/planteurs';
@@ -15,7 +15,9 @@ import { parcellesImportApi } from '@/lib/api/parcelles-import';
 import { updatePlanteurSchema, STATUT_PLANTATION_OPTIONS } from '@/lib/validations/planteur';
 import type { UpdatePlanteurInput, PlanteurWithRelations } from '@/lib/validations/planteur';
 import type { Database } from '@/types/database.gen';
-import { PlanteurParcellesImport, type ImportData } from '@/components/planteurs';
+import { PlanteurParcellesImport, ProfileCompletenessBar, type ImportData } from '@/components/planteurs';
+import { computeProfileCompleteness } from '@/lib/planteurs/profile-completeness';
+import { formatPlanteurValidationErrors } from '@/lib/planteurs/format-validation-errors';
 
 type ChefPlanteur = Database['public']['Tables']['chef_planteurs']['Row'];
 
@@ -42,6 +44,8 @@ export default function EditPlanteurPage() {
   const [importData, setImportData] = useState<ImportData | null>(null);
 
   const canEdit = user && hasPermission(user.role, 'planteurs:update');
+
+  const completeness = useMemo(() => computeProfileCompleteness(formData), [formData]);
 
   // Load planteur data
   useEffect(() => {
@@ -157,11 +161,7 @@ export default function EditPlanteurPage() {
     // Validate form data
     const result = updatePlanteurSchema.safeParse(formData);
     if (!result.success) {
-      const fieldErrors: Record<string, string> = {};
-      result.error.errors.forEach((err) => {
-        const field = err.path[0] as string;
-        fieldErrors[field] = err.message;
-      });
+      const { fieldErrors } = formatPlanteurValidationErrors(result.error);
       setErrors(fieldErrors);
       return;
     }
@@ -212,6 +212,7 @@ export default function EditPlanteurPage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-white p-6 shadow">
+        <ProfileCompletenessBar completeness={completeness} />
         {submitError && (
           <div className="rounded-md bg-red-50 p-4">
             <p className="text-sm text-red-700">{submitError}</p>

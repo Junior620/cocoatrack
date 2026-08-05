@@ -6,7 +6,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 
 import { useAuth, hasPermission } from '@/lib/auth';
 import { planteursApi } from '@/lib/api/planteurs';
@@ -16,7 +16,20 @@ import { parcellesImportApi } from '@/lib/api/parcelles-import';
 import { createPlanteurSchema, STATUT_PLANTATION_OPTIONS } from '@/lib/validations/planteur';
 import type { CreatePlanteurInput } from '@/lib/validations/planteur';
 import type { Database } from '@/types/database.gen';
-import { PlanteurParcellesImport, type ImportData } from '@/components/planteurs';
+import {
+  PlanteurParcellesImport,
+  ProfileCompletenessBar,
+  PlanteurFormSteps,
+  DuplicatePlanteurBanner,
+  type ImportData,
+} from '@/components/planteurs';
+import {
+  computeProfileCompleteness,
+  FORM_STEPS,
+  type FormStepId,
+} from '@/lib/planteurs/profile-completeness';
+import { formatPlanteurValidationErrors } from '@/lib/planteurs/format-validation-errors';
+import type { DuplicatePlanteurInfo } from '@/components/planteurs/DuplicatePlanteurBanner';
 
 type ChefPlanteur = Database['public']['Tables']['chef_planteurs']['Row'];
 
@@ -94,6 +107,59 @@ export default function NewPlanteurPage() {
 
   // Parcelles import (optional)
   const [importData, setImportData] = useState<ImportData | null>(null);
+
+  const [currentStep, setCurrentStep] = useState<FormStepId>('identity');
+  const [duplicate, setDuplicate] = useState<DuplicatePlanteurInfo | null>(null);
+  const [ignoreDuplicate, setIgnoreDuplicate] = useState(false);
+  const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
+
+  const completeness = useMemo(() => computeProfileCompleteness(formData), [formData]);
+
+  const stepIndex = FORM_STEPS.findIndex((s) => s.id === currentStep);
+  const isFirstStep = stepIndex === 0;
+  const isLastStep = stepIndex === FORM_STEPS.length - 1;
+
+  const goNext = () => {
+    if (!isLastStep) setCurrentStep(FORM_STEPS[stepIndex + 1].id);
+  };
+  const goPrev = () => {
+    if (!isFirstStep) setCurrentStep(FORM_STEPS[stepIndex - 1].id);
+  };
+
+  // Détection doublon (debounce)
+  useEffect(() => {
+    const name = formData.name?.trim();
+    if (!name || name.length < 2 || ignoreDuplicate) {
+      setDuplicate(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const coop = cooperatives.find((c) => c.name === formData.cooperative);
+        const params = new URLSearchParams({ name });
+        if (coop?.id) params.set('cooperative_id', coop.id);
+        const res = await fetch(`/api/planteurs/check-duplicate?${params}`, {
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as { data: { duplicate: DuplicatePlanteurInfo | null } };
+        setDuplicate(json.data.duplicate);
+      } catch {
+        setDuplicate(null);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [formData.name, formData.cooperative, cooperatives, ignoreDuplicate]);
+
+  const handlePlanteurPrefill = useCallback((values: Partial<CreatePlanteurInput>) => {
+    setFormData((prev) => ({
+      ...prev,
+      ...Object.fromEntries(
+        Object.entries(values).filter(([, v]) => v !== null && v !== undefined && v !== '')
+      ),
+    }));
+    setPrefillNotice('Champs pré-remplis depuis le fichier importé. Vérifiez avant enregistrement.');
+  }, []);
 
   // Calculate losses automatically
   const calculatedLosses = (() => {
@@ -195,12 +261,17 @@ export default function NewPlanteurPage() {
     // Validate form data
     const result = createPlanteurSchema.safeParse(dataToValidate);
     if (!result.success) {
-      const fieldErrors: Record<string, string> = {};
-      result.error.errors.forEach((err) => {
-        const field = err.path[0] as string;
-        fieldErrors[field] = err.message;
-      });
+      const { fieldErrors, details } = formatPlanteurValidationErrors(result.error);
       setErrors(fieldErrors);
+      if (details.length > 0) {
+        setSubmitError(details.map((d) => d.suggestion ? `${d.message} — ${d.suggestion}` : d.message).join(' · '));
+      }
+      return;
+    }
+
+    if (duplicate && !ignoreDuplicate) {
+      setSubmitError('Un doublon probable existe. Réutilisez le planteur existant ou confirmez « Créer quand même ».');
+      setCurrentStep('identity');
       return;
     }
 
@@ -277,8 +348,24 @@ export default function NewPlanteurPage() {
         </div>
       </div>
 
+      <ProfileCompletenessBar completeness={completeness} />
+
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-white p-6 shadow">
+        <PlanteurFormSteps currentStep={currentStep} onStepClick={setCurrentStep} />
+
+        {duplicate && !ignoreDuplicate && (
+          <DuplicatePlanteurBanner
+            duplicate={duplicate}
+            onReuse={() => router.push(`/planteurs/${duplicate.existing_planteur_id}`)}
+            onContinue={() => setIgnoreDuplicate(true)}
+          />
+        )}
+
+        {prefillNotice && (
+          <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">{prefillNotice}</div>
+        )}
+
         {submitError && (
           <div className="rounded-md bg-red-50 p-4">
             <p className="text-sm text-red-700">{submitError}</p>
@@ -286,9 +373,12 @@ export default function NewPlanteurPage() {
         )}
 
         {/* Section: Informations du Planteur */}
+        {(currentStep === 'identity' || currentStep === 'location' || currentStep === 'organisation' || currentStep === 'review') && (
         <div>
           <h2 className="mb-4 text-lg font-semibold text-primary-700">Informations du Planteur</h2>
           
+          {(currentStep === 'identity' || currentStep === 'review') && (
+          <>
           {/* Name */}
           <div className="mb-4">
             <label htmlFor="name" className="block text-sm font-medium text-gray-700">
@@ -341,7 +431,11 @@ export default function NewPlanteurPage() {
             />
             {errors.cni && <p className="mt-1 text-sm text-red-600">{errors.cni}</p>}
           </div>
+          </>
+          )}
 
+          {(currentStep === 'organisation' || currentStep === 'review') && (
+          <>
           {/* Coopérative */}
           <div className="mb-4">
             <label htmlFor="cooperative" className="block text-sm font-medium text-gray-700">
@@ -402,7 +496,11 @@ export default function NewPlanteurPage() {
               </p>
             </div>
           )}
+          </>
+          )}
 
+          {(currentStep === 'location' || currentStep === 'review') && (
+          <>
           {/* Region & Département */}
           <div className="mb-4 grid gap-4 sm:grid-cols-2">
             <div>
@@ -456,7 +554,11 @@ export default function NewPlanteurPage() {
             />
             {errors.localite && <p className="mt-1 text-sm text-red-600">{errors.localite}</p>}
           </div>
+          </>
+          )}
 
+          {(currentStep === 'organisation' || currentStep === 'review') && (
+          <>
           {/* Statut de la plantation */}
           <div className="mb-4">
             <label htmlFor="statut_plantation" className="block text-sm font-medium text-gray-700">
@@ -525,9 +627,13 @@ export default function NewPlanteurPage() {
               <p className="mt-1 text-sm text-red-600">{errors.chef_planteur_id}</p>
             )}
           </div>
+          </>
+          )}
         </div>
+        )}
 
-        {/* Section: Première Livraison (Optionnel) */}
+        {/* Section: Première Livraison (Optionnel) — visible à l'étape review */}
+        {currentStep === 'review' && (
         <div className="border-t border-gray-200 pt-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-primary-700">Première Livraison (Optionnel)</h2>
@@ -695,21 +801,64 @@ export default function NewPlanteurPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Section: Importer Parcelles (Optionnel) */}
+        {(currentStep === 'parcelles' || currentStep === 'review') && (
         <PlanteurParcellesImport
           onImportDataChange={setImportData}
+          onPlanteurPrefill={handlePlanteurPrefill}
           disabled={submitting}
+          defaultExpanded={currentStep === 'parcelles'}
         />
+        )}
+
+        {currentStep === 'review' && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+            <p className="font-medium text-gray-900">Récapitulatif</p>
+            <ul className="mt-2 space-y-1">
+              <li>Nom : {formData.name || '—'}</li>
+              <li>Village : {formData.localite || '—'}</li>
+              <li>Coopérative : {formData.cooperative || '—'}</li>
+              <li>Profil : {completeness.percentage}% complété</li>
+              {importData && (
+                <li>
+                  Import parcelles : {importData.features.filter((f) => f.validation.ok).length} feature(s) valide(s)
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 border-t border-gray-200 pt-6">
+        <div className="flex justify-between gap-3 border-t border-gray-200 pt-6">
+          <div className="flex gap-2">
+            {!isFirstStep && (
+              <button
+                type="button"
+                onClick={goPrev}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Précédent
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3">
           <Link
             href="/planteurs"
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Annuler
           </Link>
+          {!isLastStep ? (
+            <button
+              type="button"
+              onClick={goNext}
+              className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              Suivant
+            </button>
+          ) : (
           <button
             type="submit"
             disabled={submitting}
@@ -718,6 +867,8 @@ export default function NewPlanteurPage() {
             {submitting && <LoadingSpinner className="mr-2" />}
             Enregistrer
           </button>
+          )}
+          </div>
         </div>
       </form>
     </div>

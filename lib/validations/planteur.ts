@@ -174,6 +174,13 @@ export function getPlanteurAlerts(stats: PlanteurStats): PlanteurAlert[] {
         message: 'Attention: 70% de la limite atteinte',
         value: stats.usage_percentage,
       });
+      } else if (stats.usage_percentage >= 60) {
+        alerts.push({
+          type: 'usage',
+          level: 'info',
+          message: 'Attention: 60% de la limite atteinte',
+          value: stats.usage_percentage,
+        });
     }
   }
   

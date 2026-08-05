@@ -857,6 +857,11 @@ export const assignNewPlanteurSchema = z.object({
   parcelle_ids: z
     .array(z.string().uuid('Invalid parcelle ID'))
     .min(1, 'At least one parcelle must be selected'),
+
+  /**
+   * Si true et qu'un planteur name_norm existe déjà, réutiliser au lieu de créer.
+   */
+  reuse_existing: z.boolean().optional().default(false),
   
   /**
    * New planteur data

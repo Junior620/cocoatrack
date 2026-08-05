@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse(firstError.path.join('.'), firstError.message);
     }
 
-    const { parcelle_ids, planteur: planteurData } = parseResult.data;
+    const { parcelle_ids, planteur: planteurData, reuse_existing } = parseResult.data;
 
     // Create Supabase client
     const supabase = await createServerSupabaseClient();
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: existingPlanteur, error: existingError } = await (supabase as any)
       .from('planteurs')
-      .select('id, name')
+      .select('id, name, code')
       .eq('cooperative_id', cooperativeId)
       .eq('name_norm', nameNorm)
       .eq('is_active', true)
@@ -185,11 +185,11 @@ export async function POST(request: NextRequest) {
       ));
     }
 
-    if (existingPlanteur) {
+    if (existingPlanteur && !reuse_existing) {
       const typedExisting = existingPlanteur as { id: string; name: string };
       return validationErrorResponse(
         'planteur.name',
-        `A planteur with this name already exists: "${typedExisting.name}"`
+        `Un planteur similaire existe déjà : « ${typedExisting.name} ». Activez « réutiliser » pour l'associer aux parcelles.`
       );
     }
 
@@ -241,6 +241,41 @@ export async function POST(request: NextRequest) {
           `Cannot assign non-orphan parcelles: ${nonOrphanCodes.join(', ')}. These parcelles are already assigned to a planteur.`
         );
       }
+    }
+
+    // Réutiliser un planteur existant (name_norm) au lieu d'en créer un nouveau
+    if (existingPlanteur && reuse_existing) {
+      const typedExisting = existingPlanteur as { id: string; name: string; code: string };
+      const planteurId = typedExisting.id;
+      const assignedIds: string[] = [];
+      let updatedCount = 0;
+
+      for (const parcelle of typedParcelles) {
+        let code = parcelle.code;
+        if (!code) {
+          code = await generateParcelleCode(supabase, planteurId);
+        }
+        const { error: updateError } = await (supabase as any)
+          .from('parcelles')
+          .update({ planteur_id: planteurId, code, updated_at: new Date().toISOString() })
+          .eq('id', parcelle.id);
+
+        if (!updateError) {
+          assignedIds.push(parcelle.id);
+          updatedCount++;
+        }
+      }
+
+      return addSecurityHeaders(
+        NextResponse.json({
+          planteur_id: planteurId,
+          planteur_name: typedExisting.name,
+          planteur_code: typedExisting.code,
+          updated_count: updatedCount,
+          assigned_ids: assignedIds,
+          audit_log_id: null,
+        } satisfies AssignNewPlanteurResponse)
+      );
     }
 
     // Generate planteur code if not provided

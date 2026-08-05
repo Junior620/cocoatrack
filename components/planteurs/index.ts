@@ -29,3 +29,9 @@ export type { SelectAllCheckboxProps } from './SelectAllCheckbox';
 
 export { BulkActionToolbar } from './BulkActionToolbar';
 export type { BulkActionToolbarProps } from './BulkActionToolbar';
+
+export { ProfileCompletenessBar } from './ProfileCompletenessBar';
+export { PlanteurFormSteps } from './PlanteurFormSteps';
+export { DuplicatePlanteurBanner } from './DuplicatePlanteurBanner';
+export type { DuplicatePlanteurInfo } from './DuplicatePlanteurBanner';
+export { PlanteurTraceabilityTab } from './PlanteurTraceabilityTab';
