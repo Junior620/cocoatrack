@@ -184,7 +184,7 @@ export class RiskAssessmentService {
 
     const { data: temporalData } = await supabase
       .from('ndvi_results')
-      .select('calculation_date, mean_ndvi, health_status')
+      .select('calculation_date, mean_ndvi, mean_evi, mean_ndmi, health_status')
       .eq('parcelle_id', parcelleId)
       .gte('calculation_date', startDate.toISOString())
       .order('calculation_date', { ascending: true });
@@ -203,12 +203,34 @@ export class RiskAssessmentService {
     const deforestationCount = deforestationEvents?.length || 0;
     const hasDeforestation = deforestationCount > 0;
 
+    // Early hydric / canopy alerts from index series
+    const { detectNDMIEarlyAlert } = await import('../ndmi-alerts');
+    const { detectEVIEarlyAlert } = await import('../evi-alerts');
+    const { combineVegetationAlerts } = await import('../combined-alerts');
+    const series = (temporalData || []).map((row: any) => ({
+      date: row.calculation_date,
+      ndvi: Number(row.mean_ndvi),
+      evi: row.mean_evi != null ? Number(row.mean_evi) : null,
+      ndmi: row.mean_ndmi != null ? Number(row.mean_ndmi) : null,
+    }));
+    const eviAlert = detectEVIEarlyAlert(series);
+    const ndmiAlert = detectNDMIEarlyAlert(series);
+    const combined = combineVegetationAlerts(eviAlert, ndmiAlert);
+    const hasHydricAlert = ndmiAlert.level === 'alert';
+    const hasEarlyWatch =
+      ndmiAlert.level === 'watch' ||
+      eviAlert.level === 'watch' ||
+      eviAlert.level === 'alert';
+    const hasDualAlert = combined.code === 'canopy_and_hydric';
+
     // Determine risk category
     const riskCategory = this.determineRiskCategory(
       latestNDVI?.health_status as HealthStatus | null,
       trend,
       hasDeforestation,
-      significantChanges
+      significantChanges,
+      hasHydricAlert || hasDualAlert,
+      hasEarlyWatch
     );
 
     // Identify risk factors
@@ -216,7 +238,10 @@ export class RiskAssessmentService {
       latestNDVI?.health_status as HealthStatus | null,
       trend,
       hasDeforestation,
-      significantChanges
+      significantChanges,
+      ndmiAlert.level,
+      eviAlert.level,
+      hasDualAlert
     );
 
     // Generate recommendations
@@ -224,7 +249,8 @@ export class RiskAssessmentService {
       riskCategory,
       latestNDVI?.health_status as HealthStatus | null,
       trend,
-      hasDeforestation
+      hasDeforestation,
+      hasHydricAlert || hasDualAlert
     );
 
     return {
@@ -455,52 +481,52 @@ export class RiskAssessmentService {
     healthStatus: HealthStatus | null,
     trend: 'improving' | 'stable' | 'declining' | null,
     hasDeforestation: boolean,
-    significantChanges: number
+    significantChanges: number,
+    hasHydricAlert = false,
+    hasEarlyWatch = false
   ): RiskCategory {
-    // Unknown if no data
     if (!healthStatus || !trend) {
       return RISK_CATEGORIES.UNKNOWN;
     }
 
-    // HIGH RISK: Critical/poor health OR deforestation OR declining with poor health
     if (
       HIGH_RISK_STATUSES.includes(healthStatus) ||
       hasDeforestation ||
+      hasHydricAlert ||
       (trend === 'declining' && healthStatus !== 'excellent' && healthStatus !== 'good')
     ) {
       return RISK_CATEGORIES.HIGH_RISK;
     }
 
-    // EXCELLENT: Excellent health + improving/stable trend + no alerts
     if (
       healthStatus === 'excellent' &&
       (trend === 'improving' || trend === 'stable') &&
       !hasDeforestation &&
+      !hasEarlyWatch &&
       significantChanges === 0
     ) {
       return RISK_CATEGORIES.EXCELLENT;
     }
 
-    // LOW RISK: Good/excellent health + stable/improving trend
     if (
       GOOD_STATUSES.includes(healthStatus) &&
-      (trend === 'improving' || trend === 'stable')
+      (trend === 'improving' || trend === 'stable') &&
+      !hasEarlyWatch
     ) {
       return RISK_CATEGORIES.LOW_RISK;
     }
 
-    // MEDIUM RISK: Everything else (fair health, declining good health, etc.)
     return RISK_CATEGORIES.MEDIUM_RISK;
   }
 
-  /**
-   * Identify specific risk factors
-   */
   private identifyRiskFactors(
     healthStatus: HealthStatus | null,
     trend: 'improving' | 'stable' | 'declining' | null,
     hasDeforestation: boolean,
-    significantChanges: number
+    significantChanges: number,
+    ndmiLevel: string = 'none',
+    eviLevel: string = 'none',
+    hasDualAlert = false
   ): string[] {
     const factors: string[] = [];
 
@@ -521,6 +547,20 @@ export class RiskAssessmentService {
       factors.push('Alertes de déforestation');
     }
 
+    if (hasDualAlert) {
+      factors.push('Double signal EVI + NDMI');
+    } else if (ndmiLevel === 'alert') {
+      factors.push('Stress hydrique (NDMI)');
+    } else if (ndmiLevel === 'watch') {
+      factors.push('Surveillance hydrique (NDMI)');
+    }
+
+    if (!hasDualAlert && eviLevel === 'alert') {
+      factors.push('Stress canopée (EVI)');
+    } else if (!hasDualAlert && eviLevel === 'watch') {
+      factors.push('Surveillance canopée (EVI)');
+    }
+
     if (significantChanges > 0) {
       factors.push(`${significantChanges} changement(s) significatif(s)`);
     }
@@ -532,14 +572,12 @@ export class RiskAssessmentService {
     return factors;
   }
 
-  /**
-   * Generate actionable recommendations
-   */
   private generateRecommendations(
     riskCategory: RiskCategory,
     healthStatus: HealthStatus | null,
     trend: 'improving' | 'stable' | 'declining' | null,
-    hasDeforestation: boolean
+    hasDeforestation: boolean,
+    hasHydricAlert = false
   ): string[] {
     const recommendations: string[] = [];
 
@@ -552,6 +590,9 @@ export class RiskAssessmentService {
         if (hasDeforestation) {
           recommendations.push('Vérifier conformité EUDR');
         }
+        if (hasHydricAlert) {
+          recommendations.push('Vérifier irrigation et disponibilité en eau (NDMI)');
+        }
         if (trend === 'declining') {
           recommendations.push('Analyser causes du déclin (stress hydrique, maladies)');
         }
@@ -561,6 +602,9 @@ export class RiskAssessmentService {
         recommendations.push('Surveillance accrue recommandée');
         if (trend === 'declining') {
           recommendations.push('Planifier visite terrain sous 2 semaines');
+        }
+        if (hasHydricAlert) {
+          recommendations.push('Surveiller le stress hydrique (NDMI)');
         }
         recommendations.push('Vérifier irrigation et nutrition');
         break;

@@ -75,6 +75,8 @@ function transformRpcRow(row: GetParcelleRow): ParcelleWithPlanteur {
     import_file_id: row.import_file_id,
     feature_hash: row.feature_hash,
     is_active: row.is_active,
+    annee_plantation: null,
+    densite_arbres_ha: null,
     created_by: row.created_by,
     created_by_name: row.created_by_name,
     created_at: row.created_at,
@@ -154,6 +156,25 @@ export async function GET(
 
     // Transform to ParcelleWithPlanteur response
     const parcelle = transformRpcRow(row);
+
+    // Supplement plantation fields (not yet on get_parcelle RPC)
+    const { data: plantation } = await supabase
+      .from('parcelles')
+      .select('annee_plantation, densite_arbres_ha')
+      .eq('id', id)
+      .maybeSingle();
+    if (plantation) {
+      parcelle.annee_plantation =
+        (plantation as { annee_plantation: number | null }).annee_plantation ??
+        null;
+      parcelle.densite_arbres_ha =
+        (plantation as { densite_arbres_ha: number | null }).densite_arbres_ha !=
+        null
+          ? Number(
+              (plantation as { densite_arbres_ha: number }).densite_arbres_ha
+            )
+          : null;
+    }
 
     // Build response
     const response = NextResponse.json(parcelle);
@@ -335,9 +356,66 @@ export async function PATCH(
       rpcParams.p_risk_flags = validatedInput.risk_flags;
     }
 
-    // Call the RPC function
+    const plantationOnly =
+      validatedInput.annee_plantation !== undefined ||
+      validatedInput.densite_arbres_ha !== undefined;
+    const hasRpcFields =
+      validatedInput.code !== undefined ||
+      validatedInput.label !== undefined ||
+      validatedInput.village !== undefined ||
+      validatedInput.geometry !== undefined ||
+      validatedInput.certifications !== undefined ||
+      validatedInput.conformity_status !== undefined ||
+      validatedInput.risk_flags !== undefined;
+
+    // Call the RPC function (skip when only plantation fields change)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await supabase.rpc('update_parcelle', rpcParams as any);
+    let data: unknown = null;
+    let error: { message: string } | null = null;
+
+    if (hasRpcFields) {
+      const rpcResult = await supabase.rpc('update_parcelle', rpcParams as any);
+      data = rpcResult.data;
+      error = rpcResult.error;
+    } else if (plantationOnly) {
+      // Ensure access via get_parcelle, then update plantation columns
+      const access = await supabase.rpc('get_parcelle', { p_id: id } as any);
+      if (access.error) {
+        error = access.error;
+      } else if (!access.data || (access.data as unknown[]).length === 0) {
+        return notFoundResponse('parcelle', id);
+      } else {
+        data = access.data;
+      }
+    }
+
+    if (
+      !error &&
+      (validatedInput.annee_plantation !== undefined ||
+        validatedInput.densite_arbres_ha !== undefined)
+    ) {
+      const plantationPatch: Record<string, unknown> = {};
+      if (validatedInput.annee_plantation !== undefined) {
+        plantationPatch.annee_plantation = validatedInput.annee_plantation;
+      }
+      if (validatedInput.densite_arbres_ha !== undefined) {
+        plantationPatch.densite_arbres_ha = validatedInput.densite_arbres_ha;
+      }
+      const { error: plantErr } = await supabase
+        .from('parcelles')
+        .update(plantationPatch)
+        .eq('id', id);
+      if (plantErr) {
+        console.error('Error updating plantation fields:', plantErr);
+        return toNextResponse(
+          createParcelleError(
+            ParcelleErrorCodes.INTERNAL_ERROR,
+            'Failed to update plantation fields',
+            { reason: plantErr.message }
+          )
+        );
+      }
+    }
 
     if (error) {
       // Handle specific error cases
@@ -387,6 +465,24 @@ export async function PATCH(
 
     // Transform to ParcelleWithPlanteur response
     const parcelle = transformRpcRow(row);
+
+    const { data: plantation } = await supabase
+      .from('parcelles')
+      .select('annee_plantation, densite_arbres_ha')
+      .eq('id', id)
+      .maybeSingle();
+    if (plantation) {
+      parcelle.annee_plantation =
+        (plantation as { annee_plantation: number | null }).annee_plantation ??
+        null;
+      parcelle.densite_arbres_ha =
+        (plantation as { densite_arbres_ha: number | null }).densite_arbres_ha !=
+        null
+          ? Number(
+              (plantation as { densite_arbres_ha: number }).densite_arbres_ha
+            )
+          : null;
+    }
 
     // Build response
     const response = NextResponse.json(parcelle);

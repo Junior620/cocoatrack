@@ -35,6 +35,27 @@ import { mockImageryService, shouldUseMockImagery } from './imagery.service.mock
 import { rasterGeneratorService } from './raster-generator.service';
 import { storageService } from './storage.service';
 import { redisCacheService } from './redis-cache.service';
+import {
+  calculatePixelEVIAuto,
+  calculatePixelWiseEVI,
+  calculateIndexStatistics,
+} from '../evi';
+import {
+  calculatePixelNDMI,
+  calculatePixelWiseNDMI,
+} from '../ndmi';
+import {
+  calculatePixelNDWI,
+  calculatePixelWiseNDWI,
+} from '../ndwi';
+import {
+  calculatePixelSAVI,
+  calculatePixelWiseSAVI,
+} from '../savi';
+import {
+  calculatePixelNDRE,
+  calculatePixelWiseNDRE,
+} from '../ndre';
 
 // ============================================================================
 // Constants
@@ -47,11 +68,16 @@ import { redisCacheService } from './redis-cache.service';
 const MIN_PIXEL_COUNT = 10;
 
 /**
- * Sentinel-2 band names for NDVI calculation
+ * Sentinel-2 band names for NDVI / EVI / NDMI calculation
  */
 const NDVI_BANDS = {
+  BLUE: 'B2',
+  GREEN: 'B3',
   RED: 'B4',
   NIR: 'B8',
+  NIR_NARROW: 'B8A',
+  SWIR: 'B11',
+  RED_EDGE: 'B5',
 } as const;
 
 /**
@@ -172,28 +198,89 @@ export class NDVIService {
         }
       }
 
-      // Step 2: Retrieve Sentinel-2 bands B4 (Red) and B8 (NIR)
+      // Step 2: Retrieve Sentinel-2 bands B2/B4/B8 (10m) + B8A/B11 (20m NDMI)
       const bandData = await this.retrieveBands(geometry, date);
 
       // Step 3: Calculate pixel-wise NDVI values (OPTIMIZED: uses Web Worker)
       // Special case: if band data is 1x1 (from reduceRegion for small parcelles),
       // calculate NDVI directly from the mean values without the pixel-count check
       let ndviValues: number[];
+      let eviValues: number[];
+      let ndmiValues: number[];
+      let ndwiValues: number[];
+      let saviValues: number[];
+      let ndreValues: number[];
       let isMeanValueOnly = false;
 
       if (bandData.red.length === 1 && bandData.red[0].length === 1) {
-        // Single mean value from reduceRegion, calculate NDVI directly
+        // Single mean value from reduceRegion, calculate NDVI/EVI/NDMI/NDWI directly
         isMeanValueOnly = true;
         const red = bandData.red[0][0];
         const nir = bandData.nir[0][0];
+        const blue = bandData.blue?.[0]?.[0];
+        const green = bandData.green?.[0]?.[0];
+        const nirNarrow = bandData.nirNarrow?.[0]?.[0] ?? nir;
+        const swir = bandData.swir?.[0]?.[0];
         const ndvi = this.calculatePixelNDVI(nir, red);
+        const evi = calculatePixelEVIAuto(nir, red, blue);
+        const ndmi =
+          swir != null && !isNaN(swir)
+            ? calculatePixelNDMI(nirNarrow, swir)
+            : NaN;
+        const ndwi =
+          green != null && !isNaN(green)
+            ? calculatePixelNDWI(green, nir)
+            : NaN;
+        const savi = calculatePixelSAVI(nir, red);
+        const ndre =
+          bandData.redEdge?.[0]?.[0] != null &&
+          !isNaN(bandData.redEdge[0][0]) &&
+          bandData.nirNarrow?.[0]?.[0] != null
+            ? calculatePixelNDRE(bandData.nirNarrow[0][0], bandData.redEdge[0][0])
+            : bandData.redEdge?.[0]?.[0] != null && nirNarrow != null
+              ? calculatePixelNDRE(nirNarrow, bandData.redEdge[0][0])
+              : NaN;
         ndviValues = [ndvi];
-        console.log(`[NDVI Service] Small parcelle: direct NDVI from mean values = ${ndvi.toFixed(4)}`);
+        eviValues = [evi];
+        ndmiValues = [ndmi];
+        ndwiValues = [ndwi];
+        saviValues = [savi];
+        ndreValues = [ndre];
+        console.log(
+          `[NDVI Service] Small parcelle: NDVI=${ndvi.toFixed(4)}, EVI=${evi.toFixed(4)}, NDMI=${Number.isFinite(ndmi) ? ndmi.toFixed(4) : 'n/a'}, NDWI=${Number.isFinite(ndwi) ? ndwi.toFixed(4) : 'n/a'}, SAVI=${Number.isFinite(savi) ? savi.toFixed(4) : 'n/a'}`
+        );
       } else {
         ndviValues = await this.calculatePixelWiseNDVI(
           bandData.red,
           bandData.nir
         );
+        eviValues = calculatePixelWiseEVI(
+          bandData.red,
+          bandData.nir,
+          bandData.blue
+        );
+        if (bandData.swir && (bandData.nirNarrow || bandData.nir)) {
+          ndmiValues = calculatePixelWiseNDMI(
+            bandData.nirNarrow ?? bandData.nir,
+            bandData.swir
+          );
+        } else {
+          ndmiValues = [];
+        }
+        if (bandData.green) {
+          ndwiValues = calculatePixelWiseNDWI(bandData.green, bandData.nir);
+        } else {
+          ndwiValues = [];
+        }
+        saviValues = calculatePixelWiseSAVI(bandData.nir, bandData.red);
+        if (bandData.redEdge && (bandData.nirNarrow || bandData.nir)) {
+          ndreValues = calculatePixelWiseNDRE(
+            bandData.nirNarrow ?? bandData.nir,
+            bandData.redEdge
+          );
+        } else {
+          ndreValues = [];
+        }
       }
 
       // Step 4: Validate we have sufficient data
@@ -221,7 +308,13 @@ export class NDVIService {
         statistics = this.calculateStatistics(ndviValues);
       }
 
-      // Step 6: Determine health status
+      const eviStatistics = calculateIndexStatistics(eviValues);
+      const ndmiStatistics = calculateIndexStatistics(ndmiValues);
+      const ndwiStatistics = calculateIndexStatistics(ndwiValues);
+      const saviStatistics = calculateIndexStatistics(saviValues);
+      const ndreStatistics = calculateIndexStatistics(ndreValues);
+
+      // Step 6: Determine health status (NDVI only — complementary indices separate)
       const healthStatus = this.calculateHealthStatus(statistics.mean);
 
       // Step 7: Generate raster if requested
@@ -271,7 +364,7 @@ export class NDVIService {
         }
       }
 
-      // Step 8: Create NDVI result
+      // Step 8: Create NDVI result (with optional EVI / NDMI stats)
       const ndviResult: NDVIResult = {
         id: `ndvi-${parcelleId}-${date.getTime()}`,
         parcelleId,
@@ -281,6 +374,26 @@ export class NDVIService {
         minNDVI: statistics.min,
         maxNDVI: statistics.max,
         stdDevNDVI: statistics.stdDev,
+        meanEVI: eviStatistics?.mean ?? null,
+        minEVI: eviStatistics?.min ?? null,
+        maxEVI: eviStatistics?.max ?? null,
+        stdDevEVI: eviStatistics?.stdDev ?? null,
+        meanNDMI: ndmiStatistics?.mean ?? null,
+        minNDMI: ndmiStatistics?.min ?? null,
+        maxNDMI: ndmiStatistics?.max ?? null,
+        stdDevNDMI: ndmiStatistics?.stdDev ?? null,
+        meanNDWI: ndwiStatistics?.mean ?? null,
+        minNDWI: ndwiStatistics?.min ?? null,
+        maxNDWI: ndwiStatistics?.max ?? null,
+        stdDevNDWI: ndwiStatistics?.stdDev ?? null,
+        meanSAVI: saviStatistics?.mean ?? null,
+        minSAVI: saviStatistics?.min ?? null,
+        maxSAVI: saviStatistics?.max ?? null,
+        stdDevSAVI: saviStatistics?.stdDev ?? null,
+        meanNDRE: ndreStatistics?.mean ?? null,
+        minNDRE: ndreStatistics?.min ?? null,
+        maxNDRE: ndreStatistics?.max ?? null,
+        stdDevNDRE: ndreStatistics?.stdDev ?? null,
         healthStatus,
         ndviRasterUrl,
         createdAt: new Date(),
@@ -336,8 +449,16 @@ export class NDVIService {
         console.log('[NDVI Service] Using mock imagery service for development');
       }
 
-      // Request both Red (B4) and NIR (B8) bands
-      const bands = [NDVI_BANDS.RED, NDVI_BANDS.NIR];
+      // Request B2/B3/B4/B8 (NDVI+EVI+NDWI) and B8A/B11 (NDMI at 20m)
+      const bands = [
+        NDVI_BANDS.BLUE,
+        NDVI_BANDS.GREEN,
+        NDVI_BANDS.RED,
+        NDVI_BANDS.NIR,
+        NDVI_BANDS.NIR_NARROW,
+        NDVI_BANDS.SWIR,
+        NDVI_BANDS.RED_EDGE,
+      ];
       const bandData = await service.getBands(geometry, date, bands);
 
       // Validate band data
@@ -740,13 +861,26 @@ export class NDVIService {
         
         // Remove the cachedAt timestamp before returning
         const { cachedAt, ...ndviResult } = cachedFromRedis;
-        
-        // Convert date strings back to Date objects
-        return {
-          ...ndviResult,
-          calculationDate: new Date(ndviResult.calculationDate),
-          createdAt: new Date(ndviResult.createdAt),
-        };
+
+        // Legacy cache without EVI/NDMI/NDWI → force recalculation
+        if (
+          ndviResult.meanEVI == null ||
+          ndviResult.meanNDMI == null ||
+          ndviResult.meanNDWI == null ||
+          ndviResult.meanSAVI == null ||
+          ndviResult.meanNDRE == null
+        ) {
+          console.log(
+            `[NDVI Service] Redis hit missing indices for parcelle ${parcelleId}, date ${dateKey} → miss`
+          );
+        } else {
+          // Convert date strings back to Date objects
+          return {
+            ...ndviResult,
+            calculationDate: new Date(ndviResult.calculationDate),
+            createdAt: new Date(ndviResult.createdAt),
+          };
+        }
       }
 
       console.log(`[NDVI Service] Redis cache miss for parcelle ${parcelleId}, date ${dateKey}, checking database`);
@@ -796,6 +930,20 @@ export class NDVIService {
         return null;
       }
 
+      // Legacy rows → recalculate to fill NDMI/NDWI
+      if (
+        data.mean_evi == null ||
+        data.mean_ndmi == null ||
+        data.mean_ndwi == null ||
+        data.mean_savi == null ||
+        data.mean_ndre == null
+      ) {
+        console.log(
+          `[NDVI Service] DB cache missing complementary indices for parcelle ${parcelleId}, date ${dateKey} → miss`
+        );
+        return null;
+      }
+
       // Convert database row to NDVIResult
       const ndviResult: NDVIResult = {
         id: data.id,
@@ -806,6 +954,26 @@ export class NDVIService {
         minNDVI: Number(data.min_ndvi),
         maxNDVI: Number(data.max_ndvi),
         stdDevNDVI: Number(data.std_dev_ndvi),
+        meanEVI: data.mean_evi != null ? Number(data.mean_evi) : null,
+        minEVI: data.min_evi != null ? Number(data.min_evi) : null,
+        maxEVI: data.max_evi != null ? Number(data.max_evi) : null,
+        stdDevEVI: data.std_dev_evi != null ? Number(data.std_dev_evi) : null,
+        meanNDMI: data.mean_ndmi != null ? Number(data.mean_ndmi) : null,
+        minNDMI: data.min_ndmi != null ? Number(data.min_ndmi) : null,
+        maxNDMI: data.max_ndmi != null ? Number(data.max_ndmi) : null,
+        stdDevNDMI: data.std_dev_ndmi != null ? Number(data.std_dev_ndmi) : null,
+        meanNDWI: data.mean_ndwi != null ? Number(data.mean_ndwi) : null,
+        minNDWI: data.min_ndwi != null ? Number(data.min_ndwi) : null,
+        maxNDWI: data.max_ndwi != null ? Number(data.max_ndwi) : null,
+        stdDevNDWI: data.std_dev_ndwi != null ? Number(data.std_dev_ndwi) : null,
+        meanSAVI: data.mean_savi != null ? Number(data.mean_savi) : null,
+        minSAVI: data.min_savi != null ? Number(data.min_savi) : null,
+        maxSAVI: data.max_savi != null ? Number(data.max_savi) : null,
+        stdDevSAVI: data.std_dev_savi != null ? Number(data.std_dev_savi) : null,
+        meanNDRE: data.mean_ndre != null ? Number(data.mean_ndre) : null,
+        minNDRE: data.min_ndre != null ? Number(data.min_ndre) : null,
+        maxNDRE: data.max_ndre != null ? Number(data.max_ndre) : null,
+        stdDevNDRE: data.std_dev_ndre != null ? Number(data.std_dev_ndre) : null,
         healthStatus: data.health_status as HealthStatus,
         ndviRasterUrl: data.ndvi_raster_url,
         createdAt: new Date(data.created_at),
@@ -897,6 +1065,26 @@ export class NDVIService {
         min_ndvi: ndviResult.minNDVI,
         max_ndvi: ndviResult.maxNDVI,
         std_dev_ndvi: ndviResult.stdDevNDVI,
+        mean_evi: ndviResult.meanEVI ?? null,
+        min_evi: ndviResult.minEVI ?? null,
+        max_evi: ndviResult.maxEVI ?? null,
+        std_dev_evi: ndviResult.stdDevEVI ?? null,
+        mean_ndmi: ndviResult.meanNDMI ?? null,
+        min_ndmi: ndviResult.minNDMI ?? null,
+        max_ndmi: ndviResult.maxNDMI ?? null,
+        std_dev_ndmi: ndviResult.stdDevNDMI ?? null,
+        mean_ndwi: ndviResult.meanNDWI ?? null,
+        min_ndwi: ndviResult.minNDWI ?? null,
+        max_ndwi: ndviResult.maxNDWI ?? null,
+        std_dev_ndwi: ndviResult.stdDevNDWI ?? null,
+        mean_savi: ndviResult.meanSAVI ?? null,
+        min_savi: ndviResult.minSAVI ?? null,
+        max_savi: ndviResult.maxSAVI ?? null,
+        std_dev_savi: ndviResult.stdDevSAVI ?? null,
+        mean_ndre: ndviResult.meanNDRE ?? null,
+        min_ndre: ndviResult.minNDRE ?? null,
+        max_ndre: ndviResult.maxNDRE ?? null,
+        std_dev_ndre: ndviResult.stdDevNDRE ?? null,
         health_status: ndviResult.healthStatus,
         ndvi_raster_url: ndviResult.ndviRasterUrl,
       };
@@ -1277,14 +1465,35 @@ export class NDVIService {
         const date = expectedDates[i];
         const dateKey = this.normalizeDateToKey(date);
         let ndviResult = ndviMap.get(dateKey);
-        
-        // For monthly intervals, if exact date not found, find any data in the same month
-        if (!ndviResult && interval === 'monthly') {
+
+        // Monthly: prefer rows with EVI, else rows with a real acquisition date.
+        // Legacy NDVI-only rows without acquisition (often duplicates) must not
+        // surface as "needs EVI" when GEE has no usable image for that month.
+        if (interval === 'monthly') {
           const monthKey = this.normalizeToMonthKey(date);
           const monthResults = ndviByMonth.get(monthKey);
           if (monthResults && monthResults.length > 0) {
-            // Use the most recent result in the month
-            ndviResult = monthResults[monthResults.length - 1];
+            const withEvi = monthResults.filter((r) => r.meanEVI != null);
+            const withAcq = monthResults.filter((r) => !!r.acquisitionDate);
+            // Prefer rows that also have NDMI+NDWI when choosing among EVI rows
+            const withEviNdmi = withEvi.filter(
+              (r) =>
+                r.meanNDMI != null &&
+                r.meanNDWI != null &&
+                r.meanSAVI != null
+            );
+            const withEviNdmiOnly = withEvi.filter((r) => r.meanNDMI != null);
+            const eviPool =
+              withEviNdmi.length > 0
+                ? withEviNdmi
+                : withEviNdmiOnly.length > 0
+                  ? withEviNdmiOnly
+                  : withEvi;
+            const pool =
+              eviPool.length > 0 ? eviPool : withAcq.length > 0 ? withAcq : [];
+            ndviResult = pool.length > 0 ? pool[pool.length - 1] : undefined;
+          } else {
+            ndviResult = undefined;
           }
         }
 
@@ -1299,7 +1508,13 @@ export class NDVIService {
           const dataPoint: import('../types').TemporalDataPoint = {
             date: pointDate,
             ndvi: ndviResult.meanNDVI,
-            cloudCover: 0, // Will be populated from imagery data if available
+            evi: ndviResult.meanEVI ?? null,
+            ndmi: ndviResult.meanNDMI ?? null,
+            ndwi: ndviResult.meanNDWI ?? null,
+            savi: ndviResult.meanSAVI ?? null,
+            ndre: ndviResult.meanNDRE ?? null,
+            cloudCover: ndviResult.cloudCover ?? 0,
+            imageryQuality: ndviResult.imageryQuality ?? null,
             healthStatus: ndviResult.healthStatus,
             hasSignificantChange: this.hasSignificantChange(previousNDVI, ndviResult.meanNDVI),
             isAcquisitionDate: hasAcquisition,
@@ -1470,6 +1685,28 @@ export class NDVIService {
       minNDVI: Number(row.min_ndvi),
       maxNDVI: Number(row.max_ndvi),
       stdDevNDVI: Number(row.std_dev_ndvi),
+      meanEVI: row.mean_evi != null ? Number(row.mean_evi) : null,
+      minEVI: row.min_evi != null ? Number(row.min_evi) : null,
+      maxEVI: row.max_evi != null ? Number(row.max_evi) : null,
+      stdDevEVI: row.std_dev_evi != null ? Number(row.std_dev_evi) : null,
+      meanNDMI: row.mean_ndmi != null ? Number(row.mean_ndmi) : null,
+      minNDMI: row.min_ndmi != null ? Number(row.min_ndmi) : null,
+      maxNDMI: row.max_ndmi != null ? Number(row.max_ndmi) : null,
+      stdDevNDMI: row.std_dev_ndmi != null ? Number(row.std_dev_ndmi) : null,
+      meanNDWI: row.mean_ndwi != null ? Number(row.mean_ndwi) : null,
+      minNDWI: row.min_ndwi != null ? Number(row.min_ndwi) : null,
+      maxNDWI: row.max_ndwi != null ? Number(row.max_ndwi) : null,
+      stdDevNDWI: row.std_dev_ndwi != null ? Number(row.std_dev_ndwi) : null,
+      meanSAVI: row.mean_savi != null ? Number(row.mean_savi) : null,
+      minSAVI: row.min_savi != null ? Number(row.min_savi) : null,
+      maxSAVI: row.max_savi != null ? Number(row.max_savi) : null,
+      stdDevSAVI: row.std_dev_savi != null ? Number(row.std_dev_savi) : null,
+      meanNDRE: row.mean_ndre != null ? Number(row.mean_ndre) : null,
+      minNDRE: row.min_ndre != null ? Number(row.min_ndre) : null,
+      maxNDRE: row.max_ndre != null ? Number(row.max_ndre) : null,
+      stdDevNDRE: row.std_dev_ndre != null ? Number(row.std_dev_ndre) : null,
+      cloudCover: row.cloud_cover != null ? Number(row.cloud_cover) : null,
+      imageryQuality: (row.imagery_quality as NDVIResult['imageryQuality']) ?? null,
       healthStatus: row.health_status as HealthStatus,
       ndviRasterUrl: row.ndvi_raster_url,
       createdAt: new Date(row.created_at),
@@ -1772,7 +2009,7 @@ export class NDVIService {
       const significantChangeEvents = this.detectSignificantChanges(timeline);
       const significantChangesCount = significantChangeEvents.length;
 
-      // Step 4: Calculate average NDVI over the period
+      // Step 4: Calculate average NDVI / EVI over the period
       // Filter out invalid data points (NaN values)
       const validDataPoints = timeline.filter(point => !isNaN(point.ndvi));
       
@@ -1788,6 +2025,55 @@ export class NDVIService {
       const totalNDVI = validDataPoints.reduce((sum, point) => sum + point.ndvi, 0);
       const averageNDVI = totalNDVI / validDataPoints.length;
 
+      const validEviPoints = timeline.filter(
+        (point) => point.evi != null && !isNaN(Number(point.evi))
+      );
+      const averageEVI =
+        validEviPoints.length > 0
+          ? validEviPoints.reduce((sum, point) => sum + Number(point.evi), 0) /
+            validEviPoints.length
+          : null;
+
+      const eviTrend = this.computeEVITrendFromTimeline(validEviPoints);
+
+      const validNdmiPoints = timeline.filter(
+        (point) => point.ndmi != null && !isNaN(Number(point.ndmi))
+      );
+      const averageNDMI =
+        validNdmiPoints.length > 0
+          ? validNdmiPoints.reduce((sum, point) => sum + Number(point.ndmi), 0) /
+            validNdmiPoints.length
+          : null;
+      const ndmiTrend = this.computeNDMITrendFromTimeline(validNdmiPoints);
+
+      const validNdwiPoints = timeline.filter(
+        (point) => point.ndwi != null && !isNaN(Number(point.ndwi))
+      );
+      const averageNDWI =
+        validNdwiPoints.length > 0
+          ? validNdwiPoints.reduce((sum, point) => sum + Number(point.ndwi), 0) /
+            validNdwiPoints.length
+          : null;
+      const ndwiTrend = this.computeNDWITrendFromTimeline(validNdwiPoints);
+
+      const validSaviPoints = timeline.filter(
+        (point) => point.savi != null && !isNaN(Number(point.savi))
+      );
+      const averageSAVI =
+        validSaviPoints.length > 0
+          ? validSaviPoints.reduce((sum, point) => sum + Number(point.savi), 0) /
+            validSaviPoints.length
+          : null;
+
+      const validNdrePoints = timeline.filter(
+        (point) => point.ndre != null && !isNaN(Number(point.ndre))
+      );
+      const averageNDRE =
+        validNdrePoints.length > 0
+          ? validNdrePoints.reduce((sum, point) => sum + Number(point.ndre), 0) /
+            validNdrePoints.length
+          : null;
+
       // Step 5: Calculate average cloud cover
       // Note: Cloud cover data may not be available for all data points
       // We calculate the average of available cloud cover values
@@ -1800,8 +2086,16 @@ export class NDVIService {
       const summary: import('../types').TemporalAnalysisSummary = {
         timeline,
         trend,
+        eviTrend,
+        ndmiTrend,
+        ndwiTrend,
         significantChanges: significantChangesCount,
         averageNDVI,
+        averageEVI,
+        averageNDMI,
+        averageNDWI,
+        averageSAVI,
+        averageNDRE,
         averageCloudCover,
       };
 
@@ -1822,6 +2116,117 @@ export class NDVIService {
         (error as Error).message
       );
     }
+  }
+
+  /**
+   * EVI trend from timeline points (linear regression, same ±0.05 / mois thresholds as NDVI).
+   */
+  private computeEVITrendFromTimeline(
+    eviPoints: Array<{ date: Date; evi?: number | null }>
+  ): import('../types').EVITrend | null {
+    if (eviPoints.length < 2) return null;
+
+    const dataPoints = eviPoints.map((p) => ({
+      date: new Date(p.date),
+      ndvi: Number(p.evi),
+    }));
+
+    const { slope, startNDVI, endNDVI } = this.calculateLinearRegression(dataPoints);
+    const changeRatePerMonth = slope * 30 * 24 * 60 * 60 * 1000;
+    const TREND_THRESHOLD = 0.05;
+
+    let trend: 'improving' | 'stable' | 'declining';
+    if (changeRatePerMonth > TREND_THRESHOLD) trend = 'improving';
+    else if (changeRatePerMonth < -TREND_THRESHOLD) trend = 'declining';
+    else trend = 'stable';
+
+    const sorted = [...dataPoints].sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    );
+
+    return {
+      trend,
+      changeRate: changeRatePerMonth,
+      dataPoints: dataPoints.length,
+      startDate: sorted[0].date,
+      endDate: sorted[sorted.length - 1].date,
+      startEVI: startNDVI,
+      endEVI: endNDVI,
+    };
+  }
+
+  /**
+   * NDMI trend from timeline points (same ±0.05 / mois thresholds as NDVI/EVI).
+   */
+  private computeNDMITrendFromTimeline(
+    ndmiPoints: Array<{ date: Date; ndmi?: number | null }>
+  ): import('../types').NDMITrend | null {
+    if (ndmiPoints.length < 2) return null;
+
+    const dataPoints = ndmiPoints.map((p) => ({
+      date: new Date(p.date),
+      ndvi: Number(p.ndmi),
+    }));
+
+    const { slope, startNDVI, endNDVI } = this.calculateLinearRegression(dataPoints);
+    const changeRatePerMonth = slope * 30 * 24 * 60 * 60 * 1000;
+    const TREND_THRESHOLD = 0.05;
+
+    let trend: 'improving' | 'stable' | 'declining';
+    if (changeRatePerMonth > TREND_THRESHOLD) trend = 'improving';
+    else if (changeRatePerMonth < -TREND_THRESHOLD) trend = 'declining';
+    else trend = 'stable';
+
+    const sorted = [...dataPoints].sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    );
+
+    return {
+      trend,
+      changeRate: changeRatePerMonth,
+      dataPoints: dataPoints.length,
+      startDate: sorted[0].date,
+      endDate: sorted[sorted.length - 1].date,
+      startNDMI: startNDVI,
+      endNDMI: endNDVI,
+    };
+  }
+
+  /**
+   * NDWI trend from timeline points (same ±0.05 / mois thresholds as NDVI/EVI/NDMI).
+   */
+  private computeNDWITrendFromTimeline(
+    ndwiPoints: Array<{ date: Date; ndwi?: number | null }>
+  ): import('../types').NDWITrend | null {
+    if (ndwiPoints.length < 2) return null;
+
+    const dataPoints = ndwiPoints.map((p) => ({
+      date: new Date(p.date),
+      ndvi: Number(p.ndwi),
+    }));
+
+    const { slope, startNDVI, endNDVI } = this.calculateLinearRegression(dataPoints);
+    const changeRatePerMonth = slope * 30 * 24 * 60 * 60 * 1000;
+    const TREND_THRESHOLD = 0.05;
+
+    let trend: 'improving' | 'stable' | 'declining';
+    if (changeRatePerMonth > TREND_THRESHOLD) trend = 'improving';
+    else if (changeRatePerMonth < -TREND_THRESHOLD) trend = 'declining';
+    else trend = 'stable';
+
+    const sorted = [...dataPoints].sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    );
+
+    return {
+      trend,
+      changeRate: changeRatePerMonth,
+      dataPoints: dataPoints.length,
+      startDate: sorted[0].date,
+      endDate: sorted[sorted.length - 1].date,
+      startNDWI: startNDVI,
+      endNDWI: endNDVI,
+    };
   }
 }
 

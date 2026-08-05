@@ -53,6 +53,35 @@ export interface NDVIResult {
   minNDVI: number;
   maxNDVI: number;
   stdDevNDVI: number;
+  /** EVI stats (nullable until recalculated / blue band available) */
+  meanEVI?: number | null;
+  minEVI?: number | null;
+  maxEVI?: number | null;
+  stdDevEVI?: number | null;
+  /** NDMI stats (nullable until SWIR B11 recalculated) */
+  meanNDMI?: number | null;
+  minNDMI?: number | null;
+  maxNDMI?: number | null;
+  stdDevNDMI?: number | null;
+  /** NDWI McFeeters (nullable until B3+B8 recalculated) */
+  meanNDWI?: number | null;
+  minNDWI?: number | null;
+  maxNDWI?: number | null;
+  stdDevNDWI?: number | null;
+  /** SAVI Huete L=0.5 (nullable until recalculated) */
+  meanSAVI?: number | null;
+  minSAVI?: number | null;
+  maxSAVI?: number | null;
+  stdDevSAVI?: number | null;
+  /** NDRE red-edge (nullable until B5+B8A recalculated) */
+  meanNDRE?: number | null;
+  minNDRE?: number | null;
+  maxNDRE?: number | null;
+  stdDevNDRE?: number | null;
+  /** Sentinel-2 cloudy pixel % when known */
+  cloudCover?: number | null;
+  /** good (<80%) | acceptable (80–95% fallback) | degraded (≥95%) */
+  imageryQuality?: 'good' | 'acceptable' | 'degraded' | null;
   healthStatus: HealthStatus;
   ndviRasterUrl: string | null;
   createdAt: Date;
@@ -88,7 +117,19 @@ export interface DeforestationEvent {
 export interface TemporalDataPoint {
   date: Date;
   ndvi: number;
+  /** EVI when available (null for legacy rows) */
+  evi?: number | null;
+  /** NDMI when available (null for legacy rows) */
+  ndmi?: number | null;
+  /** NDWI when available (null for legacy rows) */
+  ndwi?: number | null;
+  /** SAVI when available (null for legacy rows) */
+  savi?: number | null;
+  /** NDRE when available (null for legacy rows) */
+  ndre?: number | null;
   cloudCover: number;
+  /** good | acceptable | degraded — derived from cloud % / fallback */
+  imageryQuality?: 'good' | 'acceptable' | 'degraded' | null;
   healthStatus: HealthStatus;
   hasSignificantChange: boolean; // NDVI change > 0.15 from previous
   /** True when `date` is the satellite capture date, not a monthly grid day */
@@ -185,11 +226,21 @@ export interface ImageryDate {
 }
 
 /**
- * Sentinel-2 band data for NDVI calculation
+ * Sentinel-2 band data for NDVI / EVI / NDMI calculation
  */
 export interface BandData {
   red: number[][]; // Band 4
-  nir: number[][]; // Band 8
+  nir: number[][]; // Band 8 (10m) — NDVI/EVI
+  /** Band 2 — required for 3-band EVI; optional for NDVI-only */
+  blue?: number[][];
+  /** Band 8A (20m) — preferred NIR for NDMI when available */
+  nirNarrow?: number[][];
+  /** Band 11 SWIR (20m) — NDMI */
+  swir?: number[][];
+  /** Band 3 Green (10m) — NDWI */
+  green?: number[][];
+  /** Band 5 Red Edge (20m) — NDRE */
+  redEdge?: number[][];
   bounds: GeoJSON.BBox;
   resolution: number;
 }
@@ -212,13 +263,65 @@ export interface NDVITrend {
 }
 
 /**
+ * EVI trend over time (same classification thresholds as NDVI)
+ */
+export interface EVITrend {
+  trend: 'improving' | 'stable' | 'declining';
+  changeRate: number; // EVI units per month
+  dataPoints: number;
+  startDate: Date;
+  endDate: Date;
+  startEVI: number;
+  endEVI: number;
+}
+
+/**
+ * NDMI trend over time (moisture / hydric stress)
+ */
+export interface NDMITrend {
+  trend: 'improving' | 'stable' | 'declining';
+  changeRate: number; // NDMI units per month
+  dataPoints: number;
+  startDate: Date;
+  endDate: Date;
+  startNDMI: number;
+  endNDMI: number;
+}
+
+/**
+ * NDWI trend over time (surface water / wetness)
+ */
+export interface NDWITrend {
+  trend: 'improving' | 'stable' | 'declining';
+  changeRate: number; // NDWI units per month
+  dataPoints: number;
+  startDate: Date;
+  endDate: Date;
+  startNDWI: number;
+  endNDWI: number;
+}
+
+/**
  * Temporal analysis summary
  */
 export interface TemporalAnalysisSummary {
   timeline: TemporalDataPoint[];
   trend: NDVITrend | null; // null when insufficient data points for trend calculation
+  eviTrend: EVITrend | null;
+  ndmiTrend: NDMITrend | null;
+  ndwiTrend: NDWITrend | null;
   significantChanges: number;
   averageNDVI: number;
+  /** null when no EVI values in the period yet */
+  averageEVI: number | null;
+  /** null when no NDMI values in the period yet */
+  averageNDMI: number | null;
+  /** null when no NDWI values in the period yet */
+  averageNDWI: number | null;
+  /** null when no SAVI values in the period yet */
+  averageSAVI: number | null;
+  /** null when no NDRE values in the period yet */
+  averageNDRE: number | null;
   averageCloudCover: number;
 }
 
@@ -494,6 +597,26 @@ export interface NDVIResultRow {
   min_ndvi: number;
   max_ndvi: number;
   std_dev_ndvi: number;
+  mean_evi?: number | null;
+  min_evi?: number | null;
+  max_evi?: number | null;
+  std_dev_evi?: number | null;
+  mean_ndmi?: number | null;
+  min_ndmi?: number | null;
+  max_ndmi?: number | null;
+  std_dev_ndmi?: number | null;
+  mean_ndwi?: number | null;
+  min_ndwi?: number | null;
+  max_ndwi?: number | null;
+  std_dev_ndwi?: number | null;
+  mean_savi?: number | null;
+  min_savi?: number | null;
+  max_savi?: number | null;
+  std_dev_savi?: number | null;
+  mean_ndre?: number | null;
+  min_ndre?: number | null;
+  max_ndre?: number | null;
+  std_dev_ndre?: number | null;
   health_status: string;
   ndvi_raster_url: string | null;
   created_at: string;

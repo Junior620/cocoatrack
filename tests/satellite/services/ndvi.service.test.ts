@@ -383,19 +383,30 @@ describe('NDVIService', () => {
       expect(result.healthStatus).toBeDefined();
       expect(['excellent', 'good', 'fair', 'poor', 'critical']).toContain(result.healthStatus);
 
+      // EVI should be computed via EVI2 fallback (no blue band in mock)
+      expect(result.meanEVI).toBeTypeOf('number');
+      expect(result.meanEVI!).toBeGreaterThan(0);
+      expect(result.meanEVI!).toBeLessThanOrEqual(1);
+
       // Verify getBands was called correctly
       expect(imageryService.getBands).toHaveBeenCalledWith(
         mockGeometry,
         new Date('2024-01-15'),
-        ['B4', 'B8']
+        ['B2', 'B4', 'B8']
       );
     });
 
     it('should throw InsufficientDataError when pixel count is below minimum', async () => {
-      // Mock band data with very few pixels
+      // Mock band data with few pixels but not 1x1 (1x1 uses mean-value shortcut)
       const mockBandData: BandData = {
-        red: [[100]],
-        nir: [[300]],
+        red: [
+          [100, 120],
+          [110, 130],
+        ],
+        nir: [
+          [300, 320],
+          [310, 330],
+        ],
         bounds: [10.0, 5.0, 10.1, 5.1],
         resolution: 10,
       };

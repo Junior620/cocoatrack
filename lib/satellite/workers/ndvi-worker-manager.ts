@@ -333,6 +333,28 @@ export class NDVIWorkerManager {
   }
 
   /**
+   * Calculate EVI on the main thread (worker path uses same sync helpers).
+   * Blue band optional → EVI2 fallback.
+   */
+  async calculateEVI(
+    redBand: number[][],
+    nirBand: number[][],
+    blueBand?: number[][] | null
+  ): Promise<{
+    eviValues: number[];
+    statistics: { mean: number; min: number; max: number; stdDev: number; validCount: number } | null;
+  }> {
+    const { calculatePixelWiseEVI, calculateEVIStatistics } = await import(
+      './ndvi-calculator-sync'
+    );
+    const eviValues = calculatePixelWiseEVI(redBand, nirBand, blueBand);
+    return {
+      eviValues,
+      statistics: calculateEVIStatistics(eviValues),
+    };
+  }
+
+  /**
    * Terminate the worker and clean up resources
    */
   terminate(): void {

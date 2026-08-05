@@ -41,9 +41,9 @@ describe('CSV Export Utilities', () => {
 
       const csv = convertTemporalDataToCSV(timeline);
 
-      expect(csv).toContain('date,mean_ndvi,min_ndvi,max_ndvi,change_from_previous');
-      expect(csv).toContain('2024-01-01,0.7500,0.7000,0.8000,0.0000');
-      expect(csv).toContain('2024-02-01,0.8000,0.7500,0.8500,0.0500');
+      expect(csv).toContain('date,mean_ndvi,mean_evi,mean_ndmi,mean_ndwi,mean_savi,min_ndvi,max_ndvi,change_from_previous');
+      expect(csv).toContain('2024-01-01,0.7500,,,,,0.7000,0.8000,0.0000');
+      expect(csv).toContain('2024-02-01,0.8000,,,,,0.7500,0.8500,0.0500');
     });
 
     it('should convert temporal data without headers when specified', () => {
@@ -68,7 +68,7 @@ describe('CSV Export Utilities', () => {
 
       const csv = convertTemporalDataToCSV(timeline);
 
-      expect(csv).toBe('date,mean_ndvi,min_ndvi,max_ndvi,change_from_previous\n');
+      expect(csv).toBe('date,mean_ndvi,mean_evi,mean_ndmi,mean_ndwi,mean_savi,min_ndvi,max_ndvi,change_from_previous\n');
     });
 
     it('should calculate change from previous correctly', () => {
@@ -99,11 +99,11 @@ describe('CSV Export Utilities', () => {
       const csv = convertTemporalDataToCSV(timeline);
 
       // First point should have 0.0000 change
-      expect(csv).toContain('2024-01-01,0.6000,0.6000,0.6000,0.0000');
+      expect(csv).toContain('2024-01-01,0.6000,,,,,0.6000,0.6000,0.0000');
       // Second point: 0.75 - 0.60 = 0.15
-      expect(csv).toContain('2024-02-01,0.7500,0.7500,0.7500,0.1500');
+      expect(csv).toContain('2024-02-01,0.7500,,,,,0.7500,0.7500,0.1500');
       // Third point: 0.70 - 0.75 = -0.05
-      expect(csv).toContain('2024-03-01,0.7000,0.7000,0.7000,-0.0500');
+      expect(csv).toContain('2024-03-01,0.7000,,,,,0.7000,0.7000,-0.0500');
     });
 
     it('should use mean NDVI when min/max not provided', () => {
@@ -119,7 +119,81 @@ describe('CSV Export Utilities', () => {
 
       const csv = convertTemporalDataToCSV(timeline);
 
-      expect(csv).toContain('2024-01-01,0.7500,0.7500,0.7500,0.0000');
+      expect(csv).toContain('2024-01-01,0.7500,,,,,0.7500,0.7500,0.0000');
+    });
+
+    it('should export mean_evi when present', () => {
+      const timeline: TemporalCSVDataPoint[] = [
+        {
+          date: new Date('2024-01-01'),
+          ndvi: 0.75,
+          evi: 0.42,
+          cloudCover: 10,
+          healthStatus: 'good',
+          hasSignificantChange: false,
+        },
+      ];
+
+      const csv = convertTemporalDataToCSV(timeline);
+
+      expect(csv).toContain('2024-01-01,0.7500,0.4200,,,,0.7500,0.7500,0.0000');
+    });
+
+    it('should export mean_ndmi when present', () => {
+      const timeline: TemporalCSVDataPoint[] = [
+        {
+          date: new Date('2024-01-01'),
+          ndvi: 0.75,
+          evi: 0.42,
+          ndmi: 0.18,
+          cloudCover: 10,
+          healthStatus: 'good',
+          hasSignificantChange: false,
+        },
+      ];
+
+      const csv = convertTemporalDataToCSV(timeline);
+
+      expect(csv).toContain('2024-01-01,0.7500,0.4200,0.1800,,,0.7500,0.7500,0.0000');
+    });
+
+    it('should export mean_ndwi when present', () => {
+      const timeline: TemporalCSVDataPoint[] = [
+        {
+          date: new Date('2024-01-01'),
+          ndvi: 0.75,
+          evi: 0.42,
+          ndmi: 0.18,
+          ndwi: -0.05,
+          cloudCover: 10,
+          healthStatus: 'good',
+          hasSignificantChange: false,
+        },
+      ];
+
+      const csv = convertTemporalDataToCSV(timeline);
+
+      expect(csv).toContain('2024-01-01,0.7500,0.4200,0.1800,-0.0500,,0.7500,0.7500,0.0000');
+    });
+
+    it('should export mean_savi when present', () => {
+      const timeline: TemporalCSVDataPoint[] = [
+        {
+          date: new Date('2024-01-01'),
+          ndvi: 0.75,
+          evi: 0.42,
+          ndmi: 0.18,
+          ndwi: -0.05,
+          savi: 0.33,
+          cloudCover: 10,
+          healthStatus: 'good',
+          hasSignificantChange: false,
+        },
+      ];
+
+      const csv = convertTemporalDataToCSV(timeline);
+
+      expect(csv).toContain('2024-01-01,0.7500,0.4200,0.1800,-0.0500,0.3300,0.7500,0.7500,0.0000');
     });
 
     it('should handle Date objects and ISO strings', () => {

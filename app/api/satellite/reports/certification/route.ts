@@ -267,6 +267,7 @@ async function fetchNDVITrend(
   return ndviResults.map((result, index) => {
     // Access database columns with snake_case
     const meanNDVI = result.mean_ndvi;
+    const meanEVI = result.mean_evi != null ? Number(result.mean_evi) : null;
     const calculationDate = result.calculation_date;
     const healthStatus = result.health_status;
     
@@ -280,9 +281,10 @@ async function fetchNDVITrend(
 
     return {
       date: new Date(calculationDate),
-      ndvi: meanNDVI,
-      cloudCover: 0, // Not stored in ndvi_results, would need to join with satellite_imagery
-      healthStatus: healthStatus,
+      ndvi: Number(meanNDVI),
+      evi: meanEVI,
+      cloudCover: 0,
+      healthStatus: healthStatus as TemporalDataPoint['healthStatus'],
       hasSignificantChange,
     };
   });
@@ -761,12 +763,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // NDVI Trend section (if requested and available)
+    // NDVI / EVI Trend section (if requested and available)
     if (options.includeNDVITrend && ndviTrend && ndviTrend.length > 0) {
       yPos = checkPageBreak(yPos, 80);
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('NDVI Trend Analysis', 20, yPos);
+      doc.text(
+        options.language === 'fr' ? 'Analyse NDVI / EVI' : 'NDVI / EVI Trend Analysis',
+        20,
+        yPos
+      );
       yPos += 10;
 
       doc.setFontSize(10);
@@ -777,15 +783,35 @@ export async function POST(request: NextRequest) {
       const avgNDVI = ndviTrend.reduce((sum, point) => sum + point.ndvi, 0) / ndviTrend.length;
       doc.text(`Average NDVI: ${avgNDVI.toFixed(3)}`, 20, yPos);
       yPos += 6;
+
+      const eviPts = ndviTrend.filter((p) => p.evi != null && !isNaN(Number(p.evi)));
+      if (eviPts.length > 0) {
+        const avgEVI =
+          eviPts.reduce((sum, p) => sum + Number(p.evi), 0) / eviPts.length;
+        const eviDelta =
+          eviPts.length >= 2
+            ? Number(eviPts[eviPts.length - 1].evi) - Number(eviPts[0].evi)
+            : null;
+        doc.text(`Average EVI: ${avgEVI.toFixed(3)}`, 20, yPos);
+        yPos += 6;
+        if (eviDelta != null) {
+          doc.text(
+            `EVI trend: ${eviDelta >= 0 ? '+' : ''}${eviDelta.toFixed(3)}`,
+            20,
+            yPos
+          );
+          yPos += 6;
+        }
+      }
       
       const minNDVI = Math.min(...ndviTrend.map(p => p.ndvi));
       const maxNDVI = Math.max(...ndviTrend.map(p => p.ndvi));
-      doc.text(`Range: ${minNDVI.toFixed(3)} - ${maxNDVI.toFixed(3)}`, 20, yPos);
+      doc.text(`NDVI range: ${minNDVI.toFixed(3)} - ${maxNDVI.toFixed(3)}`, 20, yPos);
       yPos += 10;
 
       // Simple text-based trend chart
       doc.setFontSize(9);
-      doc.text('Recent NDVI Values:', 20, yPos);
+      doc.text('Recent values (NDVI / EVI):', 20, yPos);
       yPos += 6;
       
       ndviTrend.slice(-10).forEach((point) => {
@@ -793,11 +819,15 @@ export async function POST(request: NextRequest) {
           month: 'short', 
           year: 'numeric' 
         });
-        const healthEmoji = point.healthStatus === 'excellent' ? '●' : 
-                           point.healthStatus === 'good' ? '●' :
-                           point.healthStatus === 'fair' ? '●' :
-                           point.healthStatus === 'poor' ? '●' : '●';
-        doc.text(`  ${dateStr}: ${point.ndvi.toFixed(3)} ${healthEmoji} ${point.healthStatus}`, 20, yPos);
+        const eviStr =
+          point.evi != null && !isNaN(Number(point.evi))
+            ? ` / EVI ${Number(point.evi).toFixed(3)}`
+            : '';
+        doc.text(
+          `  ${dateStr}: NDVI ${point.ndvi.toFixed(3)}${eviStr} · ${point.healthStatus}`,
+          20,
+          yPos
+        );
         yPos += 5;
       });
       yPos += 10;

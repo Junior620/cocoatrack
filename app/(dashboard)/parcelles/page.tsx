@@ -24,6 +24,7 @@ import { ParcelleStatsCards } from '@/components/parcelles/ParcelleStatsCards';
 import { AssignParcellesModal, type AssignResult } from '@/components/parcelles/AssignParcellesModal';
 import { KMLExportButton } from '@/components/satellite/KMLExportButton';
 import RiskExportButton from '@/components/satellite/RiskExportButton';
+import { EarlyAlertsPanel } from '@/components/satellite/EarlyAlertsPanel';
 import { useBatchNDVICalculation } from '@/hooks/satellite/useBatchNDVICalculation';
 import { Activity, CheckCircle, XCircle } from 'lucide-react';
 
@@ -94,6 +95,46 @@ function ParcellesContent() {
     health_status: (searchParams.get('health_status') as HealthStatus) || undefined,
     is_active: searchParams.get('is_active') === 'false' ? false : true,
   };
+
+  const earlyAlertFilter = searchParams.get('early_alert') || '';
+  const [earlyAlertIds, setEarlyAlertIds] = useState<Set<string> | null>(null);
+  const [earlyAlertCount, setEarlyAlertCount] = useState(0);
+
+  useEffect(() => {
+    if (!earlyAlertFilter) {
+      setEarlyAlertIds(null);
+      setEarlyAlertCount(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const type =
+          earlyAlertFilter === 'ndmi' ||
+          earlyAlertFilter === 'ndwi' ||
+          earlyAlertFilter === 'evi' ||
+          earlyAlertFilter === 'combined'
+            ? earlyAlertFilter
+            : 'any';
+        const res = await fetch(
+          `/api/satellite/early-alerts?type=${type}&level=any&limit=300`
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!json.success || cancelled) return;
+        const ids = new Set<string>(
+          (json.data.alerts || []).map((a: { parcelleId: string }) => a.parcelleId)
+        );
+        setEarlyAlertIds(ids);
+        setEarlyAlertCount(ids.size);
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [earlyAlertFilter]);
 
   // Parse sort from URL
   // Default sort: planteur name ascending (shows parcelles with planteurs first)
@@ -183,7 +224,7 @@ function ParcellesContent() {
   }, [fetchParcelles, fetchKPIs, fetchFilterOptions, fetchGroupedData, viewMode]);
 
   // Update URL with new filters
-  const updateFilters = (newFilters: Partial<ParcelleFilters & { sortBy?: string; sortOrder?: string; view?: ViewMode }>) => {
+  const updateFilters = (newFilters: Partial<ParcelleFilters & { sortBy?: string; sortOrder?: string; view?: ViewMode; early_alert?: string }>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(newFilters).forEach(([key, value]) => {
       if (value !== undefined && value !== '' && value !== null) {
@@ -455,6 +496,26 @@ function ParcellesContent() {
               ))}
             </select>
 
+            {/* Early alert filter (EVI/NDMI) — client-side on current page */}
+            <select
+              value={earlyAlertFilter}
+              onChange={(e) =>
+                updateFilters({
+                  early_alert: e.target.value || undefined,
+                  page: 1,
+                })
+              }
+              className="rounded-lg border border-amber-200 bg-amber-50/50 py-2.5 pl-3 pr-8 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              title="Filtre les parcelles de la page courante présentes dans les alertes précoces"
+            >
+              <option value="">Alertes EVI/NDMI</option>
+              <option value="any">Toute alerte précoce</option>
+              <option value="ndmi">Hydrique (NDMI)</option>
+              <option value="ndwi">Eau de surface (NDWI)</option>
+              <option value="evi">Canopée (EVI)</option>
+              <option value="combined">Double signal</option>
+            </select>
+
             {/* Import File Filter */}
             {importFiles.length > 0 && (
               <select
@@ -539,6 +600,22 @@ function ParcellesContent() {
               </button>
             </div>
           </div>
+        </AnimatedSection>
+      )}
+
+      {/* Early EVI/NDMI alerts for coop agents */}
+      {viewMode === 'list' && (
+        <AnimatedSection animation="fadeUp" delay={0.2}>
+          <EarlyAlertsPanel />
+          {earlyAlertFilter && (
+            <p className="mt-2 text-xs text-amber-900">
+              Filtre liste actif ({earlyAlertFilter}) — {earlyAlertCount} alerte(s)
+              scannées coop · intersection avec la page courante.
+              <Link href="/parcelles/map?early_alert=any&color_early=1" className="ml-2 underline">
+                Voir sur la carte
+              </Link>
+            </p>
+          )}
         </AnimatedSection>
       )}
 
@@ -660,15 +737,21 @@ function ParcellesContent() {
         {viewMode === 'list' ? (
           <ParcelleTable
             key={tableKey}
-            parcelles={data?.data || []}
+            parcelles={
+              earlyAlertIds
+                ? (data?.data || []).filter((p) => earlyAlertIds.has(p.id))
+                : data?.data || []
+            }
             loading={loading}
             sortConfig={sortConfig}
             onSortChange={handleSortChange}
             pagination={data ? {
               page: data.page,
               pageSize: data.pageSize,
-              total: data.total,
-              totalPages: data.totalPages,
+              total: earlyAlertIds
+                ? (data.data || []).filter((p) => earlyAlertIds.has(p.id)).length
+                : data.total,
+              totalPages: earlyAlertIds ? 1 : data.totalPages,
             } : undefined}
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}

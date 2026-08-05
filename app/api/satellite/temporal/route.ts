@@ -235,9 +235,15 @@ export async function GET(request: NextRequest) {
         timeline: summary.timeline.map(point => ({
           date: point.date.toISOString(),
           ndvi: point.ndvi,
+          evi: point.evi ?? null,
+          ndmi: point.ndmi ?? null,
+          ndwi: point.ndwi ?? null,
+          savi: point.savi ?? null,
           cloudCover: point.cloudCover,
+          imageryQuality: point.imageryQuality ?? null,
           healthStatus: point.healthStatus,
           hasSignificantChange: point.hasSignificantChange,
+          isAcquisitionDate: point.isAcquisitionDate ?? false,
         })),
         trend: summary.trend ? {
           trend: summary.trend.trend,
@@ -248,8 +254,45 @@ export async function GET(request: NextRequest) {
           startNDVI: summary.trend.startNDVI,
           endNDVI: summary.trend.endNDVI,
         } : null, // null when insufficient data for trend calculation
+        eviTrend: summary.eviTrend
+          ? {
+              trend: summary.eviTrend.trend,
+              changeRate: summary.eviTrend.changeRate,
+              dataPoints: summary.eviTrend.dataPoints,
+              startDate: summary.eviTrend.startDate.toISOString(),
+              endDate: summary.eviTrend.endDate.toISOString(),
+              startEVI: summary.eviTrend.startEVI,
+              endEVI: summary.eviTrend.endEVI,
+            }
+          : null,
+        ndmiTrend: summary.ndmiTrend
+          ? {
+              trend: summary.ndmiTrend.trend,
+              changeRate: summary.ndmiTrend.changeRate,
+              dataPoints: summary.ndmiTrend.dataPoints,
+              startDate: summary.ndmiTrend.startDate.toISOString(),
+              endDate: summary.ndmiTrend.endDate.toISOString(),
+              startNDMI: summary.ndmiTrend.startNDMI,
+              endNDMI: summary.ndmiTrend.endNDMI,
+            }
+          : null,
+        ndwiTrend: summary.ndwiTrend
+          ? {
+              trend: summary.ndwiTrend.trend,
+              changeRate: summary.ndwiTrend.changeRate,
+              dataPoints: summary.ndwiTrend.dataPoints,
+              startDate: summary.ndwiTrend.startDate.toISOString(),
+              endDate: summary.ndwiTrend.endDate.toISOString(),
+              startNDWI: summary.ndwiTrend.startNDWI,
+              endNDWI: summary.ndwiTrend.endNDWI,
+            }
+          : null,
         significantChanges: summary.significantChanges,
         averageNDVI: summary.averageNDVI,
+        averageEVI: summary.averageEVI,
+        averageNDMI: summary.averageNDMI,
+        averageNDWI: summary.averageNDWI,
+        averageSAVI: summary.averageSAVI,
         averageCloudCover: summary.averageCloudCover,
       },
     };

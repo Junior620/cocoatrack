@@ -69,6 +69,7 @@ const MAX_RETRY_DELAY_MS = 10000;
 export const SENTINEL2_BANDS = {
   BLUE: 'B2',
   GREEN: 'B3',
+  RED_EDGE: 'B5',
   RED: 'B4',
   NIR: 'B8', // Near-Infrared
   SWIR1: 'B11',
@@ -702,11 +703,28 @@ export class ImageryService {
 
       const image = collection.first().select(bands);
 
+      const needs20m = bands.some((b) => b === 'B8A' || b === 'B11' || b === 'B12');
+      const scale10 = SENTINEL2_RESOLUTION;
+      const scale20 = 20;
+
       // Try sampleRectangle first for larger parcelles (better spatial detail)
       // Fall back to reduceRegion for small parcelles
       let redArray: number[][] = [];
       let nirArray: number[][] = [];
-      
+      let blueArray: number[][] = [];
+      let nirNarrowArray: number[][] = [];
+      let swirArray: number[][] = [];
+      let greenArray: number[][] = [];
+      let redEdgeArray: number[][] = [];
+
+      const redBandName = bands.find((b) => b === 'B4');
+      const nirBandName = bands.find((b) => b === 'B8');
+      const blueBandName = bands.find((b) => b === 'B2');
+      const greenBandName = bands.find((b) => b === 'B3');
+      const redEdgeBandName = bands.find((b) => b === 'B5');
+      const nirNarrowBandName = bands.find((b) => b === 'B8A');
+      const swirBandName = bands.find((b) => b === 'B11') ?? bands.find((b) => b === 'B12');
+
       try {
         const sampled = image.sampleRectangle({
           region: geeGeometry,
@@ -715,57 +733,116 @@ export class ImageryService {
 
         const result = await evaluateEE<Record<string, number[][]>>(sampled);
 
-        const redBandName = bands.find(b => b === 'B4') ?? bands[0];
-        const nirBandName = bands.find(b => b === 'B8') ?? bands[bands.length - 1];
-
-        redArray = result?.[redBandName] ?? [];
-        nirArray = result?.[nirBandName] ?? [];
-      } catch (sampleError) {
-        console.log(`[ImageryService] sampleRectangle failed, falling back to reduceRegion for small parcelle`);
+        if (redBandName) redArray = result?.[redBandName] ?? [];
+        if (nirBandName) nirArray = result?.[nirBandName] ?? [];
+        if (blueBandName) blueArray = result?.[blueBandName] ?? [];
+        if (greenBandName) greenArray = result?.[greenBandName] ?? [];
+        if (redEdgeBandName) redEdgeArray = result?.[redEdgeBandName] ?? [];
+        if (nirNarrowBandName) nirNarrowArray = result?.[nirNarrowBandName] ?? [];
+        if (swirBandName) swirArray = result?.[swirBandName] ?? [];
+      } catch {
+        console.log(
+          `[ImageryService] sampleRectangle failed, falling back to reduceRegion for small parcelle`
+        );
       }
 
-      // If sampleRectangle failed or returned empty arrays, use reduceRegion
-      if (redArray.length === 0 || nirArray.length === 0) {
-        console.log(`[ImageryService] Using reduceRegion for small parcelle geometry`);
-        
-        const redBandName = bands.find(b => b === 'B4') ?? bands[0];
-        const nirBandName = bands.find(b => b === 'B8') ?? bands[bands.length - 1];
-        
-        // Calculate mean values over the entire geometry
-        const stats = image.reduceRegion({
+      const needs10mMeans =
+        (redBandName && redArray.length === 0) ||
+        (nirBandName && nirArray.length === 0) ||
+        (greenBandName && greenArray.length === 0);
+      const needs20mMeans =
+        (nirNarrowBandName && nirNarrowArray.length === 0) ||
+        (swirBandName && swirArray.length === 0);
+
+      if (needs10mMeans && (redBandName || nirBandName || blueBandName || greenBandName)) {
+        const bands10 = [redBandName, nirBandName, blueBandName, greenBandName].filter(
+          Boolean
+        ) as string[];
+        const stats10 = image.select(bands10).reduceRegion({
           reducer: ee.Reducer.mean(),
           geometry: geeGeometry,
-          scale: SENTINEL2_RESOLUTION,
+          scale: scale10,
           maxPixels: 1e9,
         });
-
-        const result = await evaluateEE<Record<string, number>>(stats);
-        
-        const redMean = result?.[redBandName];
-        const nirMean = result?.[nirBandName];
-
-        if (redMean === undefined || nirMean === undefined || redMean === null || nirMean === null) {
-          throw new ImageryUnavailableError(
-            `No valid pixel data for date ${date.toISOString().split('T')[0]}. The parcelle may be outside the image coverage or completely cloud-covered.`,
-            'unknown',
-            date
-          );
+        const result10 = await evaluateEE<Record<string, number>>(stats10);
+        if (redBandName && result10?.[redBandName] != null) {
+          redArray = [[result10[redBandName]]];
         }
-
-        // Convert single mean values to 1x1 arrays for compatibility
-        redArray = [[redMean]];
-        nirArray = [[nirMean]];
-        
-        console.log(`[ImageryService] getBands: retrieved mean values (Red: ${redMean.toFixed(2)}, NIR: ${nirMean.toFixed(2)}) for small parcelle`);
-      } else {
-        console.log(`[ImageryService] getBands: retrieved ${redArray.length}x${redArray[0]?.length ?? 0} pixels for ${bands.join(', ')}`);
+        if (nirBandName && result10?.[nirBandName] != null) {
+          nirArray = [[result10[nirBandName]]];
+        }
+        if (blueBandName && result10?.[blueBandName] != null) {
+          blueArray = [[result10[blueBandName]]];
+        }
+        if (greenBandName && result10?.[greenBandName] != null) {
+          greenArray = [[result10[greenBandName]]];
+        }
       }
 
+      if (needs20mMeans && (nirNarrowBandName || swirBandName)) {
+        const bands20 = [nirNarrowBandName, swirBandName].filter(
+          Boolean
+        ) as string[];
+        const stats20 = image.select(bands20).reduceRegion({
+          reducer: ee.Reducer.mean(),
+          geometry: geeGeometry,
+          scale: scale20,
+          maxPixels: 1e9,
+        });
+        const result20 = await evaluateEE<Record<string, number>>(stats20);
+        if (nirNarrowBandName && result20?.[nirNarrowBandName] != null) {
+          nirNarrowArray = [[result20[nirNarrowBandName]]];
+        }
+        if (swirBandName && result20?.[swirBandName] != null) {
+          swirArray = [[result20[swirBandName]]];
+        }
+        if (redEdgeBandName && result20?.[redEdgeBandName] != null) {
+          redEdgeArray = [[result20[redEdgeBandName]]];
+        }
+      }
+
+      // Legacy path: only B4/B8 requested and still empty → error
+      if (
+        redBandName &&
+        nirBandName &&
+        (redArray.length === 0 || nirArray.length === 0)
+      ) {
+        throw new ImageryUnavailableError(
+          `No valid pixel data for date ${date.toISOString().split('T')[0]}. The parcelle may be outside the image coverage or completely cloud-covered.`,
+          'unknown',
+          date
+        );
+      }
+
+      // NDMI-only request (B8A+B11 without B4/B8)
+      if (
+        !redBandName &&
+        !nirBandName &&
+        (nirNarrowArray.length === 0 || swirArray.length === 0)
+      ) {
+        throw new ImageryUnavailableError(
+          `No valid SWIR/NIR narrow data for date ${date.toISOString().split('T')[0]}`,
+          'unknown',
+          date
+        );
+      }
+
+      console.log(
+        `[ImageryService] getBands: bands=${bands.join(',')} ` +
+          `red=${redArray.length}x${redArray[0]?.length ?? 0} ` +
+          `swir=${swirArray.length}x${swirArray[0]?.length ?? 0}`
+      );
+
       return {
-        red: redArray,
-        nir: nirArray,
+        red: redArray.length > 0 ? redArray : [[0]],
+        nir: nirArray.length > 0 ? nirArray : [[0]],
+        blue: blueArray.length > 0 ? blueArray : undefined,
+        nirNarrow: nirNarrowArray.length > 0 ? nirNarrowArray : undefined,
+        swir: swirArray.length > 0 ? swirArray : undefined,
+        green: greenArray.length > 0 ? greenArray : undefined,
+        redEdge: redEdgeArray.length > 0 ? redEdgeArray : undefined,
         bounds,
-        resolution: SENTINEL2_RESOLUTION,
+        resolution: needs20m && !redBandName ? scale20 : scale10,
       };
 
     } catch (error) {

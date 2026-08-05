@@ -89,6 +89,49 @@ function ParcellesMapContent() {
   const [villages, setVillages] = useState<string[]>([]);
   const [importFiles, setImportFiles] = useState<ImportFileOption[]>([]);
   const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
+  const [earlyAlerts, setEarlyAlerts] = useState<
+    Record<string, { level: string; code: string; visitPriority?: string }>
+  >({});
+  const earlyAlertFilter = searchParams.get('early_alert') || '';
+  const colorByEarlyAlert = searchParams.get('color_early') === '1';
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const type =
+          earlyAlertFilter === 'ndmi' ||
+          earlyAlertFilter === 'ndwi' ||
+          earlyAlertFilter === 'evi' ||
+          earlyAlertFilter === 'combined'
+            ? earlyAlertFilter
+            : 'any';
+        const res = await fetch(
+          `/api/satellite/early-alerts?type=${type}&level=any&limit=300`
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!json.success || cancelled) return;
+        const map: Record<
+          string,
+          { level: string; code: string; visitPriority?: string }
+        > = {};
+        for (const a of json.data.alerts || []) {
+          map[a.parcelleId] = {
+            level: a.combinedLevel,
+            code: a.combinedCode,
+            visitPriority: a.visitPriority,
+          };
+        }
+        setEarlyAlerts(map);
+      } catch (err) {
+        console.error('Failed to load early alerts for map', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [earlyAlertFilter]);
 
   // Parse filters from URL
   const filters: ParcelleFilters = useMemo(() => ({
@@ -212,7 +255,9 @@ function ParcellesMapContent() {
   }, [currentBbox]);
 
   // Update URL with new filters
-  const updateFilters = (newFilters: Partial<ParcelleFilters>) => {
+  const updateFilters = (
+    newFilters: Partial<ParcelleFilters & { early_alert?: string; color_early?: string }>
+  ) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(newFilters).forEach(([key, value]) => {
       if (value !== undefined && value !== '' && value !== null) {
@@ -276,7 +321,9 @@ function ParcellesMapContent() {
     searchParams.get('village') ||
     searchParams.get('region') ||
     searchParams.get('source') ||
-    searchParams.get('import_file_id')
+    searchParams.get('import_file_id') ||
+    searchParams.get('early_alert') ||
+    searchParams.get('color_early')
   );
 
   // Get selected parcelle
@@ -287,8 +334,10 @@ function ParcellesMapContent() {
 
   // Convert parcelles to map format (Parcelle type without planteur requirement)
   const mapParcelles = useMemo(() => {
-    return data?.data || [];
-  }, [data?.data]);
+    const list = data?.data || [];
+    if (!earlyAlertFilter) return list;
+    return list.filter((p) => !!earlyAlerts[p.id]);
+  }, [data?.data, earlyAlertFilter, earlyAlerts]);
 
   // Full-height map page: use negative margins to counteract the main content padding
   // Header is h-16 (4rem), main content has p-4 sm:p-6 lg:p-8 padding
@@ -474,6 +523,48 @@ function ParcellesMapContent() {
                     </select>
                   </div>
 
+                  {/* Early alert (EVI/NDMI) */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Alerte précoce
+                    </label>
+                    <select
+                      value={earlyAlertFilter}
+                      onChange={(e) =>
+                        updateFilters({
+                          early_alert: e.target.value || undefined,
+                        })
+                      }
+                      className="w-full rounded-lg border border-gray-200 py-2 pl-3 pr-8 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    >
+                      <option value="">Toutes les parcelles</option>
+                      <option value="any">Toute alerte EVI/NDMI/NDWI</option>
+                      <option value="ndmi">Hydrique (NDMI)</option>
+                      <option value="ndwi">Eau de surface (NDWI)</option>
+                      <option value="evi">Canopée (EVI)</option>
+                      <option value="combined">Double signal</option>
+                    </select>
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={colorByEarlyAlert}
+                        onChange={(e) =>
+                          updateFilters({
+                            color_early: e.target.checked ? '1' : undefined,
+                          })
+                        }
+                        className="rounded border-gray-300"
+                      />
+                      Colorer selon alerte (ambre / orange)
+                    </label>
+                    {Object.keys(earlyAlerts).length > 0 && (
+                      <p className="mt-1 text-[11px] text-amber-800">
+                        {Object.keys(earlyAlerts).length} parcelle(s) en alerte
+                        (scan coop)
+                      </p>
+                    )}
+                  </div>
+
                   {/* Import File Filter */}
                   {importFiles.length > 0 && (
                     <div>
@@ -616,6 +707,9 @@ function ParcellesMapContent() {
           height="100%"
           defaultProvider="leaflet"
           zoomToSelected={true}
+          earlyAlerts={earlyAlerts}
+          filterEarlyAlertsOnly={!!earlyAlertFilter}
+          colorByEarlyAlert={colorByEarlyAlert}
         />
 
         {/* Bbox Loading Indicator */}

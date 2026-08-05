@@ -2,6 +2,25 @@
 
 This directory contains utility scripts for testing and verification.
 
+## EVI backfill
+
+**File**: `backfill-evi-coop.ts`
+
+Recalcule les mois NDVI sans `mean_evi`.
+
+```bash
+# Toutes les parcelles (recommandé si peu / pas de cooperatives)
+npx tsx scripts/backfill-evi-coop.ts --all --months 12 --limit 50
+
+# Planteurs sans cooperative_id
+npx tsx scripts/backfill-evi-coop.ts --no-coop --months 12
+
+# Une coopérative
+npx tsx scripts/backfill-evi-coop.ts --coop 123e4567-e89b-12d3-a456-426614174000 --months 12
+```
+
+API : `POST /api/satellite/ndvi/backfill-coop` avec `{ "scope": "all", "months": 12 }`
+
 ## NDVI Optimization Test
 
 **File**: `test-ndvi-optimization.ts`

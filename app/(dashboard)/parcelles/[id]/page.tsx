@@ -20,6 +20,7 @@ import HealthStatusBadge from '@/components/satellite/HealthStatusBadge';
 import type { HealthStatus, TrendDirection } from '@/components/satellite/HealthStatusBadge';
 import { TemporalSlider } from '@/components/satellite/TemporalSlider';
 import { TemporalDataChart } from '@/components/satellite/TemporalDataChart';
+import { AlertFeedbackButtons } from '@/components/satellite/AlertFeedbackButtons';
 import DeforestationAlert from '@/components/satellite/DeforestationAlert';
 import { KMLExportButton } from '@/components/satellite/KMLExportButton';
 import ReportOptionsModal from '@/components/satellite/ReportOptionsModal';
@@ -61,6 +62,8 @@ function ParcelleDetailContent() {
   // Editable fields state
   const [editedLabel, setEditedLabel] = useState<string>('');
   const [editedVillage, setEditedVillage] = useState<string>('');
+  const [editedAnneePlantation, setEditedAnneePlantation] = useState<string>('');
+  const [editedDensiteArbresHa, setEditedDensiteArbresHa] = useState<string>('');
   const [editedCertifications, setEditedCertifications] = useState<Certification[]>([]);
   const [certDropdownOpen, setCertDropdownOpen] = useState(false);
   const certDropdownRef = useRef<HTMLDivElement>(null);
@@ -71,6 +74,66 @@ function ParcelleDetailContent() {
   // Health status state
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
   const [meanNDVI, setMeanNDVI] = useState<number | null>(null);
+  const [meanEVI, setMeanEVI] = useState<number | null>(null);
+  const [meanNDMI, setMeanNDMI] = useState<number | null>(null);
+  const [meanNDWI, setMeanNDWI] = useState<number | null>(null);
+  const [meanSAVI, setMeanSAVI] = useState<number | null>(null);
+  const [saviRelevant, setSaviRelevant] = useState(false);
+  const [ndviEviGap, setNdviEviGap] = useState<number | null>(null);
+  const [ndviEviGapLabel, setNdviEviGapLabel] = useState<string | null>(null);
+  const [eviAlert, setEviAlert] = useState<{
+    level: 'none' | 'watch' | 'alert';
+    messageFr: string;
+    code: string;
+  } | null>(null);
+  const [ndmiAlert, setNdmiAlert] = useState<{
+    level: 'none' | 'watch' | 'alert';
+    messageFr: string;
+    code: string;
+  } | null>(null);
+  const [ndwiAlert, setNdwiAlert] = useState<{
+    level: 'none' | 'watch' | 'alert';
+    messageFr: string;
+    code: string;
+  } | null>(null);
+  const [combinedAlert, setCombinedAlert] = useState<{
+    level: 'none' | 'watch' | 'alert';
+    messageFr: string;
+    code: string;
+    visitPriority: string;
+  } | null>(null);
+  const [ndmiBandLabel, setNdmiBandLabel] = useState<string | null>(null);
+  const [ndmiBandHint, setNdmiBandHint] = useState<string | null>(null);
+  const [ndwiBandLabel, setNdwiBandLabel] = useState<string | null>(null);
+  const [ndwiBandHint, setNdwiBandHint] = useState<string | null>(null);
+  const [saviBandLabel, setSaviBandLabel] = useState<string | null>(null);
+  const [saviBandHint, setSaviBandHint] = useState<string | null>(null);
+  const [indexLegend, setIndexLegend] = useState<string | null>(null);
+  const [visitPriorityMsg, setVisitPriorityMsg] = useState<string | null>(null);
+  const [visitPriorityRank, setVisitPriorityRank] = useState<string | null>(null);
+  const [saviAlertMsg, setSaviAlertMsg] = useState<string | null>(null);
+  const [ndreAlertMsg, setNdreAlertMsg] = useState<string | null>(null);
+  const [meanNDRE, setMeanNDRE] = useState<number | null>(null);
+  const [villageEviLabel, setVillageEviLabel] = useState<string | null>(null);
+  const [villageSaviLabel, setVillageSaviLabel] = useState<string | null>(null);
+  const [seasonLabel, setSeasonLabel] = useState<string | null>(null);
+  const [seasonHint, setSeasonHint] = useState<string | null>(null);
+  const [villageNdmi, setVillageNdmi] = useState<{
+    labelFr: string;
+    hintFr: string;
+    band: string;
+    villageMedianNDMI: number | null;
+    delta: number | null;
+    sampleSize: number;
+    village: string;
+  } | null>(null);
+  const [imageryQuality, setImageryQuality] = useState<
+    'good' | 'acceptable' | 'degraded' | null
+  >(null);
+  const [cloudCover, setCloudCover] = useState<number | null>(null);
+  const [rainfallLabel, setRainfallLabel] = useState<string | null>(null);
+  const [rainfallHint, setRainfallHint] = useState<string | null>(null);
+  const [rainfallNdmiHint, setRainfallNdmiHint] = useState<string | null>(null);
   const [lastCalculationDate, setLastCalculationDate] = useState<Date | null>(null);
   const [trend, setTrend] = useState<TrendDirection | null>(null);
   const [recommendation, setRecommendation] = useState<string | null>(null);
@@ -107,6 +170,10 @@ function ParcelleDetailContent() {
   const hasChanges = parcelle && (
     editedLabel !== (parcelle.label || '') ||
     editedVillage !== (parcelle.village || '') ||
+    editedAnneePlantation !==
+      (parcelle.annee_plantation != null ? String(parcelle.annee_plantation) : '') ||
+    editedDensiteArbresHa !==
+      (parcelle.densite_arbres_ha != null ? String(parcelle.densite_arbres_ha) : '') ||
     JSON.stringify([...editedCertifications].sort()) !== JSON.stringify([...parcelle.certifications].sort())
   );
 
@@ -124,6 +191,12 @@ function ParcelleDetailContent() {
       // Initialize editable fields
       setEditedLabel(data.label || '');
       setEditedVillage(data.village || '');
+      setEditedAnneePlantation(
+        data.annee_plantation != null ? String(data.annee_plantation) : ''
+      );
+      setEditedDensiteArbresHa(
+        data.densite_arbres_ha != null ? String(data.densite_arbres_ha) : ''
+      );
       setEditedCertifications(data.certifications || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors du chargement de la parcelle');
@@ -150,6 +223,39 @@ function ParcelleDetailContent() {
         // No NDVI data available yet
         setHealthStatus(null);
         setMeanNDVI(null);
+        setMeanEVI(null);
+        setMeanNDMI(null);
+        setMeanNDWI(null);
+        setMeanSAVI(null);
+        setMeanNDRE(null);
+        setSaviRelevant(false);
+        setIndexLegend(null);
+        setVisitPriorityMsg(null);
+        setVisitPriorityRank(null);
+        setSaviAlertMsg(null);
+        setNdreAlertMsg(null);
+        setVillageEviLabel(null);
+        setVillageSaviLabel(null);
+        setNdviEviGap(null);
+        setNdviEviGapLabel(null);
+        setEviAlert(null);
+        setNdmiAlert(null);
+        setNdwiAlert(null);
+        setCombinedAlert(null);
+        setNdmiBandLabel(null);
+        setNdmiBandHint(null);
+        setNdwiBandLabel(null);
+        setNdwiBandHint(null);
+        setSaviBandLabel(null);
+        setSaviBandHint(null);
+        setSeasonLabel(null);
+        setSeasonHint(null);
+        setVillageNdmi(null);
+        setImageryQuality(null);
+        setCloudCover(null);
+        setRainfallLabel(null);
+        setRainfallHint(null);
+        setRainfallNdmiHint(null);
         setLastCalculationDate(null);
         setTrend(null);
         setRecommendation(null);
@@ -167,6 +273,61 @@ function ParcelleDetailContent() {
       if (result.success && result.data) {
         setHealthStatus(result.data.healthStatus);
         setMeanNDVI(result.data.meanNDVI);
+        setMeanEVI(
+          result.data.meanEVI != null ? Number(result.data.meanEVI) : null
+        );
+        setMeanNDMI(
+          result.data.meanNDMI != null ? Number(result.data.meanNDMI) : null
+        );
+        setMeanNDWI(
+          result.data.meanNDWI != null ? Number(result.data.meanNDWI) : null
+        );
+        setMeanSAVI(
+          result.data.meanSAVI != null ? Number(result.data.meanSAVI) : null
+        );
+        setSaviRelevant(Boolean(result.data.saviRelevant));
+        setNdviEviGap(
+          result.data.ndviEviGap != null ? Number(result.data.ndviEviGap) : null
+        );
+        setNdviEviGapLabel(result.data.ndviEviGapLabel ?? null);
+        setEviAlert(result.data.eviAlert ?? null);
+        setNdmiAlert(result.data.ndmiAlert ?? null);
+        setNdwiAlert(result.data.ndwiAlert ?? null);
+        setCombinedAlert(result.data.combinedAlert ?? null);
+        setNdmiBandLabel(result.data.ndmiBand?.labelFr ?? null);
+        setNdmiBandHint(result.data.ndmiBand?.hintFr ?? null);
+        setNdwiBandLabel(result.data.ndwiBand?.labelFr ?? null);
+        setNdwiBandHint(result.data.ndwiBand?.hintFr ?? null);
+        setSaviBandLabel(result.data.saviBand?.labelFr ?? null);
+        setSaviBandHint(result.data.saviBand?.hintFr ?? null);
+        setIndexLegend(result.data.indexLegend ?? null);
+        setVisitPriorityMsg(result.data.visitPriority?.messageFr ?? null);
+        setVisitPriorityRank(result.data.visitPriority?.rank ?? null);
+        setSaviAlertMsg(
+          result.data.saviAlert?.level && result.data.saviAlert.level !== 'none'
+            ? result.data.saviAlert.messageFr
+            : null
+        );
+        setNdreAlertMsg(
+          result.data.ndreAlert?.level && result.data.ndreAlert.level !== 'none'
+            ? result.data.ndreAlert.messageFr
+            : null
+        );
+        setMeanNDRE(
+          result.data.meanNDRE != null ? Number(result.data.meanNDRE) : null
+        );
+        setVillageEviLabel(result.data.villageEvi?.labelFr ?? null);
+        setVillageSaviLabel(result.data.villageSavi?.labelFr ?? null);
+        setSeasonLabel(result.data.season?.labelFr ?? null);
+        setSeasonHint(result.data.season?.hintFr ?? null);
+        setVillageNdmi(result.data.villageNdmi ?? null);
+        setImageryQuality(result.data.imageryQuality ?? null);
+        setCloudCover(
+          result.data.cloudCover != null ? Number(result.data.cloudCover) : null
+        );
+        setRainfallLabel(result.data.rainfall?.labelFr ?? null);
+        setRainfallHint(result.data.rainfall?.hintFr ?? null);
+        setRainfallNdmiHint(result.data.rainfall?.ndmiInterpretationFr ?? null);
         setLastCalculationDate(new Date(result.data.lastCalculationDate));
         setTrend(result.data.trend?.direction || null);
         setRecommendation(result.data.recommendation);
@@ -309,6 +470,22 @@ function ParcelleDetailContent() {
       if (editedVillage !== (parcelle.village || '')) {
         updateData.village = editedVillage || null;
       }
+      {
+        const y = editedAnneePlantation.trim()
+          ? Number.parseInt(editedAnneePlantation.trim(), 10)
+          : null;
+        const prevY = parcelle.annee_plantation ?? null;
+        if (y !== prevY) {
+          updateData.annee_plantation = Number.isFinite(y as number) ? y : null;
+        }
+        const d = editedDensiteArbresHa.trim()
+          ? Number.parseFloat(editedDensiteArbresHa.trim())
+          : null;
+        const prevD = parcelle.densite_arbres_ha ?? null;
+        if (d !== prevD) {
+          updateData.densite_arbres_ha = Number.isFinite(d as number) ? d : null;
+        }
+      }
       if (JSON.stringify([...editedCertifications].sort()) !== JSON.stringify([...parcelle.certifications].sort())) {
         updateData.certifications = editedCertifications;
       }
@@ -333,6 +510,14 @@ function ParcelleDetailContent() {
     if (parcelle) {
       setEditedLabel(parcelle.label || '');
       setEditedVillage(parcelle.village || '');
+      setEditedAnneePlantation(
+        parcelle.annee_plantation != null ? String(parcelle.annee_plantation) : ''
+      );
+      setEditedDensiteArbresHa(
+        parcelle.densite_arbres_ha != null
+          ? String(parcelle.densite_arbres_ha)
+          : ''
+      );
       setEditedCertifications(parcelle.certifications || []);
     }
   };
@@ -405,6 +590,18 @@ function ParcelleDetailContent() {
         // Update health status with new data
         setHealthStatus(result.data.ndvi.healthStatus);
         setMeanNDVI(result.data.ndvi.meanNDVI);
+        setMeanEVI(
+          result.data.ndvi.meanEVI != null ? Number(result.data.ndvi.meanEVI) : null
+        );
+        setMeanNDMI(
+          result.data.ndvi.meanNDMI != null ? Number(result.data.ndvi.meanNDMI) : null
+        );
+        setMeanNDWI(
+          result.data.ndvi.meanNDWI != null ? Number(result.data.ndvi.meanNDWI) : null
+        );
+        setMeanSAVI(
+          result.data.ndvi.meanSAVI != null ? Number(result.data.ndvi.meanSAVI) : null
+        );
         setLastCalculationDate(new Date(result.data.ndvi.calculationDate));
         setRecommendation(result.data.recommendation);
         
@@ -461,6 +658,18 @@ function ParcelleDetailContent() {
         // Update map layers with data from selected date
         setHealthStatus(result.data.ndvi.healthStatus);
         setMeanNDVI(result.data.ndvi.meanNDVI);
+        setMeanEVI(
+          result.data.ndvi.meanEVI != null ? Number(result.data.ndvi.meanEVI) : null
+        );
+        setMeanNDMI(
+          result.data.ndvi.meanNDMI != null ? Number(result.data.ndvi.meanNDMI) : null
+        );
+        setMeanNDWI(
+          result.data.ndvi.meanNDWI != null ? Number(result.data.ndvi.meanNDWI) : null
+        );
+        setMeanSAVI(
+          result.data.ndvi.meanSAVI != null ? Number(result.data.ndvi.meanSAVI) : null
+        );
         setLastCalculationDate(new Date(result.data.ndvi.calculationDate));
         setNdviRasterUrl(result.data.ndvi.ndviRasterUrl || null);
         setNdviRasterBounds(result.data.ndvi.ndviRasterBounds || null);
@@ -1092,6 +1301,56 @@ function ParcelleDetailContent() {
             ) : (
               <DetailRow label="Village" value={parcelle.village || '-'} />
             )}
+            {canEdit && parcelle.is_active ? (
+              <div className="flex justify-between border-b border-gray-100 pb-2">
+                <dt className="text-sm text-gray-500">Année plantation</dt>
+                <dd className="flex-1 ml-4">
+                  <input
+                    type="number"
+                    min={1900}
+                    max={2100}
+                    value={editedAnneePlantation}
+                    onChange={(e) => setEditedAnneePlantation(e.target.value)}
+                    placeholder="ex. 2019"
+                    className="w-full text-right text-sm font-medium text-gray-900 border-0 border-b border-transparent focus:border-primary-500 focus:ring-0 bg-transparent placeholder:text-gray-400"
+                  />
+                </dd>
+              </div>
+            ) : (
+              <DetailRow
+                label="Année plantation"
+                value={
+                  parcelle.annee_plantation != null
+                    ? String(parcelle.annee_plantation)
+                    : '-'
+                }
+              />
+            )}
+            {canEdit && parcelle.is_active ? (
+              <div className="flex justify-between border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                <dt className="text-sm text-gray-500">Densité (arbres/ha)</dt>
+                <dd className="flex-1 ml-4">
+                  <input
+                    type="number"
+                    min={1}
+                    max={5000}
+                    value={editedDensiteArbresHa}
+                    onChange={(e) => setEditedDensiteArbresHa(e.target.value)}
+                    placeholder="ex. 1100"
+                    className="w-full text-right text-sm font-medium text-gray-900 border-0 border-b border-transparent focus:border-primary-500 focus:ring-0 bg-transparent placeholder:text-gray-400"
+                  />
+                </dd>
+              </div>
+            ) : (
+              <DetailRow
+                label="Densité (arbres/ha)"
+                value={
+                  parcelle.densite_arbres_ha != null
+                    ? String(parcelle.densite_arbres_ha)
+                    : '-'
+                }
+              />
+            )}
           </dl>
         </div>
       </div>
@@ -1135,14 +1394,370 @@ function ParcelleDetailContent() {
               />
             </div>
 
-            {/* NDVI Value */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500">Indice NDVI:</span>
-              <span className="text-lg font-semibold text-gray-900">
-                {meanNDVI.toFixed(3)}
-              </span>
+            {indexLegend && (
+              <p className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+                {indexLegend}
+              </p>
+            )}
+            {visitPriorityRank && visitPriorityRank !== 'none' && (
+              <div
+                className={`rounded-lg border px-3 py-2 text-sm ${
+                  visitPriorityRank === 'high'
+                    ? 'border-orange-200 bg-orange-50 text-orange-950'
+                    : 'border-amber-200 bg-amber-50 text-amber-950'
+                }`}
+              >
+                <span className="font-semibold uppercase text-[11px] tracking-wide opacity-70">
+                  Visite · {visitPriorityRank}
+                </span>
+                <p className="mt-0.5">{visitPriorityMsg}</p>
+                {saviAlertMsg && (
+                  <p className="mt-1 text-xs opacity-90">{saviAlertMsg}</p>
+                )}
+                {ndreAlertMsg && (
+                  <p className="mt-1 text-xs opacity-90">{ndreAlertMsg}</p>
+                )}
+              </div>
+            )}
+            {(villageEviLabel || villageSaviLabel) && (
+              <p className="text-xs text-gray-600">
+                {[villageEviLabel, villageSaviLabel].filter(Boolean).join(' · ')}
+                {meanNDRE != null ? ` · NDRE ${meanNDRE.toFixed(3)}` : ''}
+              </p>
+            )}
+            {/* NDVI / EVI / NDMI Values */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500">Indice NDVI:</span>
+                <span className="text-lg font-semibold text-gray-900">
+                  {meanNDVI.toFixed(3)}
+                </span>
+              </div>
+              {meanEVI != null ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-500">Indice EVI:</span>
+                  <span className="text-lg font-semibold text-gray-900">
+                    {meanEVI.toFixed(3)}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xs text-sky-700">
+                  EVI indisponible — recalculez le NDVI ou lancez Historique GEE
+                </span>
+              )}
+              {meanNDMI != null ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm text-gray-500">Indice NDMI:</span>
+                  <span className="text-lg font-semibold text-amber-900">
+                    {meanNDMI.toFixed(3)}
+                  </span>
+                  {ndmiBandLabel && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                      {ndmiBandLabel}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-xs text-amber-800">
+                  NDMI indisponible — Historique GEE pour stress hydrique
+                </span>
+              )}
+              {meanNDWI != null ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm text-gray-500">Indice NDWI:</span>
+                  <span className="text-lg font-semibold text-cyan-900">
+                    {meanNDWI.toFixed(3)}
+                  </span>
+                  {ndwiBandLabel && (
+                    <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-xs font-medium text-cyan-900">
+                      {ndwiBandLabel}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-xs text-cyan-800">
+                  NDWI indisponible — Historique GEE pour eau de surface
+                </span>
+              )}
+              {saviRelevant && meanSAVI != null && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm text-gray-500">Indice SAVI:</span>
+                  <span className="text-lg font-semibold text-stone-900">
+                    {meanSAVI.toFixed(3)}
+                  </span>
+                  {saviBandLabel && (
+                    <span className="rounded-full bg-stone-200 px-2 py-0.5 text-xs font-medium text-stone-900">
+                      {saviBandLabel}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-stone-500">
+                    canopée claire — correction sol
+                  </span>
+                </div>
+              )}
+              {seasonLabel && (
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-700">
+                  {seasonLabel}
+                </span>
+              )}
+              {imageryQuality && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    imageryQuality === 'good'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : imageryQuality === 'acceptable'
+                        ? 'bg-amber-100 text-amber-900'
+                        : 'bg-red-100 text-red-800'
+                  }`}
+                  title={
+                    cloudCover != null
+                      ? `Couverture nuageuse ${cloudCover.toFixed(0)} %`
+                      : undefined
+                  }
+                >
+                  Image{' '}
+                  {imageryQuality === 'good'
+                    ? 'bonne'
+                    : imageryQuality === 'acceptable'
+                      ? 'acceptable'
+                      : 'dégradée'}
+                  {cloudCover != null ? ` · ${cloudCover.toFixed(0)} % nuages` : ''}
+                </span>
+              )}
               <span className="text-xs text-gray-400">(échelle: -1 à +1)</span>
             </div>
+
+            {(ndmiBandHint || ndwiBandHint || saviBandHint || seasonHint || rainfallLabel) && (
+              <p className="text-xs leading-relaxed text-gray-500">
+                {ndmiBandHint}
+                {ndmiBandHint && ndwiBandHint ? ' · ' : ''}
+                {ndwiBandHint}
+                {(ndmiBandHint || ndwiBandHint) && saviBandHint ? ' · ' : ''}
+                {saviBandHint}
+                {(ndmiBandHint || ndwiBandHint || saviBandHint) && seasonHint ? ' · ' : ''}
+                {seasonHint}
+                {rainfallLabel ? (
+                  <>
+                    {(ndmiBandHint || ndwiBandHint || saviBandHint || seasonHint) ? ' · ' : ''}
+                    <span className="font-medium text-sky-800">{rainfallLabel}</span>
+                    {rainfallNdmiHint ? ` — ${rainfallNdmiHint}` : ''}
+                  </>
+                ) : null}
+              </p>
+            )}
+
+            {villageNdmi && villageNdmi.band !== 'insufficient' && (
+              <div
+                className={`rounded-lg border px-3 py-2.5 text-sm ${
+                  villageNdmi.band === 'below'
+                    ? 'border-orange-200 bg-orange-50 text-orange-950'
+                    : villageNdmi.band === 'above'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                      : 'border-gray-200 bg-gray-50 text-gray-800'
+                }`}
+              >
+                <p className="font-medium">
+                  vs village {villageNdmi.village} — {villageNdmi.labelFr}
+                </p>
+                <p className="mt-0.5 text-xs opacity-90">{villageNdmi.hintFr}</p>
+                {villageNdmi.villageMedianNDMI != null && (
+                  <p className="mt-1 text-xs tabular-nums opacity-80">
+                    Médiane village {villageNdmi.villageMedianNDMI.toFixed(3)}
+                    {villageNdmi.delta != null
+                      ? ` · écart ${villageNdmi.delta >= 0 ? '+' : ''}${villageNdmi.delta.toFixed(3)}`
+                      : ''}
+                    {` · n=${villageNdmi.sampleSize}`}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {ndviEviGap != null && (
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="text-gray-500">Écart NDVI − EVI:</span>
+                <span className="font-semibold tabular-nums text-gray-900">
+                  {ndviEviGap.toFixed(3)}
+                </span>
+                {ndviEviGapLabel && (
+                  <span className="text-xs text-gray-500">{ndviEviGapLabel}</span>
+                )}
+              </div>
+            )}
+
+            {combinedAlert &&
+              combinedAlert.code === 'canopy_and_hydric' &&
+              combinedAlert.level !== 'none' && (
+              <div
+                className={`rounded-lg border-2 p-4 text-sm shadow-sm ${
+                  combinedAlert.visitPriority === 'high'
+                    ? 'border-orange-500 bg-orange-50 text-orange-950'
+                    : 'border-amber-400 bg-amber-50 text-amber-950'
+                }`}
+                role="status"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertTriangle
+                    className="mt-0.5 h-5 w-5 shrink-0 text-orange-600"
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold">
+                      Double signal EVI + NDMI — priorité visite{' '}
+                      {combinedAlert.visitPriority === 'high' ? 'haute' : 'moyenne'}
+                    </p>
+                    <p className="mt-1 leading-relaxed opacity-90">
+                      {combinedAlert.messageFr}
+                    </p>
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-xs opacity-90">
+                      <li>Visite terrain sous 7 jours (canopée + hydrique)</li>
+                      <li>Vérifier irrigation, ombrage et sanitaire</li>
+                      <li>Comparer avec une parcelle voisine du même village</li>
+                    </ul>
+                    <AlertFeedbackButtons
+                      parcelleId={parcelleId}
+                      alertKind="combined"
+                      alertLevel={combinedAlert.level === 'alert' ? 'alert' : 'watch'}
+                      alertCode={combinedAlert.code}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {eviAlert && eviAlert.level !== 'none' && (
+              <div
+                className={`rounded-lg border-2 p-4 text-sm shadow-sm ${
+                  eviAlert.level === 'alert'
+                    ? 'border-amber-400 bg-amber-50 text-amber-950'
+                    : 'border-sky-300 bg-sky-50 text-sky-950'
+                }`}
+                role="status"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertTriangle
+                    className={`mt-0.5 h-5 w-5 shrink-0 ${
+                      eviAlert.level === 'alert' ? 'text-amber-600' : 'text-sky-600'
+                    }`}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold">
+                      {eviAlert.level === 'alert'
+                        ? 'Alerte EVI précoce — visite terrain recommandée'
+                        : 'Surveillance EVI — signal précoce'}
+                    </p>
+                    <p className="mt-1 leading-relaxed opacity-90">{eviAlert.messageFr}</p>
+                    {eviAlert.code === 'evi_early_stress' && (
+                      <p className="mt-2 text-xs font-medium opacity-80">
+                        Le NDVI masque souvent ce stress sous canopée dense : prioriser l’EVI.
+                      </p>
+                    )}
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-xs opacity-90">
+                      <li>Contrôler hydrique, ombrage et sanitaire sous 7–14 jours</li>
+                      <li>Comparer avec une parcelle voisine du même village</li>
+                      <li>Suivre l’EVI le mois prochain pour confirmer la tendance</li>
+                    </ul>
+                    <AlertFeedbackButtons
+                      parcelleId={parcelleId}
+                      alertKind="evi"
+                      alertLevel={eviAlert.level === 'alert' ? 'alert' : 'watch'}
+                      alertCode={eviAlert.code}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {ndmiAlert && ndmiAlert.level !== 'none' && (
+              <div
+                className={`rounded-lg border-2 p-4 text-sm shadow-sm ${
+                  ndmiAlert.level === 'alert'
+                    ? 'border-amber-500 bg-amber-50 text-amber-950'
+                    : 'border-amber-300 bg-amber-50/80 text-amber-950'
+                }`}
+                role="status"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertTriangle
+                    className={`mt-0.5 h-5 w-5 shrink-0 ${
+                      ndmiAlert.level === 'alert' ? 'text-amber-700' : 'text-amber-600'
+                    }`}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold">
+                      {ndmiAlert.level === 'alert'
+                        ? 'Alerte hydrique NDMI — vérifier l’eau'
+                        : 'Surveillance hydrique NDMI'}
+                    </p>
+                    <p className="mt-1 leading-relaxed opacity-90">{ndmiAlert.messageFr}</p>
+                    {ndmiAlert.code === 'ndmi_early_dry' && (
+                      <p className="mt-2 text-xs font-medium opacity-80">
+                        Le NDVI peut rester stable alors que l’humidité foliaire baisse déjà.
+                      </p>
+                    )}
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-xs opacity-90">
+                      <li>Vérifier irrigation / disponibilité en eau sous 7–14 jours</li>
+                      <li>Observer flétrissement et stress des cacaoyers jeunes</li>
+                      <li>Comparer le NDMI avec une parcelle voisine du même village</li>
+                    </ul>
+                    {rainfallNdmiHint && (
+                      <p className="mt-2 text-xs opacity-80">{rainfallNdmiHint}</p>
+                    )}
+                    <AlertFeedbackButtons
+                      parcelleId={parcelleId}
+                      alertKind="ndmi"
+                      alertLevel={ndmiAlert.level === 'alert' ? 'alert' : 'watch'}
+                      alertCode={ndmiAlert.code}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {ndwiAlert && ndwiAlert.level !== 'none' && (
+              <div
+                className={`rounded-lg border-2 p-4 text-sm shadow-sm ${
+                  ndwiAlert.level === 'alert'
+                    ? 'border-cyan-500 bg-cyan-50 text-cyan-950'
+                    : 'border-cyan-300 bg-cyan-50/80 text-cyan-950'
+                }`}
+                role="status"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertTriangle
+                    className={`mt-0.5 h-5 w-5 shrink-0 ${
+                      ndwiAlert.level === 'alert' ? 'text-cyan-700' : 'text-cyan-600'
+                    }`}
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold">
+                      {ndwiAlert.level === 'alert'
+                        ? 'Alerte eau de surface NDWI'
+                        : 'Surveillance eau de surface NDWI'}
+                    </p>
+                    <p className="mt-1 leading-relaxed opacity-90">{ndwiAlert.messageFr}</p>
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-xs opacity-90">
+                      <li>Vérifier drainage et bas-fonds sous 7–14 jours</li>
+                      <li>Repérer mares / eau stagnante après fortes pluies</li>
+                      <li>Comparer avec le NDMI (humidité foliaire) sur la même période</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {ndviEviGap != null && ndviEviGapLabel && (
+              <p className="text-xs text-gray-500">
+                Lecture écart : {ndviEviGapLabel}
+                {ndviEviGap >= 0.15
+                  ? ' — EVI plus fiable que NDVI ici.'
+                  : ndviEviGap < 0.03
+                    ? ' — vérifier peuplement / sol nu / stress.'
+                    : '.'}
+              </p>
+            )}
 
             {/* Last Calculation Date */}
             {lastCalculationDate && (
@@ -1225,7 +1840,7 @@ function ParcelleDetailContent() {
       </div>
 
       {/* Temporal Analysis Section - Task 3.4.2 */}
-      {parcelle.is_active && <TemporalAnalysisSection parcelleId={parcelle.id} />}
+      {parcelle.is_active && <TemporalAnalysisSection parcelleId={parcelle.id} anneePlantation={parcelle?.annee_plantation} densiteArbresHa={parcelle?.densite_arbres_ha} />}
 
       {/* Yield Prediction Section - Task 5.5.4 */}
       {parcelle.is_active && (
@@ -1651,7 +2266,15 @@ function ParcelleDetailContent() {
 }
 
 // Temporal Analysis Section Component - Task 3.4.2
-function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
+function TemporalAnalysisSection({
+  parcelleId,
+  anneePlantation = null,
+  densiteArbresHa = null,
+}: {
+  parcelleId: string;
+  anneePlantation?: number | null;
+  densiteArbresHa?: number | null;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -1666,7 +2289,12 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
 
   // Backfill state
   const [backfilling, setBackfilling] = useState(false);
-  const [backfillResult, setBackfillResult] = useState<{ calculated: number; skipped: number; failed: number } | null>(null);
+  const [backfillResult, setBackfillResult] = useState<{
+    calculated: number;
+    skipped: number;
+    failed: number;
+    errors?: Array<{ date: string; reason: string }>;
+  } | null>(null);
   const [backfillError, setBackfillError] = useState<string | null>(null);
 
   // Handle backfill from GEE (12 derniers mois, bouton Historique GEE)
@@ -1685,7 +2313,12 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
         throw new Error(err.error ?? `HTTP ${res.status}`);
       }
       const json = await res.json();
-      setBackfillResult(json.data);
+      setBackfillResult({
+        calculated: json.data?.calculated ?? 0,
+        skipped: json.data?.skipped ?? 0,
+        failed: json.data?.failed ?? 0,
+        errors: json.data?.errors,
+      });
       await fetchTemporalData();
     } catch (err) {
       setBackfillError((err as Error).message);
@@ -1804,7 +2437,7 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Analyse Temporelle</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Évolution de l'indice NDVI sur les 12 derniers mois
+            Évolution NDVI / EVI sur les 12 derniers mois
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1813,7 +2446,7 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
             onClick={handleBackfill}
             disabled={backfilling}
             className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-            title="Récupère les données NDVI réelles des 12 derniers mois depuis Google Earth Engine"
+            title="Récupère NDVI + EVI des 12 derniers mois depuis Google Earth Engine (recalcule aussi les mois sans EVI)"
           >
             {backfilling ? (
               <>
@@ -1846,15 +2479,39 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
 
       {/* Backfill result / error */}
       {backfillResult && (
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
-          <p>
-            {backfillResult.calculated} mois calculés depuis GEE
-            {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà présents`}
-            {backfillResult.failed > 0 && (
-              <span className="text-amber-700"> · {backfillResult.failed} mois sans image disponible</span>
+        <div
+          className={`mb-4 flex items-start gap-3 rounded-lg border p-3 text-sm ${
+            backfillResult.calculated > 0
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-amber-200 bg-amber-50 text-amber-950'
+          }`}
+        >
+          {backfillResult.calculated > 0 ? (
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+          ) : (
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+          )}
+          <div>
+            <p>
+              {backfillResult.calculated} mois calculés depuis GEE (NDVI + EVI)
+              {backfillResult.skipped > 0 && `, ${backfillResult.skipped} déjà complets`}
+              {backfillResult.failed > 0 && (
+                <span>
+                  {' '}
+                  · {backfillResult.failed} mois non enregistrés
+                </span>
+              )}
+            </p>
+            {backfillResult.errors && backfillResult.errors.length > 0 && (
+              <ul className="mt-1 list-inside list-disc text-xs opacity-90">
+                {backfillResult.errors.slice(0, 5).map((e) => (
+                  <li key={e.date}>
+                    {e.date}: {e.reason}
+                  </li>
+                ))}
+              </ul>
             )}
-          </p>
+          </div>
         </div>
       )}
       {backfillError && (
@@ -1863,6 +2520,43 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
           <p>Erreur GEE : {backfillError}</p>
         </div>
       )}
+
+      {/* Legacy NDVI-only rows: invite to complete EVI via GEE */}
+      {!backfilling &&
+        !backfillResult &&
+        (() => {
+          const missingEvi = timeline.filter(
+            (p: { ndvi?: number; evi?: number | null; date?: Date }) =>
+              p.ndvi != null &&
+              !Number.isNaN(p.ndvi) &&
+              (p.evi == null || Number.isNaN(Number(p.evi)))
+          );
+          if (missingEvi.length === 0) return null;
+          const labels = missingEvi
+            .slice(0, 3)
+            .map((p: { date?: Date }) =>
+              p.date
+                ? new Date(p.date).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })
+                : '?'
+            )
+            .join(', ');
+          return (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+            <p>
+              {missingEvi.length} point{missingEvi.length > 1 ? 's' : ''} sans EVI
+              {labels ? ` (${labels}${missingEvi.length > 3 ? '…' : ''})` : ''}.
+              Relancez le calcul GEE pour compléter.
+            </p>
+            <button
+              type="button"
+              onClick={handleBackfill}
+              className="shrink-0 rounded-md bg-sky-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-800"
+            >
+              Compléter l&apos;EVI
+            </button>
+          </div>
+          );
+        })()}
 
       {/* Custom Date Range Selector */}
       {customDateRange && (
@@ -2006,6 +2700,8 @@ function TemporalAnalysisSection({ parcelleId }: { parcelleId: string }) {
       {/* Temporal Chart */}
       {!loading && !error && timeline.length > 0 && (
         <TemporalDataChart
+          anneePlantation={anneePlantation}
+          densiteArbresHa={densiteArbresHa}
           timeline={timeline}
           selectedDate={selectedDate}
           parcelleId={parcelleId}

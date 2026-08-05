@@ -302,6 +302,12 @@ export interface Parcelle {
   
   /** Village location */
   village: string | null;
+
+  /** Year cocoa was planted (calendar year) */
+  annee_plantation: number | null;
+
+  /** Trees per hectare */
+  densite_arbres_ha: number | null;
   
   /** Region (one of the 10 Cameroon regions) */
   region: string | null;
@@ -699,6 +705,9 @@ export interface CreateParcelleInput {
   
   /** Village location */
   village?: string;
+
+  annee_plantation?: number | null;
+  densite_arbres_ha?: number | null;
   
   /** Polygon geometry as GeoJSON (Polygon or MultiPolygon) */
   geometry: Polygon | MultiPolygon;
@@ -727,6 +736,9 @@ export interface UpdateParcelleInput {
   
   /** Village location */
   village?: string | null;
+
+  annee_plantation?: number | null;
+  densite_arbres_ha?: number | null;
   
   /** Polygon geometry as GeoJSON (Polygon or MultiPolygon) */
   geometry?: Polygon | MultiPolygon;

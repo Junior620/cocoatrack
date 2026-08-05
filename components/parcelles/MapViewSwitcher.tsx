@@ -50,6 +50,12 @@ interface MapViewSwitcherProps {
   height?: string;
   defaultProvider?: 'leaflet' | 'google';
   zoomToSelected?: boolean;
+  earlyAlerts?: Record<
+    string,
+    { level: string; code: string; visitPriority?: string }
+  >;
+  filterEarlyAlertsOnly?: boolean;
+  colorByEarlyAlert?: boolean;
 }
 
 export function MapViewSwitcher({
@@ -62,6 +68,9 @@ export function MapViewSwitcher({
   height = '600px',
   defaultProvider = 'leaflet',
   zoomToSelected = false,
+  earlyAlerts,
+  filterEarlyAlertsOnly = false,
+  colorByEarlyAlert = false,
 }: MapViewSwitcherProps) {
   const [mapProvider, setMapProvider] = useState<'leaflet' | 'google'>(defaultProvider);
   const [leafletLayer, setLeafletLayer] = useState<'osm' | 'satellite'>('osm');
@@ -131,6 +140,9 @@ export function MapViewSwitcher({
             zoomToFit={true}
             zoomToSelected={zoomToSelected}
             tileLayer={leafletLayer}
+            earlyAlerts={earlyAlerts}
+            filterEarlyAlertsOnly={filterEarlyAlertsOnly}
+            colorByEarlyAlert={colorByEarlyAlert}
           />
         ) : (
           <GoogleMapView

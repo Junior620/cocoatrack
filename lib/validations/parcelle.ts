@@ -192,6 +192,21 @@ export const createParcelleSchema = z.object({
     .max(100, 'Village must be at most 100 characters')
     .optional()
     .nullable(),
+
+  annee_plantation: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .nullable(),
+
+  densite_arbres_ha: z
+    .number()
+    .positive()
+    .max(5000)
+    .optional()
+    .nullable(),
   
   geometry: geometrySchema,
   
@@ -241,6 +256,21 @@ export const updateParcelleSchema = z.object({
   village: z
     .string()
     .max(100, 'Village must be at most 100 characters')
+    .optional()
+    .nullable(),
+
+  annee_plantation: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2100)
+    .optional()
+    .nullable(),
+
+  densite_arbres_ha: z
+    .number()
+    .positive()
+    .max(5000)
     .optional()
     .nullable(),
   

@@ -1302,8 +1302,8 @@ ${coordinates}
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     const sectionTitle = language === 'fr' 
-      ? 'Évolution NDVI' 
-      : 'NDVI Trend';
+      ? 'Évolution NDVI / EVI' 
+      : 'NDVI / EVI Trend';
     doc.text(sectionTitle, 20, yPosition);
     
     yPosition += 8;
@@ -1313,6 +1313,17 @@ ${coordinates}
     const minNDVI = Math.min(...ndviTrend.map(p => p.ndvi));
     const maxNDVI = Math.max(...ndviTrend.map(p => p.ndvi));
     const significantChanges = ndviTrend.filter(p => p.hasSignificantChange).length;
+    const eviPoints = ndviTrend.filter(
+      (p) => p.evi != null && !isNaN(Number(p.evi))
+    );
+    const avgEVI =
+      eviPoints.length > 0
+        ? eviPoints.reduce((sum, p) => sum + Number(p.evi), 0) / eviPoints.length
+        : null;
+    const eviTrendChange =
+      eviPoints.length >= 2
+        ? Number(eviPoints[eviPoints.length - 1].evi) - Number(eviPoints[0].evi)
+        : null;
     
     // Prepare table data
     const headers = language === 'fr' 
@@ -1331,6 +1342,16 @@ ${coordinates}
       [
         language === 'fr' ? 'NDVI moyen' : 'Average NDVI',
         avgNDVI.toFixed(3)
+      ],
+      [
+        language === 'fr' ? 'EVI moyen' : 'Average EVI',
+        avgEVI != null ? avgEVI.toFixed(3) : (language === 'fr' ? 'N/D' : 'N/A')
+      ],
+      [
+        language === 'fr' ? 'Tendance EVI' : 'EVI trend',
+        eviTrendChange != null
+          ? `${eviTrendChange >= 0 ? '+' : ''}${eviTrendChange.toFixed(3)}`
+          : (language === 'fr' ? 'N/D' : 'N/A')
       ],
       [
         language === 'fr' ? 'NDVI minimum' : 'Minimum NDVI',

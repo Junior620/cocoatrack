@@ -66,6 +66,8 @@ function transformRpcRow(row: ListParcellesRow): ParcelleWithPlanteur {
     code: row.code,
     label: row.label,
     village: row.village,
+    annee_plantation: null,
+    densite_arbres_ha: null,
     region: row.region,
     geometry: row.geometry_geojson as unknown as Parcelle['geometry'],
     centroid: {
@@ -436,6 +438,26 @@ export async function POST(request: NextRequest) {
 
     const row = rows[0];
 
+    if (
+      validatedInput.annee_plantation != null ||
+      validatedInput.densite_arbres_ha != null
+    ) {
+      const plantationPatch: Record<string, unknown> = {};
+      if (validatedInput.annee_plantation !== undefined) {
+        plantationPatch.annee_plantation = validatedInput.annee_plantation;
+      }
+      if (validatedInput.densite_arbres_ha !== undefined) {
+        plantationPatch.densite_arbres_ha = validatedInput.densite_arbres_ha;
+      }
+      const { error: plantErr } = await supabase
+        .from('parcelles')
+        .update(plantationPatch)
+        .eq('id', row.id);
+      if (plantErr) {
+        console.error('Error setting plantation fields on create:', plantErr);
+      }
+    }
+
     // Transform to ParcelleWithPlanteur response
     const createdParcelle: ParcelleWithPlanteur = {
       id: row.id,
@@ -457,6 +479,8 @@ export async function POST(request: NextRequest) {
       import_file_id: row.import_file_id,
       feature_hash: row.feature_hash,
       is_active: row.is_active,
+      annee_plantation: validatedInput.annee_plantation ?? null,
+      densite_arbres_ha: validatedInput.densite_arbres_ha ?? null,
       created_by: row.created_by,
       created_by_name: row.created_by_name,
       created_at: row.created_at,

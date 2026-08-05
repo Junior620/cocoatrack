@@ -153,7 +153,7 @@ describe('Property 8: Temporal CSV Serialization', () => {
         const lines = csv.split('\n');
 
         // First line should be the header
-        expect(lines[0]).toBe('date,mean_ndvi,min_ndvi,max_ndvi,change_from_previous');
+        expect(lines[0]).toBe('date,mean_ndvi,mean_evi,mean_ndmi,mean_ndwi,mean_savi,min_ndvi,max_ndvi,change_from_previous');
 
         return true;
       }),
@@ -188,14 +188,14 @@ describe('Property 8: Temporal CSV Serialization', () => {
   });
 
   /**
-   * Property 8.4: Each CSV row has exactly 5 columns
+   * Property 8.4: Each CSV row has exactly 9 columns
    * 
    * For any temporal dataset, each data row in the CSV SHALL have
-   * exactly 5 comma-separated values (date, mean_ndvi, min_ndvi, max_ndvi, change_from_previous).
+   * exactly 8 comma-separated values (date, mean_ndvi, mean_evi, min_ndvi, max_ndvi, change_from_previous).
    * 
    * This validates the CSV column structure is consistent.
    */
-  it('should have exactly 5 columns per data row', () => {
+  it('should have exactly 9 columns per data row', () => {
     fc.assert(
       fc.property(temporalTimelineArbitrary, timeline => {
         if (timeline.length === 0) {
@@ -208,7 +208,7 @@ describe('Property 8: Temporal CSV Serialization', () => {
         // Check each data row (skip header)
         for (let i = 1; i < lines.length; i++) {
           const columns = lines[i].split(',');
-          expect(columns.length).toBe(5);
+          expect(columns.length).toBe(9);
         }
 
         return true;
@@ -276,9 +276,9 @@ describe('Property 8: Temporal CSV Serialization', () => {
         for (let i = 1; i < lines.length; i++) {
           const columns = lines[i].split(',');
           const meanNDVI = columns[1];
-          const minNDVI = columns[2];
-          const maxNDVI = columns[3];
-          const change = columns[4];
+          const minNDVI = columns[6];
+          const maxNDVI = columns[7];
+          const change = columns[8];
 
           expect(decimalRegex.test(meanNDVI)).toBe(true);
           expect(decimalRegex.test(minNDVI)).toBe(true);
@@ -313,7 +313,7 @@ describe('Property 8: Temporal CSV Serialization', () => {
         // Check first data row (index 1, after header)
         const firstDataRow = lines[1];
         const columns = firstDataRow.split(',');
-        const change = columns[4];
+        const change = columns[8];
 
         expect(change).toBe('0.0000');
 
@@ -345,7 +345,7 @@ describe('Property 8: Temporal CSV Serialization', () => {
         for (let i = 2; i < lines.length; i++) {
           const columns = lines[i].split(',');
           const currentNDVI = parseFloat(columns[1]);
-          const change = parseFloat(columns[4]);
+          const change = parseFloat(columns[8]);
 
           // Get previous NDVI from previous row
           const previousColumns = lines[i - 1].split(',');
@@ -395,7 +395,7 @@ describe('Property 8: Temporal CSV Serialization', () => {
           for (let i = 1; i < lines.length; i++) {
             const columns = lines[i].split(',');
             const meanNDVI = columns[1];
-            const minNDVI = columns[2];
+            const minNDVI = columns[6];
 
             // Min should equal mean when not provided
             expect(minNDVI).toBe(meanNDVI);
@@ -439,7 +439,7 @@ describe('Property 8: Temporal CSV Serialization', () => {
           for (let i = 1; i < lines.length; i++) {
             const columns = lines[i].split(',');
             const meanNDVI = columns[1];
-            const maxNDVI = columns[3];
+            const maxNDVI = columns[7];
 
             // Max should equal mean when not provided
             expect(maxNDVI).toBe(meanNDVI);
@@ -464,7 +464,7 @@ describe('Property 8: Temporal CSV Serialization', () => {
     const emptyTimeline: TemporalCSVDataPoint[] = [];
     const csv = convertTemporalDataToCSV(emptyTimeline);
 
-    expect(csv).toBe('date,mean_ndvi,min_ndvi,max_ndvi,change_from_previous\n');
+    expect(csv).toBe('date,mean_ndvi,mean_evi,mean_ndmi,mean_ndwi,mean_savi,min_ndvi,max_ndvi,change_from_previous\n');
   });
 
   /**

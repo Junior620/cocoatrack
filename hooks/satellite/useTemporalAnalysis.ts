@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { TemporalDataPoint, NDVITrend } from '@/lib/satellite/types';
+import type { TemporalDataPoint, NDVITrend, EVITrend, NDMITrend, NDWITrend } from '@/lib/satellite/types';
 
 // ============================================================================
 // Types
@@ -35,9 +35,16 @@ export interface UseTemporalAnalysisOptions {
  */
 interface TemporalAnalysisSummary {
   timeline: TemporalDataPoint[];
-  trend: NDVITrend;
+  trend: NDVITrend | null;
+  eviTrend: EVITrend | null;
+  ndmiTrend: NDMITrend | null;
+  ndwiTrend: NDWITrend | null;
   significantChanges: number;
   averageNDVI: number;
+  averageEVI: number | null;
+  averageNDMI: number | null;
+  averageNDWI: number | null;
+  averageSAVI: number | null;
   averageCloudCover: number;
 }
 
@@ -57,12 +64,26 @@ export interface UseTemporalAnalysisReturn {
   setSelectedDate: (date: Date) => void;
   /** NDVI change from baseline (percentage) */
   ndviChange: number;
-  /** Overall trend analysis */
+  /** Overall NDVI trend analysis */
   trend: NDVITrend | null;
+  /** Overall EVI trend analysis */
+  eviTrend: EVITrend | null;
+  /** Overall NDMI trend analysis */
+  ndmiTrend: NDMITrend | null;
+  /** Overall NDWI trend analysis */
+  ndwiTrend: NDWITrend | null;
   /** Number of significant changes detected */
   significantChanges: number;
   /** Average NDVI over the period */
   averageNDVI: number;
+  /** Average EVI over the period (null if unavailable) */
+  averageEVI: number | null;
+  /** Average NDMI over the period (null if unavailable) */
+  averageNDMI: number | null;
+  /** Average NDWI over the period (null if unavailable) */
+  averageNDWI: number | null;
+  /** Average SAVI over the period (null if unavailable) */
+  averageSAVI: number | null;
   /** Average cloud cover over the period */
   averageCloudCover: number;
   /** Manually trigger temporal data fetch */
@@ -199,35 +220,94 @@ export function useTemporalAnalysis({
         (point: {
           date: string;
           ndvi: number;
+          evi?: number | null;
+          ndmi?: number | null;
+          ndwi?: number | null;
+          savi?: number | null;
+          ndre?: number | null;
           cloudCover: number;
+          imageryQuality?: TemporalDataPoint['imageryQuality'];
           healthStatus: string;
           hasSignificantChange: boolean;
+          isAcquisitionDate?: boolean;
         }) => ({
           date: new Date(point.date),
           ndvi: point.ndvi,
+          evi: point.evi ?? null,
+          ndmi: point.ndmi ?? null,
+          ndwi: point.ndwi ?? null,
+          savi: point.savi ?? null,
+          ndre: point.ndre ?? null,
           cloudCover: point.cloudCover,
+          imageryQuality: point.imageryQuality ?? null,
           healthStatus: point.healthStatus as TemporalDataPoint['healthStatus'],
           hasSignificantChange: point.hasSignificantChange,
+          isAcquisitionDate: point.isAcquisitionDate,
         })
       );
 
       // Convert date strings to Date objects in trend
-      const processedTrend: NDVITrend = {
-        trend: summaryData.trend.trend,
-        changeRate: summaryData.trend.changeRate,
-        dataPoints: summaryData.trend.dataPoints,
-        startDate: new Date(summaryData.trend.startDate),
-        endDate: new Date(summaryData.trend.endDate),
-        startNDVI: summaryData.trend.startNDVI,
-        endNDVI: summaryData.trend.endNDVI,
-      };
+      const processedTrend: NDVITrend | null = summaryData.trend
+        ? {
+            trend: summaryData.trend.trend,
+            changeRate: summaryData.trend.changeRate,
+            dataPoints: summaryData.trend.dataPoints,
+            startDate: new Date(summaryData.trend.startDate),
+            endDate: new Date(summaryData.trend.endDate),
+            startNDVI: summaryData.trend.startNDVI,
+            endNDVI: summaryData.trend.endNDVI,
+          }
+        : null;
+
+      const processedEviTrend: EVITrend | null = summaryData.eviTrend
+        ? {
+            trend: summaryData.eviTrend.trend,
+            changeRate: summaryData.eviTrend.changeRate,
+            dataPoints: summaryData.eviTrend.dataPoints,
+            startDate: new Date(summaryData.eviTrend.startDate),
+            endDate: new Date(summaryData.eviTrend.endDate),
+            startEVI: summaryData.eviTrend.startEVI,
+            endEVI: summaryData.eviTrend.endEVI,
+          }
+        : null;
+
+      const processedNdmiTrend: NDMITrend | null = summaryData.ndmiTrend
+        ? {
+            trend: summaryData.ndmiTrend.trend,
+            changeRate: summaryData.ndmiTrend.changeRate,
+            dataPoints: summaryData.ndmiTrend.dataPoints,
+            startDate: new Date(summaryData.ndmiTrend.startDate),
+            endDate: new Date(summaryData.ndmiTrend.endDate),
+            startNDMI: summaryData.ndmiTrend.startNDMI,
+            endNDMI: summaryData.ndmiTrend.endNDMI,
+          }
+        : null;
+
+      const processedNdwiTrend: NDWITrend | null = summaryData.ndwiTrend
+        ? {
+            trend: summaryData.ndwiTrend.trend,
+            changeRate: summaryData.ndwiTrend.changeRate,
+            dataPoints: summaryData.ndwiTrend.dataPoints,
+            startDate: new Date(summaryData.ndwiTrend.startDate),
+            endDate: new Date(summaryData.ndwiTrend.endDate),
+            startNDWI: summaryData.ndwiTrend.startNDWI,
+            endNDWI: summaryData.ndwiTrend.endNDWI,
+          }
+        : null;
 
       // Build processed summary
       const processedSummary: TemporalAnalysisSummary = {
         timeline: processedTimeline,
         trend: processedTrend,
+        eviTrend: processedEviTrend,
+        ndmiTrend: processedNdmiTrend,
+        ndwiTrend: processedNdwiTrend,
         significantChanges: summaryData.significantChanges,
         averageNDVI: summaryData.averageNDVI,
+        averageEVI: summaryData.averageEVI ?? null,
+        averageNDMI: summaryData.averageNDMI ?? null,
+        averageNDWI: summaryData.averageNDWI ?? null,
+        averageSAVI: summaryData.averageSAVI ?? null,
         averageCloudCover: summaryData.averageCloudCover,
       };
 
@@ -310,8 +390,15 @@ export function useTemporalAnalysis({
    */
   const timeline = summary?.timeline || [];
   const trend = summary?.trend || null;
+  const eviTrend = summary?.eviTrend || null;
+  const ndmiTrend = summary?.ndmiTrend || null;
+  const ndwiTrend = summary?.ndwiTrend || null;
   const significantChanges = summary?.significantChanges || 0;
   const averageNDVI = summary?.averageNDVI || 0;
+  const averageEVI = summary?.averageEVI ?? null;
+  const averageNDMI = summary?.averageNDMI ?? null;
+  const averageNDWI = summary?.averageNDWI ?? null;
+  const averageSAVI = summary?.averageSAVI ?? null;
   const averageCloudCover = summary?.averageCloudCover || 0;
 
   return {
@@ -322,8 +409,15 @@ export function useTemporalAnalysis({
     setSelectedDate,
     ndviChange,
     trend,
+    eviTrend,
+    ndmiTrend,
+    ndwiTrend,
     significantChanges,
     averageNDVI,
+    averageEVI,
+    averageNDMI,
+    averageNDWI,
+    averageSAVI,
     averageCloudCover,
     refetch,
     cached,

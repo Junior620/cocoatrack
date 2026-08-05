@@ -84,13 +84,13 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const isCronAuth = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
-    // Use service role client for cron (bypasses RLS), regular client for users
-    const supabase = isCronAuth
+    // Auth with session client; writes always go through service role inside batchCalculateNDVI
+    const authClient = isCronAuth
       ? createServiceRoleSupabaseClient()
       : await createServerSupabaseClient();
 
     if (!isCronAuth) {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await authClient.auth.getUser();
       if (authError || !user) {
         return NextResponse.json(
           { success: false, error: 'Authentication required' },
@@ -99,8 +99,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Step 3: Get parcelle geometry
-    const { data: parcelle, error: parcelleError } = await supabase
+    // Step 3: Get parcelle geometry (auth-scoped read)
+    const { data: parcelle, error: parcelleError } = await authClient
       .from('parcelles')
       .select('id, geometry')
       .eq('id', parcelleId)
@@ -121,14 +121,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 4: Build list of target dates (last day of each month, going back N months)
+    // Service role for GEE writes (bypass RLS)
+    let writeClient = authClient;
+    try {
+      writeClient = createServiceRoleSupabaseClient();
+    } catch {
+      // fallback to session client
+    }
+
+    // Step 4: Build list of target dates (last day of each month UTC)
     const targetDates: Date[] = [];
     const now = new Date();
 
     for (let i = 0; i < months; i++) {
-      // Last day of each month, gives the most complete monthly window
-      const d = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-      targetDates.push(d);
+      const y = now.getUTCFullYear();
+      const m = now.getUTCMonth() - i;
+      targetDates.push(new Date(Date.UTC(y, m + 1, 0, 12, 0, 0)));
     }
 
     console.log(
@@ -144,7 +152,7 @@ export async function POST(request: NextRequest) {
         geometry,
         targetDates,
         forceRecalculate,
-        supabase  // pass the correct client (service role for cron, session for users)
+        writeClient
       );
 
       return NextResponse.json({
@@ -166,15 +174,21 @@ export async function POST(request: NextRequest) {
     const existingDates = new Set<string>();
 
     if (!forceRecalculate) {
-      const { data: existing } = await supabase
+      const { data: existing } = await writeClient
         .from('ndvi_results')
-        .select('calculation_date')
+        .select('calculation_date, mean_evi, mean_ndmi')
         .eq('parcelle_id', parcelleId)
         .gte('calculation_date', targetDates[targetDates.length - 1].toISOString())
         .lte('calculation_date', now.toISOString());
 
       if (existing) {
-        for (const row of existing) {
+        for (const row of existing as unknown as Array<{
+          calculation_date: string;
+          mean_evi: number | null;
+          mean_ndmi: number | null;
+        }>) {
+          // Skip only months that already have EVI + NDMI
+          if (row.mean_evi == null || row.mean_ndmi == null) continue;
           const d = new Date(row.calculation_date);
           existingDates.add(`${d.getFullYear()}-${d.getMonth()}`);
         }
@@ -192,19 +206,19 @@ export async function POST(request: NextRequest) {
       const dateLabel = date.toISOString().split('T')[0];
 
       if (existingDates.has(monthKey)) {
-        console.log(`[Backfill] Skipping ${dateLabel}, already in database`);
+        console.log(`[Backfill] Skipping ${dateLabel}, already in database with EVI`);
         skipped++;
         continue;
       }
 
       try {
-        console.log(`[Backfill] Calculating NDVI for ${dateLabel}...`);
+        console.log(`[Backfill] Calculating NDVI/EVI for ${dateLabel}...`);
 
         const result = await ndviService.calculateNDVI(
           parcelleId,
           geometry,
           date,
-          { forceRecalculate, storeResult: true, generateRaster: false }
+          { forceRecalculate: true, storeResult: true, generateRaster: false }
         );
 
         results.push({

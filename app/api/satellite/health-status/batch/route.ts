@@ -37,6 +37,10 @@ type BatchHealthStatusItem = {
   parcelleId: string;
   healthStatus: HealthStatus;
   meanNDVI: number;
+  meanEVI: number | null;
+  meanNDMI: number | null;
+  meanNDWI: number | null;
+  meanSAVI: number | null;
   lastCalculationDate: Date;
   trend: null | NDVITrend;
   recommendation: string;
@@ -129,7 +133,7 @@ export async function GET(request: NextRequest) {
     const { data: latestRows, error: latestError } = await supabase
       .from('ndvi_results')
       .select(
-        'parcelle_id, mean_ndvi, health_status, calculation_date, ndvi_raster_url, ndvi_raster_bounds'
+        'parcelle_id, mean_ndvi, mean_evi, mean_ndmi, mean_ndwi, mean_savi, health_status, calculation_date, ndvi_raster_url, ndvi_raster_bounds'
       )
       .in('parcelle_id', accessibleIds)
       .order('calculation_date', { ascending: false })
@@ -149,6 +153,10 @@ export async function GET(request: NextRequest) {
       const r = row as unknown as {
         parcelle_id: string;
         mean_ndvi: number;
+        mean_evi: number | null;
+        mean_ndmi: number | null;
+        mean_ndwi: number | null;
+        mean_savi: number | null;
         health_status: string;
         calculation_date: string;
         ndvi_raster_url: string | null;
@@ -161,6 +169,10 @@ export async function GET(request: NextRequest) {
       const r = row as unknown as {
         parcelle_id: string;
         mean_ndvi: number;
+        mean_evi: number | null;
+        mean_ndmi: number | null;
+        mean_ndwi: number | null;
+        mean_savi: number | null;
         health_status: string;
         calculation_date: string;
         ndvi_raster_url: string | null;
@@ -175,6 +187,10 @@ export async function GET(request: NextRequest) {
         parcelleId,
         healthStatus: r.health_status as HealthStatus,
         meanNDVI: Number(r.mean_ndvi),
+        meanEVI: r.mean_evi != null ? Number(r.mean_evi) : null,
+        meanNDMI: r.mean_ndmi != null ? Number(r.mean_ndmi) : null,
+        meanNDWI: r.mean_ndwi != null ? Number(r.mean_ndwi) : null,
+        meanSAVI: r.mean_savi != null ? Number(r.mean_savi) : null,
         lastCalculationDate: new Date(r.calculation_date),
         trend: null,
         recommendation,

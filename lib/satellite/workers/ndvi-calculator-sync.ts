@@ -150,3 +150,11 @@ export function calculateStatistics(ndviValues: number[]): {
     validPixelCount: validCount,
   };
 }
+
+// Re-export EVI helpers for worker fallback / main-thread parity
+export {
+  calculatePixelWiseEVI,
+  calculateIndexStatistics as calculateEVIStatistics,
+  calculatePixelEVIAuto,
+} from '../evi';
+

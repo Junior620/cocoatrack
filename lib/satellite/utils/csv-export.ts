@@ -32,14 +32,18 @@ export function convertTemporalDataToCSV(
   includeHeaders: boolean = true
 ): string {
   if (!timeline || timeline.length === 0) {
-    return includeHeaders ? 'date,mean_ndvi,min_ndvi,max_ndvi,change_from_previous\n' : '';
+    return includeHeaders
+      ? 'date,mean_ndvi,mean_evi,mean_ndmi,mean_ndwi,mean_savi,min_ndvi,max_ndvi,change_from_previous\n'
+      : '';
   }
 
   const rows: string[] = [];
 
   // Add headers
   if (includeHeaders) {
-    rows.push('date,mean_ndvi,min_ndvi,max_ndvi,change_from_previous');
+    rows.push(
+      'date,mean_ndvi,mean_evi,mean_ndmi,mean_ndwi,mean_savi,min_ndvi,max_ndvi,change_from_previous'
+    );
   }
 
   // Add data rows
@@ -49,6 +53,22 @@ export function convertTemporalDataToCSV(
       : new Date(point.date).toISOString().split('T')[0];
     
     const meanNDVI = point.ndvi.toFixed(4);
+    const meanEVI =
+      point.evi != null && !isNaN(Number(point.evi))
+        ? Number(point.evi).toFixed(4)
+        : '';
+    const meanNDMI =
+      point.ndmi != null && !isNaN(Number(point.ndmi))
+        ? Number(point.ndmi).toFixed(4)
+        : '';
+    const meanNDWI =
+      point.ndwi != null && !isNaN(Number(point.ndwi))
+        ? Number(point.ndwi).toFixed(4)
+        : '';
+    const meanSAVI =
+      point.savi != null && !isNaN(Number(point.savi))
+        ? Number(point.savi).toFixed(4)
+        : '';
     const minNDVI = point.minNDVI !== undefined ? point.minNDVI.toFixed(4) : meanNDVI;
     const maxNDVI = point.maxNDVI !== undefined ? point.maxNDVI.toFixed(4) : meanNDVI;
     
@@ -62,7 +82,9 @@ export function convertTemporalDataToCSV(
       changeFromPrevious = '0.0000'; // First data point has no previous
     }
 
-    rows.push(`${date},${meanNDVI},${minNDVI},${maxNDVI},${changeFromPrevious}`);
+    rows.push(
+      `${date},${meanNDVI},${meanEVI},${meanNDMI},${meanNDWI},${meanSAVI},${minNDVI},${maxNDVI},${changeFromPrevious}`
+    );
   });
 
   return rows.join('\n');

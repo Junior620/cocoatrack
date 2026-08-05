@@ -75,6 +75,8 @@ interface FormErrors {
   code?: string;
   label?: string;
   village?: string;
+  annee_plantation?: string;
+  densite_arbres_ha?: string;
   geometry?: string;
   certifications?: string;
   conformity_status?: string;
@@ -112,6 +114,12 @@ export function ParcelleForm({
   const [code, setCode] = useState(parcelle?.code || '');
   const [label, setLabel] = useState(parcelle?.label || '');
   const [village, setVillage] = useState(parcelle?.village || '');
+  const [anneePlantation, setAnneePlantation] = useState(
+    parcelle?.annee_plantation != null ? String(parcelle.annee_plantation) : ''
+  );
+  const [densiteArbresHa, setDensiteArbresHa] = useState(
+    parcelle?.densite_arbres_ha != null ? String(parcelle.densite_arbres_ha) : ''
+  );
   const [certifications, setCertifications] = useState<Certification[]>(
     parcelle?.certifications || []
   );
@@ -206,6 +214,26 @@ export function ParcelleForm({
       if (village !== (parcelle.village || '')) {
         updateData.village = village || null;
       }
+      {
+        const parsedYear = anneePlantation.trim()
+          ? Number.parseInt(anneePlantation.trim(), 10)
+          : null;
+        const prevYear = parcelle.annee_plantation ?? null;
+        if (parsedYear !== prevYear) {
+          updateData.annee_plantation = Number.isFinite(parsedYear as number)
+            ? parsedYear
+            : null;
+        }
+        const parsedDens = densiteArbresHa.trim()
+          ? Number.parseFloat(densiteArbresHa.trim())
+          : null;
+        const prevDens = parcelle.densite_arbres_ha ?? null;
+        if (parsedDens !== prevDens) {
+          updateData.densite_arbres_ha = Number.isFinite(parsedDens as number)
+            ? parsedDens
+            : null;
+        }
+      }
       if (
         JSON.stringify([...certifications].sort()) !==
         JSON.stringify([...parcelle.certifications].sort())
@@ -263,6 +291,14 @@ export function ParcelleForm({
       if (village.trim()) {
         createData.village = village.trim();
       }
+      if (anneePlantation.trim()) {
+        const y = Number.parseInt(anneePlantation.trim(), 10);
+        if (Number.isFinite(y)) createData.annee_plantation = y;
+      }
+      if (densiteArbresHa.trim()) {
+        const d = Number.parseFloat(densiteArbresHa.trim());
+        if (Number.isFinite(d) && d > 0) createData.densite_arbres_ha = d;
+      }
 
       // Geometry is required for create
       if (geometry) {
@@ -304,7 +340,7 @@ export function ParcelleForm({
       setErrors({});
       return { valid: true, data: result.data };
     }
-  }, [planteurId, code, label, village, geometry, certifications, conformityStatus, isEditMode, parcelle]);
+  }, [planteurId, code, label, village, anneePlantation, densiteArbresHa, geometry, certifications, conformityStatus, isEditMode, parcelle]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -508,6 +544,83 @@ export function ParcelleForm({
             {errors.village}
           </p>
         )}
+      </div>
+
+      {/* Plantation year + density (SAVI / visit context) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="annee_plantation" className="block text-sm font-medium text-gray-700 mb-1">
+            Année de plantation
+            <span className="ml-1 text-gray-400 font-normal">(optionnel)</span>
+          </label>
+          <input
+            type="number"
+            id="annee_plantation"
+            min={1900}
+            max={2100}
+            value={anneePlantation}
+            onChange={(e) => {
+              setAnneePlantation(e.target.value);
+              if (errors.annee_plantation) {
+                setErrors((prev) => ({ ...prev, annee_plantation: undefined }));
+              }
+            }}
+            placeholder="ex. 2019"
+            className={cn(
+              'w-full rounded-lg border px-3 py-2.5 text-sm transition-colors',
+              'focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500',
+              errors.annee_plantation
+                ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                : 'border-gray-200 hover:border-gray-300'
+            )}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Jeunes peuplements (&lt; 7 ans) → SAVI pertinent.
+          </p>
+          {errors.annee_plantation && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+              <AlertCircle className="h-3 w-3" />
+              {errors.annee_plantation}
+            </p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="densite_arbres_ha" className="block text-sm font-medium text-gray-700 mb-1">
+            Densité (arbres/ha)
+            <span className="ml-1 text-gray-400 font-normal">(optionnel)</span>
+          </label>
+          <input
+            type="number"
+            id="densite_arbres_ha"
+            min={1}
+            max={5000}
+            step={1}
+            value={densiteArbresHa}
+            onChange={(e) => {
+              setDensiteArbresHa(e.target.value);
+              if (errors.densite_arbres_ha) {
+                setErrors((prev) => ({ ...prev, densite_arbres_ha: undefined }));
+              }
+            }}
+            placeholder="ex. 1100"
+            className={cn(
+              'w-full rounded-lg border px-3 py-2.5 text-sm transition-colors',
+              'focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500',
+              errors.densite_arbres_ha
+                ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                : 'border-gray-200 hover:border-gray-300'
+            )}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Densité faible (&lt; 800) → sol visible / SAVI.
+          </p>
+          {errors.densite_arbres_ha && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+              <AlertCircle className="h-3 w-3" />
+              {errors.densite_arbres_ha}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Certifications Multi-select */}

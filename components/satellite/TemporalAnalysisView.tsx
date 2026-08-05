@@ -132,7 +132,7 @@ export function TemporalAnalysisView({
             Charger l'historique depuis Google Earth Engine
           </p>
           <p className="mt-0.5 text-xs text-slate-500">
-            Récupère les données NDVI réelles des 12 derniers mois depuis les archives Sentinel-2.
+            Récupère NDVI + EVI des 12 derniers mois depuis Sentinel-2 (recalcule aussi les mois sans EVI).
           </p>
         </div>
 

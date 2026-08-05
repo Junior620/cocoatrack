@@ -57,6 +57,15 @@ interface LeafletMapProps {
   ndviLayerOpacity?: number;
   /** Enable deforestation alert indicators */
   showDeforestationAlerts?: boolean;
+  /** Early vegetation alerts (EVI/NDMI) by parcelle id */
+  earlyAlerts?: Record<
+    string,
+    { level: string; code: string; visitPriority?: string }
+  >;
+  /** When true, only show parcelles present in earlyAlerts */
+  filterEarlyAlertsOnly?: boolean;
+  /** Color fill by early alert instead of conformity */
+  colorByEarlyAlert?: boolean;
 }
 
 export interface LeafletMapHandle {
@@ -82,6 +91,9 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   enableNDVILayer = false,
   ndviLayerOpacity = 0.7,
   showDeforestationAlerts = true,
+  earlyAlerts = {},
+  filterEarlyAlertsOnly = false,
+  colorByEarlyAlert = false,
 }, ref: React.Ref<LeafletMapHandle>) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -153,6 +165,17 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
   const getPolygonColor = useCallback((status: string): string => {
     return CONFORMITY_COLORS[status] || CONFORMITY_COLORS.informations_manquantes;
   }, []);
+
+  const getEarlyAlertColor = useCallback(
+    (parcelleId: string): string | null => {
+      const a = earlyAlerts[parcelleId];
+      if (!a) return null;
+      if (a.level === 'alert' || a.visitPriority === 'high') return '#ea580c';
+      if (a.level === 'watch') return '#d97706';
+      return null;
+    },
+    [earlyAlerts]
+  );
 
   // Format popup content with health status
   const formatPopupContent = useCallback(async (parcelle: Parcelle): Promise<string> => {
@@ -440,6 +463,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
     // Add parcelles as GeoJSON features
     const features = parcelles
       .filter((p) => p.geometry)
+      .filter((p) => !filterEarlyAlertsOnly || !!earlyAlerts[p.id])
       .map((parcelle) => ({
         type: 'Feature' as const,
         properties: { ...parcelle },
@@ -454,15 +478,29 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         style: (feature) => {
           const status = feature?.properties?.conformity_status || 'informations_manquantes';
           const isSelected = feature?.properties?.id === selectedId;
-          const hasAlerts = feature?.properties?.id && deforestationAlerts[feature.properties.id] > 0;
+          const id = feature?.properties?.id as string | undefined;
+          const hasDefor = id && deforestationAlerts[id] > 0;
+          const earlyColor = id ? getEarlyAlertColor(id) : null;
+          const fillBase =
+            colorByEarlyAlert && earlyColor
+              ? earlyColor
+              : getPolygonColor(status);
+          const stroke =
+            hasDefor
+              ? '#dc2626'
+              : earlyColor
+                ? earlyColor
+                : isSelected
+                  ? '#1f2937'
+                  : getPolygonColor(status);
           
           return {
-            fillColor: getPolygonColor(status),
-            fillOpacity: isSelected ? 0.6 : 0.4,
-            color: hasAlerts ? '#dc2626' : (isSelected ? '#1f2937' : getPolygonColor(status)),
-            weight: hasAlerts ? 4 : (isSelected ? 3 : 2),
+            fillColor: fillBase,
+            fillOpacity: isSelected ? 0.6 : colorByEarlyAlert && earlyColor ? 0.55 : 0.4,
+            color: stroke,
+            weight: hasDefor || earlyColor ? 4 : isSelected ? 3 : 2,
             opacity: 1,
-            dashArray: hasAlerts ? '10, 5' : undefined,
+            dashArray: hasDefor ? '10, 5' : earlyColor ? '6, 4' : undefined,
           };
         },
         onEachFeature: (feature, layer) => {
@@ -574,7 +612,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
         }
       }
     }
-  }, [parcelles, selectedId, showCentroids, zoomToFit, onSelect, getPolygonColor, formatPopupContent, deforestationAlerts]);
+  }, [parcelles, selectedId, showCentroids, zoomToFit, onSelect, getPolygonColor, getEarlyAlertColor, formatPopupContent, deforestationAlerts, earlyAlerts, filterEarlyAlertsOnly, colorByEarlyAlert]);
 
   // Handle initial bbox
   useEffect(() => {

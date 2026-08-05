@@ -1116,6 +1116,8 @@ export type Database = {
           surface_hectares: number
           updated_at: string
           village: string | null
+          annee_plantation: number | null
+          densite_arbres_ha: number | null
         }
         Insert: {
           centroid: unknown
@@ -1136,6 +1138,8 @@ export type Database = {
           surface_hectares: number
           updated_at?: string
           village?: string | null
+          annee_plantation?: number | null
+          densite_arbres_ha?: number | null
         }
         Update: {
           centroid?: unknown
@@ -1156,6 +1160,8 @@ export type Database = {
           surface_hectares?: number
           updated_at?: string
           village?: string | null
+          annee_plantation?: number | null
+          densite_arbres_ha?: number | null
         }
         Relationships: [
           {
@@ -2060,10 +2066,33 @@ export type Database = {
           parcelle_id: string
           imagery_id: string | null
           calculation_date: string
+          acquisition_date: string | null
           mean_ndvi: number
           min_ndvi: number
           max_ndvi: number
           std_dev_ndvi: number
+          mean_evi: number | null
+          min_evi: number | null
+          max_evi: number | null
+          std_dev_evi: number | null
+          mean_ndmi: number | null
+          min_ndmi: number | null
+          max_ndmi: number | null
+          std_dev_ndmi: number | null
+          mean_ndwi: number | null
+          min_ndwi: number | null
+          max_ndwi: number | null
+          std_dev_ndwi: number | null
+          mean_savi: number | null
+          min_savi: number | null
+          max_savi: number | null
+          std_dev_savi: number | null
+          mean_ndre: number | null
+          min_ndre: number | null
+          max_ndre: number | null
+          std_dev_ndre: number | null
+          cloud_cover: number | null
+          imagery_quality: "good" | "acceptable" | "degraded" | null
           health_status: "excellent" | "good" | "fair" | "poor" | "critical"
           ndvi_raster_url: string | null
           ndvi_raster_bounds: Json | null
@@ -2074,10 +2103,33 @@ export type Database = {
           parcelle_id: string
           imagery_id?: string | null
           calculation_date: string
+          acquisition_date?: string | null
           mean_ndvi: number
           min_ndvi: number
           max_ndvi: number
           std_dev_ndvi: number
+          mean_evi?: number | null
+          min_evi?: number | null
+          max_evi?: number | null
+          std_dev_evi?: number | null
+          mean_ndmi?: number | null
+          min_ndmi?: number | null
+          max_ndmi?: number | null
+          std_dev_ndmi?: number | null
+          mean_ndwi?: number | null
+          min_ndwi?: number | null
+          max_ndwi?: number | null
+          std_dev_ndwi?: number | null
+          mean_savi?: number | null
+          min_savi?: number | null
+          max_savi?: number | null
+          std_dev_savi?: number | null
+          mean_ndre?: number | null
+          min_ndre?: number | null
+          max_ndre?: number | null
+          std_dev_ndre?: number | null
+          cloud_cover?: number | null
+          imagery_quality?: "good" | "acceptable" | "degraded" | null
           health_status: "excellent" | "good" | "fair" | "poor" | "critical"
           ndvi_raster_url?: string | null
           ndvi_raster_bounds?: Json | null
@@ -2088,10 +2140,33 @@ export type Database = {
           parcelle_id?: string
           imagery_id?: string | null
           calculation_date?: string
+          acquisition_date?: string | null
           mean_ndvi?: number
           min_ndvi?: number
           max_ndvi?: number
           std_dev_ndvi?: number
+          mean_evi?: number | null
+          min_evi?: number | null
+          max_evi?: number | null
+          std_dev_evi?: number | null
+          mean_ndmi?: number | null
+          min_ndmi?: number | null
+          max_ndmi?: number | null
+          std_dev_ndmi?: number | null
+          mean_ndwi?: number | null
+          min_ndwi?: number | null
+          max_ndwi?: number | null
+          std_dev_ndwi?: number | null
+          mean_savi?: number | null
+          min_savi?: number | null
+          max_savi?: number | null
+          std_dev_savi?: number | null
+          mean_ndre?: number | null
+          min_ndre?: number | null
+          max_ndre?: number | null
+          std_dev_ndre?: number | null
+          cloud_cover?: number | null
+          imagery_quality?: "good" | "acceptable" | "degraded" | null
           health_status?: "excellent" | "good" | "fair" | "poor" | "critical"
           ndvi_raster_url?: string | null
           ndvi_raster_bounds?: Json | null
