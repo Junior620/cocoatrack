@@ -28,6 +28,24 @@ export async function resolveFactorySiteId(
   return (site?.id as string) || DEMO_FACTORY_SITE_ID;
 }
 
+export async function getFactorySite(supabase: UntypedDb, userId: string) {
+  const siteId = await resolveFactorySiteId(supabase, userId);
+  const { data, error } = await supabase
+    .from('factory_sites')
+    .select('id, name, code, location, site_mode, is_active')
+    .eq('id', siteId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as {
+    id: string;
+    name: string;
+    code: string;
+    location: string | null;
+    site_mode: 'primary' | 'industrial' | 'both';
+    is_active: boolean;
+  } | null;
+}
+
 export async function getRawProductTypeId(
   supabase: UntypedDb,
   factorySiteId: string

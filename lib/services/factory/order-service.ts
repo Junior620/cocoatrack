@@ -6,6 +6,9 @@ import type {
 } from '@/types/factory';
 import { calculateYield } from './yield-calculator';
 import { resolveFactorySiteId } from './factory-context';
+import { assertStockItemOperable } from './lot-guards';
+import { checkMassBalance, ensureDefaultGradeRule } from './grade-service';
+import { createLotRelationship, changeLotStatus } from './lot-service';
 
 type UntypedDb = SupabaseClient<any, 'public', any>;
 
@@ -79,6 +82,8 @@ export async function createOrder(
 
   if (input.stock_item_ids?.length) {
     for (const stockItemId of input.stock_item_ids) {
+      await assertStockItemOperable(supabase, stockItemId);
+
       const { data: stock } = await supabase
         .from('stock_items')
         .select('id, lot_reference, quantity_kg, status')
@@ -138,9 +143,10 @@ export async function saveProductionEntry(
   await supabase.from('transformation_losses').delete().eq('transformation_order_id', orderId);
 
   for (const inp of entry.inputs) {
+    await assertStockItemOperable(supabase, inp.stock_item_id);
     const { data: stock } = await supabase
       .from('stock_items')
-      .select('lot_reference')
+      .select('lot_reference, cocoa_lot_id')
       .eq('id', inp.stock_item_id)
       .single();
 
@@ -150,6 +156,10 @@ export async function saveProductionEntry(
       source_lot_reference: stock?.lot_reference ?? null,
       quantity_used_kg: inp.quantity_used_kg,
     });
+
+    if (stock?.cocoa_lot_id) {
+      await changeLotStatus(supabase, userId, stock.cocoa_lot_id as string, 'in_processing', `OT ${orderId}`);
+    }
   }
 
   for (const out of entry.outputs) {
@@ -182,6 +192,25 @@ export async function saveProductionEntry(
     expectedYieldPct: (order as { theoretical_yield_rate?: number }).theoretical_yield_rate ?? null,
   });
 
+  let massBalanceOk = true;
+  try {
+    const rule = await ensureDefaultGradeRule(supabase, userId);
+    const mb = checkMassBalance(
+      yieldCalc.totalInputKg,
+      yieldCalc.totalOutputKg,
+      yieldCalc.totalLossKg,
+      rule.mass_balance_tolerance_pct
+    );
+    massBalanceOk = mb.ok;
+    if (!mb.ok) {
+      throw new Error(
+        `Bilan massique hors tolérance: Δ=${mb.deltaKg.toFixed(2)} kg (max ${mb.allowedKg.toFixed(2)} kg)`
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('Bilan massique')) throw e;
+  }
+
   await supabase
     .from('transformation_orders')
     .update({
@@ -193,7 +222,11 @@ export async function saveProductionEntry(
     })
     .eq('id', orderId);
 
-  return { order: await getOrder(supabase, orderId), yield: yieldCalc };
+  return {
+    order: await getOrder(supabase, orderId),
+    yield: yieldCalc,
+    mass_balance_ok: massBalanceOk,
+  };
 }
 
 export async function validateOrder(supabase: UntypedDb, userId: string, orderId: string) {
@@ -282,6 +315,57 @@ export async function validateOrder(supabase: UntypedDb, userId: string, orderId
         reference_id: orderId,
         created_by: userId,
       });
+
+      // Lot enfant + généalogie
+      try {
+        const { data: childLot } = await supabase
+          .from('cocoa_lots')
+          .insert({
+            factory_site_id: siteId,
+            lot_number: '',
+            status: 'stored',
+            net_weight_kg: out.quantity_produced_kg as number,
+            source_output_id: out.id as string,
+            source_stock_item_id: stockItem.id,
+            warehouse_id: (out.warehouse_id as string) ?? null,
+            created_by: userId,
+          })
+          .select('id')
+          .single();
+
+        if (childLot) {
+          await supabase
+            .from('stock_items')
+            .update({ cocoa_lot_id: childLot.id })
+            .eq('id', stockItem.id);
+
+          for (const inp of inputs) {
+            const { data: parentStock } = await supabase
+              .from('stock_items')
+              .select('cocoa_lot_id, quantity_kg')
+              .eq('id', inp.stock_item_id)
+              .maybeSingle();
+            if (parentStock?.cocoa_lot_id) {
+              const share =
+                inputs.length === 1
+                  ? (out.quantity_produced_kg as number)
+                  : ((out.quantity_produced_kg as number) * Number(inp.quantity_used_kg)) /
+                    Math.max(
+                      inputs.reduce((s, i) => s + Number(i.quantity_used_kg), 0),
+                      1
+                    );
+              await createLotRelationship(supabase, userId, {
+                parent_lot_id: parentStock.cocoa_lot_id as string,
+                child_lot_id: childLot.id as string,
+                weight_kg: share,
+                transformation_order_id: orderId,
+              });
+            }
+          }
+        }
+      } catch {
+        // schéma usinage non déployé
+      }
     }
   }
 

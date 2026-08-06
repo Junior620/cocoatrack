@@ -26,7 +26,10 @@ function TraceabilityContent() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-[#5C4033]">Traçabilité industrielle</h1>
       <p className="text-sm text-[#8B6914]">
-        Lot entrant → produits finis, ou produit fini → origine amont
+        Lot entrant → produits finis, ou produit fini → origine amont.{' '}
+        <Link href="/factory/lots/passport" className="text-[#5C4033] underline">
+          Ouvrir le passeport lot
+        </Link>
       </p>
 
       <div className="rounded-xl border border-[#d4c4b0] bg-white p-4">
@@ -66,9 +69,56 @@ function TraceabilityContent() {
             </ChainBlock>
           )}
 
+          {data.parcelles && data.parcelles.length > 0 && (
+            <ChainBlock title="Parcelles (EUDR)">
+              {data.parcelles.map((p) => (
+                <p key={p.id} className="text-sm">
+                  {p.code} {p.label ? `· ${p.label}` : ''}
+                  {p.weight_kg != null ? ` · ${Number(p.weight_kg).toFixed(1)} kg` : ''}
+                </p>
+              ))}
+            </ChainBlock>
+          )}
+
+          {data.cocoa_lot && (
+            <ChainBlock title="Lot cacao">
+              <p>
+                <strong>{data.cocoa_lot.lot_number}</strong> · {data.cocoa_lot.status}
+                {data.cocoa_lot.oncc_grade ? ` · ${data.cocoa_lot.oncc_grade}` : ''}
+              </p>
+              <p className="text-sm">EUDR : {data.cocoa_lot.eudr_ready ? 'prêt' : 'incomplet'}</p>
+              <Link
+                href={`/factory/lots/passport?lot=${encodeURIComponent(data.cocoa_lot.lot_number)}`}
+                className="text-sm text-[#5C4033] hover:underline"
+              >
+                Ouvrir passeport →
+              </Link>
+            </ChainBlock>
+          )}
+
           {data.quality_control && (
             <ChainBlock title="Contrôle qualité">
               <p>Décision : {(data.quality_control as { decision?: string }).decision}</p>
+            </ChainBlock>
+          )}
+
+          {data.packaging && data.packaging.length > 0 && (
+            <ChainBlock title="Conditionnement">
+              {data.packaging.map((u) => (
+                <p key={u.unit_number} className="text-sm">
+                  {u.unit_number} · {Number(u.net_weight_kg).toFixed(1)} kg
+                </p>
+              ))}
+            </ChainBlock>
+          )}
+
+          {data.dispatches && data.dispatches.length > 0 && (
+            <ChainBlock title="Expéditions">
+              {data.dispatches.map((d) => (
+                <p key={d.dispatch_number} className="text-sm">
+                  {d.dispatch_number} · {d.status}
+                </p>
+              ))}
             </ChainBlock>
           )}
 

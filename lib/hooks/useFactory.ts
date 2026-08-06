@@ -20,6 +20,13 @@ export const factoryKeys = {
   productTypes: () => [...factoryKeys.all, 'productTypes'] as const,
   productionLines: () => [...factoryKeys.all, 'productionLines'] as const,
   reports: (type: string) => [...factoryKeys.all, 'reports', type] as const,
+  recipes: () => [...factoryKeys.all, 'recipes'] as const,
+  recipe: (id: string) => [...factoryKeys.all, 'recipe', id] as const,
+  productionOrders: (params?: Record<string, string>) =>
+    [...factoryKeys.all, 'productionOrders', params] as const,
+  productionOrder: (id: string) => [...factoryKeys.all, 'productionOrder', id] as const,
+  tanks: () => [...factoryKeys.all, 'tanks'] as const,
+  productReleases: (status?: string) => [...factoryKeys.all, 'productReleases', status] as const,
 };
 
 export function useFactoryDashboard() {
@@ -104,6 +111,54 @@ export function useFactoryProductionLines() {
   });
 }
 
+export function useFactoryRecipes() {
+  return useQuery({
+    queryKey: factoryKeys.recipes(),
+    queryFn: () => factoryApi.listRecipes(),
+    staleTime: 30_000,
+  });
+}
+
+export function useFactoryRecipe(id: string) {
+  return useQuery({
+    queryKey: factoryKeys.recipe(id),
+    queryFn: () => factoryApi.getRecipe(id),
+    enabled: !!id,
+  });
+}
+
+export function useProductionOrders(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: factoryKeys.productionOrders(params),
+    queryFn: () => factoryApi.listProductionOrders(params),
+    staleTime: 30_000,
+  });
+}
+
+export function useProductionOrder(id: string) {
+  return useQuery({
+    queryKey: factoryKeys.productionOrder(id),
+    queryFn: () => factoryApi.getProductionOrder(id),
+    enabled: !!id,
+  });
+}
+
+export function useFactoryTanks() {
+  return useQuery({
+    queryKey: factoryKeys.tanks(),
+    queryFn: () => factoryApi.listTanks(),
+    staleTime: 30_000,
+  });
+}
+
+export function useProductReleases(status?: string) {
+  return useQuery({
+    queryKey: factoryKeys.productReleases(status),
+    queryFn: () => factoryApi.listProductReleases(status),
+    staleTime: 15_000,
+  });
+}
+
 export function useInvalidateFactory() {
   const qc = useQueryClient();
   return () => qc.invalidateQueries({ queryKey: factoryKeys.all });
@@ -114,6 +169,10 @@ const FACTORY_REALTIME_TABLES = [
   'transformation_orders',
   'stock_movements',
   'quality_controls',
+  'production_orders',
+  'operation_runs',
+  'product_releases',
+  'tanks',
 ] as const;
 
 /**

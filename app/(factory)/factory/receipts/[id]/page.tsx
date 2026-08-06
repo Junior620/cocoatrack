@@ -50,31 +50,74 @@ export default function FactoryReceiptDetailPage() {
           <p>Chauffeur : {receipt.driver_name || '-'}</p>
         </InfoCard>
         <InfoCard title="Poids">
-          <p>Reçu : <strong>{Number(receipt.received_weight_kg).toFixed(2)} kg</strong></p>
-          <p>Annoncé : {receipt.declared_weight_kg != null ? `${Number(receipt.declared_weight_kg).toFixed(2)} kg` : '-'}</p>
+          <p>
+            Reçu (net) : <strong>{Number(receipt.received_weight_kg).toFixed(2)} kg</strong>
+          </p>
+          {receipt.gross_weight_kg != null && (
+            <p>Brut : {Number(receipt.gross_weight_kg).toFixed(2)} kg</p>
+          )}
+          {receipt.tare_kg != null && (
+            <p>Tare : {Number(receipt.tare_kg).toFixed(2)} kg</p>
+          )}
+          <p>
+            Annoncé :{' '}
+            {receipt.declared_weight_kg != null
+              ? `${Number(receipt.declared_weight_kg).toFixed(2)} kg`
+              : '-'}
+          </p>
           {weightDiff != null && (
-            <p className={Math.abs(weightDiff) > Number(receipt.declared_weight_kg) * 0.05 ? 'text-orange-600' : 'text-green-600'}>
-              Écart : {weightDiff > 0 ? '+' : ''}{weightDiff.toFixed(2)} kg
+            <p
+              className={
+                Math.abs(weightDiff) > Number(receipt.declared_weight_kg) * 0.05
+                  ? 'text-orange-600'
+                  : 'text-green-600'
+              }
+            >
+              Écart : {weightDiff > 0 ? '+' : ''}
+              {weightDiff.toFixed(2)} kg
             </p>
           )}
           <p>Sacs : {receipt.bag_count ?? '-'}</p>
         </InfoCard>
         {receipt.quality_control && (
           <InfoCard title="Contrôle qualité">
-            <QualityDecisionBadge decision={(receipt.quality_control as { decision?: string }).decision ?? null} />
-            <p className="mt-2 text-sm">Humidité : {(receipt.quality_control as { moisture_rate?: number }).moisture_rate ?? '-'} %</p>
+            <QualityDecisionBadge decision={receipt.quality_control.decision ?? null} />
+            <p className="mt-2 text-sm">
+              Humidité : {receipt.quality_control.moisture_rate ?? '-'} %
+            </p>
+            {receipt.quality_control.oncc_grade && (
+              <p className="text-sm">Grade ONCC : {receipt.quality_control.oncc_grade}</p>
+            )}
           </InfoCard>
         )}
       </div>
 
-      {receipt.status === 'pending_qc' && (
-        <Link
-          href={`/factory/quality?receipt=${receipt.id}`}
-          className="inline-block rounded-lg bg-[#5C4033] px-4 py-2 text-sm font-medium text-white"
-        >
-          Effectuer le contrôle qualité →
-        </Link>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {receipt.status === 'pending_qc' && (
+          <Link
+            href={`/factory/quality?receipt=${receipt.id}`}
+            className="inline-block rounded-lg bg-[#5C4033] px-4 py-2 text-sm font-medium text-white"
+          >
+            Contrôler la qualité →
+          </Link>
+        )}
+        {receipt.cocoa_lot_id && (
+          <Link
+            href={`/factory/lots/passport?id=${encodeURIComponent(receipt.cocoa_lot_id)}`}
+            className="inline-block rounded-lg border border-[#5C4033] px-4 py-2 text-sm font-medium text-[#5C4033]"
+          >
+            Voir passeport lot
+          </Link>
+        )}
+        {receipt.upstream_lot_number && (
+          <Link
+            href={`/factory/lots/passport?lot=${encodeURIComponent(receipt.upstream_lot_number)}`}
+            className="inline-block rounded-lg border border-[#d4c4b0] px-4 py-2 text-sm text-[#5C4033]"
+          >
+            Passeport (n° amont)
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

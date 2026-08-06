@@ -109,6 +109,34 @@ export default function FactoryDashboardPage() {
     <PageTransition className="space-y-6">
       <FactoryDashboardHeader period={period} onPeriodChange={setPeriod} showDemoBadge={useDemo} />
 
+      <section className="rounded-xl border border-[#d4c4b0] bg-[#faf6f1] p-4">
+        <h2 className="mb-1 text-sm font-semibold text-[#5C4033]">Parcours usinage</h2>
+        <p className="mb-3 text-xs text-[#8B6914]">Réception → Qualité → Usinage → Conditionnement → Expédition</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { href: '/factory/receipts/new', label: '1. Réception' },
+            { href: '/factory/quality', label: '2. Qualité' },
+            { href: '/factory/orders/new', label: '3. Usinage' },
+            { href: '/factory/wms', label: '4. Conditionnement' },
+            { href: '/factory/dispatches', label: '5. Expédition' },
+          ].map((step) => (
+            <Link
+              key={step.href}
+              href={step.href}
+              className="rounded-lg border border-[#d4c4b0] bg-white px-3 py-2 text-sm font-medium text-[#5C4033] hover:bg-white/80"
+            >
+              {step.label}
+            </Link>
+          ))}
+          <Link
+            href="/factory/traceability"
+            className="rounded-lg border border-dashed border-[#8B6914] px-3 py-2 text-sm text-[#8B6914]"
+          >
+            Traçabilité / passeport
+          </Link>
+        </div>
+      </section>
+
       <FactoryLiveBar
         lastUpdated={lastUpdated}
         isRefreshing={isFetching}

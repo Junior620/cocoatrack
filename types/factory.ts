@@ -36,6 +36,10 @@ export type TransformationOrderStatus =
 
 export type TransformationType =
   | 'cleaning'
+  | 'drying'
+  | 'sorting'
+  | 'blending'
+  | 'packaging'
   | 'roasting'
   | 'shelling'
   | 'grinding'
@@ -99,8 +103,11 @@ export interface FactoryReceipt {
   received_date: string;
   declared_weight_kg: number | null;
   received_weight_kg: number;
+  gross_weight_kg?: number | null;
+  tare_kg?: number | null;
   bag_count: number | null;
   warehouse_id: string | null;
+  cocoa_lot_id?: string | null;
   status: FactoryReceiptStatus;
   notes: string | null;
   created_by: string;
@@ -122,6 +129,7 @@ export interface QualityControl {
   broken_beans_rate: number | null;
   defective_beans_rate: number | null;
   grade: QualityGrade | null;
+  oncc_grade?: string | null;
   decision: QualityDecision | null;
   observations: string | null;
   controlled_by: string;
@@ -197,6 +205,29 @@ export interface TransformationLoss {
   reason: string | null;
 }
 
+export interface CreateQualityControlInput {
+  receipt_id: string;
+  control_date?: string;
+  moisture_rate?: number | null;
+  impurity_rate?: number | null;
+  mold_rate?: number | null;
+  flat_beans_rate?: number | null;
+  broken_beans_rate?: number | null;
+  defective_beans_rate?: number | null;
+  slate_rate?: number | null;
+  insect_rate?: number | null;
+  foreign_matter_rate?: number | null;
+  smoke_odor?: boolean | null;
+  mold_odor?: boolean | null;
+  chemical_odor?: boolean | null;
+  sample_id?: string | null;
+  seal_number?: string | null;
+  oncc_grade?: string | null;
+  grade?: QualityGrade | null;
+  decision: QualityDecision;
+  observations?: string | null;
+}
+
 export interface CreateFactoryReceiptInput {
   factory_site_id?: string;
   cooperative_id?: string | null;
@@ -213,20 +244,10 @@ export interface CreateFactoryReceiptInput {
   bag_count?: number | null;
   warehouse_id?: string | null;
   notes?: string | null;
-}
-
-export interface CreateQualityControlInput {
-  receipt_id: string;
-  control_date?: string;
-  moisture_rate?: number | null;
-  impurity_rate?: number | null;
-  mold_rate?: number | null;
-  flat_beans_rate?: number | null;
-  broken_beans_rate?: number | null;
-  defective_beans_rate?: number | null;
-  grade?: QualityGrade | null;
-  decision: QualityDecision;
-  observations?: string | null;
+  campaign_year?: number | null;
+  tare_kg?: number | null;
+  gross_weight_kg?: number | null;
+  photo_urls?: string[];
 }
 
 export interface CreateTransformationOrderInput {
@@ -274,10 +295,34 @@ export interface TraceabilityResult {
   orders?: TransformationOrder[];
   outputs?: TransformationOutput[];
   cooperatives?: Array<{ id: string; name: string }>;
+  /** Parcelles amont (via delivery_parcelle_shares / lot_sources) */
+  parcelles?: Array<{
+    id: string;
+    code: string;
+    label: string | null;
+    weight_kg?: number;
+    planteur_id?: string | null;
+  }>;
+  /** Généalogie lots cacao */
+  cocoa_lot?: {
+    id: string;
+    lot_number: string;
+    status: string;
+    oncc_grade: string | null;
+    eudr_ready: boolean;
+  } | null;
+  parents?: Array<{ lot_number: string; weight_kg: number }>;
+  children?: Array<{ lot_number: string; weight_kg: number }>;
+  packaging?: Array<{ unit_number: string; net_weight_kg: number; qr_code: string | null }>;
+  dispatches?: Array<{ dispatch_number: string; status: string }>;
 }
 
 export const TRANSFORMATION_TYPE_LABELS: Record<TransformationType, string> = {
-  cleaning: 'Nettoyage / tri',
+  cleaning: 'Nettoyage',
+  drying: 'Séchage',
+  sorting: 'Tri / calibrage',
+  blending: 'Mélange',
+  packaging: 'Conditionnement',
   roasting: 'Torréfaction',
   shelling: 'Décorticage',
   grinding: 'Broyage',
@@ -288,6 +333,15 @@ export const TRANSFORMATION_TYPE_LABELS: Record<TransformationType, string> = {
   chocolate: 'Chocolat',
   other: 'Autre',
 };
+
+/** Types d'OT prioritaires usinage primaire (MVP) */
+export const PRIMARY_PROCESSING_TYPES: TransformationType[] = [
+  'cleaning',
+  'drying',
+  'sorting',
+  'blending',
+  'packaging',
+];
 
 export const RECEIPT_STATUS_LABELS: Record<FactoryReceiptStatus, string> = {
   pending_qc: 'En attente QC',

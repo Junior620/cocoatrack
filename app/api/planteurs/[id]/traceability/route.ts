@@ -76,7 +76,9 @@ export async function GET(
         .limit(50),
       supabase
         .from('deliveries')
-        .select('id, code, delivered_at, weight_kg, total_amount, quality_grade, payment_status, notes')
+        .select(
+          'id, code, delivered_at, weight_kg, total_amount, quality_grade, payment_status, notes, delivery_parcelle_shares(parcelle_id, weight_kg, share_percent, parcelle:parcelles(id, code, label))'
+        )
         .eq('planteur_id', planteurId)
         .order('delivered_at', { ascending: false })
         .limit(50),

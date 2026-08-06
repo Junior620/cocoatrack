@@ -9,7 +9,7 @@ import {
   useFactoryProductionLines,
   useInvalidateFactory,
 } from '@/lib/hooks/useFactory';
-import { TRANSFORMATION_TYPE_LABELS } from '@/types/factory';
+import { TRANSFORMATION_TYPE_LABELS, PRIMARY_PROCESSING_TYPES } from '@/types/factory';
 import type { TransformationType } from '@/types/factory';
 
 export default function NewFactoryOrderPage() {
@@ -21,10 +21,10 @@ export default function NewFactoryOrderPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    transformation_type: 'pressing' as TransformationType,
+    transformation_type: 'cleaning' as TransformationType,
     production_line_id: '',
     planned_date: new Date().toISOString().slice(0, 10),
-    theoretical_yield_rate: '78',
+    theoretical_yield_rate: '98',
     notes: '',
   });
 
@@ -70,11 +70,20 @@ export default function NewFactoryOrderPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-[#d4c4b0] bg-white p-6">
         <label className="block text-sm">
-          Type de transformation
+          Type d&apos;usinage
           <select className="mt-1 w-full rounded border px-3 py-2" value={form.transformation_type} onChange={(e) => setForm({ ...form, transformation_type: e.target.value as TransformationType })}>
-            {Object.entries(TRANSFORMATION_TYPE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
+            <optgroup label="Usinage primaire">
+              {PRIMARY_PROCESSING_TYPES.map((k) => (
+                <option key={k} value={k}>{TRANSFORMATION_TYPE_LABELS[k]}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Autres">
+              {(Object.keys(TRANSFORMATION_TYPE_LABELS) as TransformationType[])
+                .filter((k) => !PRIMARY_PROCESSING_TYPES.includes(k))
+                .map((k) => (
+                  <option key={k} value={k}>{TRANSFORMATION_TYPE_LABELS[k]}</option>
+                ))}
+            </optgroup>
           </select>
         </label>
         <label className="block text-sm">
